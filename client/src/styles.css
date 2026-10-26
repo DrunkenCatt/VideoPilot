@@ -1,0 +1,73 @@
+:root {
+  font-family: Georgia, 'Times New Roman', serif;
+  color: #17231c;
+  background: #f2efe6;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 80% 15%, rgb(225 151 74 / 28%), transparent 28rem),
+    linear-gradient(135deg, #f7f3e8 0%, #e8eee5 100%);
+}
+
+.shell {
+  display: grid;
+  align-content: center;
+  min-height: 100vh;
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: clamp(2rem, 8vw, 7rem);
+}
+
+.eyebrow {
+  margin: 0 0 1.5rem;
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: #9a421f;
+}
+
+h1 {
+  max-width: 16ch;
+  margin: 0;
+  font-size: clamp(3rem, 8vw, 7rem);
+  font-weight: 500;
+  line-height: 0.95;
+  letter-spacing: -0.055em;
+}
+
+.intro {
+  max-width: 38rem;
+  margin: 2rem 0 4rem;
+  font-size: clamp(1rem, 2vw, 1.35rem);
+  line-height: 1.7;
+}
+
+section {
+  width: fit-content;
+  padding: 1.25rem 1.5rem;
+  border-left: 4px solid #d16432;
+  background: rgb(255 255 255 / 48%);
+  box-shadow: 0 1.25rem 4rem rgb(34 53 42 / 10%);
+}
+
+section span {
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+
+h2 {
+  margin: 0.35rem 0 0;
+  font-size: 1.1rem;
+}
