@@ -1,0 +1,47 @@
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.jks
+
+# Java / Maven
+target/
+*.class
+*.log
+.mvn/timing.properties
+
+# Node / Vite
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# IDE and operating system
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Runtime data and generated media
+data/
+logs/
+tmp/
+uploads/
+work/
+benchmark/local/
+mysql/data/
+redis/data/
+minio/data/
+qdrant/data/
+rabbitmq/data/
+
+# Test and tool output
+test-results/
+playwright-report/
+.scannerwork/
+dependency-check-report.*
