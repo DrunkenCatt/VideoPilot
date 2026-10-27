@@ -25,6 +25,12 @@
 
 环境要求：JDK 21、Node.js 22.12+、Docker Desktop。真实凭据只写入本地 `.env`，仓库仅提供 `.env.example` 的开发默认值；如默认端口已被占用，可在 `.env` 中覆盖对应的 `*_PORT`。
 
+开始开发前运行工具链检查，脚本会验证 Java 21、Node.js 22.12+、Docker Compose 和 Maven Wrapper：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\check-toolchain.ps1
+```
+
 启动五项基础设施：
 
 ```powershell
