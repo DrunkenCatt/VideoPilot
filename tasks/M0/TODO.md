@@ -33,13 +33,14 @@
 
 ### T3 Flyway 最小 schema
 
-- [ ] 接入 Flyway。
-- [ ] 创建 `media_asset`、`analysis_job`、`job_stage_attempt`、`job_event_outbox`、`model_call` 初始迁移。
-- [ ] 添加迁移重复执行/校验测试。
+- [x] 接入 Flyway。
+- [x] 创建 `media_asset`、`analysis_job`、`job_stage_attempt`、`job_event_outbox`、`model_call` 初始迁移。
+- [x] 添加迁移重复执行/校验测试。
 - **验收标准**：启动自动迁移且只前进；身份唯一约束、状态/version、输入指纹、Outbox 和 ModelCall 字段可支撑 T2 契约。
 - **验证命令**：`cd server; .\\mvnw.cmd test`；`docker compose up -d mysql`；迁移集成命令（接入后）；`docker compose down`。
 - **预计影响文件**：`server/pom.xml`、`server/src/main/resources/application.yml`、`server/src/main/resources/db/migration/V1__m0_foundation.sql`、迁移测试。
 - **依赖**：T2。
+- **完成记录（2026-10-27）**：Flyway V1 已在真实 MySQL 8.4 上从空库成功执行，并验证重复迁移为 no-op、五张表存在及任务身份/阶段输入指纹唯一约束；因本机 3306 被占用，本次容器映射到 33306。Spring Boot 管理的 Flyway 对 MySQL 8.4 给出“高于已测试 8.1”的非阻断警告，迁移与校验实际通过，后续依赖升级时持续观察。
 
 ### T4 配置、秘密、错误与 Trace
 
