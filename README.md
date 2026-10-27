@@ -23,7 +23,11 @@
 
 ## 本地开发
 
-环境要求：JDK 21、Node.js 22.12+、Docker Desktop。真实凭据只写入本地 `.env`，仓库仅提供 `.env.example` 的开发默认值；如默认端口已被占用，可在 `.env` 中覆盖对应的 `*_PORT`。
+环境要求：JDK 21、Node.js 22.12+、Docker Desktop。真实凭据只能通过进程环境变量或部署平台的秘密管理注入，不能写入 Git、日志或 MQ 消息。仓库中的 `.env.example` 只有本地开发占位值；Docker Compose 会读取复制出的 `.env`，Maven 启动的 Java 进程不会自动读取它。
+
+配置按运行环境分层：`application.yml` 只放所有环境共享的安全配置；`application-local.yml` 为本机基础设施提供开发默认值；快速测试使用隔离数据库依赖的 `test` profile；迁移集成测试使用 `integration` profile。非本地环境必须显式选择 profile 并通过环境变量提供凭据。
+
+日志只允许记录标识符、阶段、稳定错误码和耗时。凭据、视频、完整转录、Embedding、模型 Prompt/原始响应都不能写入日志；HTTP 错误响应也只返回稳定公共文案。统一 Trace 字段为 `requestId`、`jobId`、`runId`，HTTP 使用 `X-Request-Id`、`X-Job-Id`、`X-Run-Id` 传递。
 
 开始开发前运行工具链检查，脚本会验证 Java 21、Node.js 22.12+、Docker Compose 和 Maven Wrapper：
 
@@ -42,7 +46,7 @@ docker compose ps
 
 ```powershell
 cd server
-.\mvnw.cmd spring-boot:run
+.\mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
 启动前端（默认 `http://localhost:5173`）：

@@ -1,10 +1,6 @@
 spring:
   application:
     name: videopilot-server
-  datasource:
-    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:videopilot}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
-    username: ${MYSQL_USER:videopilot}
-    password: ${MYSQL_PASSWORD:videopilot_local}
   flyway:
     enabled: true
     locations: classpath:db/migration
@@ -28,3 +24,7 @@ management:
 info:
   application:
     name: ${spring.application.name}
+
+logging:
+  pattern:
+    correlation: "[requestId=%X{requestId:-} jobId=%X{jobId:-} runId=%X{runId:-}] "

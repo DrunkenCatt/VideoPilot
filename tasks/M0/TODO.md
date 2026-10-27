@@ -44,14 +44,15 @@
 
 ### T4 配置、秘密、错误与 Trace
 
-- [ ] 建立 profile/config 分层和环境变量约定。
-- [ ] 定义统一错误响应、错误码和可重试提示。
-- [ ] 定义 `requestId/jobId/runId` Trace/MDC 字段。
-- [ ] 完成凭据、模型原始响应、视频和完整转录的日志/提交防泄露检查。
+- [x] 建立 profile/config 分层和环境变量约定。
+- [x] 定义统一错误响应、错误码和可重试提示。
+- [x] 定义 `requestId/jobId/runId` Trace/MDC 字段。
+- [x] 完成凭据、模型原始响应、视频和完整转录的日志/提交防泄露检查。
 - **验收标准**：无真实密钥入仓；错误结构和 Trace 字段可被 HTTP/MQ/Adapter 复用。
 - **验证命令**：`git diff --check`；`rg -n -i "api.?key|password|secret|token|BEGIN .*PRIVATE" --glob '!package-lock.json' .`；`cd server; .\\mvnw.cmd test`。
 - **预计影响文件**：`application.yml`、`.env.example`、`.gitignore`、`server/.../infrastructure/...` 配置/错误/Trace 类及测试。
 - **依赖**：T2。
+- **完成记录（2026-10-27）**：拆分共享/local/test/integration 配置职责并验证环境变量覆盖；新增稳定错误码、可重试标记、脱敏 HTTP 错误响应和可复用 Trace/MDC 作用域；请求头只接受受限字符，异常详情不进入响应或日志；补充原始媒体、完整转录和模型响应的忽略规则。后端 7 项测试、diff 检查和敏感词人工复核通过，命中均为规则说明、开发占位值或脱敏测试数据。
 
 ### T5 五项依赖健康
 
