@@ -56,14 +56,14 @@ T6/T9 -> T10 CI 与 M0 退出验收
 
 - **依赖**：T1。
 - **验收标准**：
-  - [ ] 新增四份 ADR：任务身份、状态机、Outbox/Checkpoint、云端模型调用与预算；每份包含上下文、决策、替代方案、后果和验证场景。
+  - [ ] 新增三份 ADR：任务身份、状态机、云端模型调用与预算；Outbox/Checkpoint 复用 ADR-0001，避免重复记录同一决策。
   - [ ] ADR 不与 `docs/adr/0001-use-rabbitmq-for-analysis-jobs.md` 冲突，并明确 M1/M4 才实现的内容不在 M0 交付范围。
   - [ ] 状态迁移、输入指纹、错误分类和模型调用审计字段可直接作为后续表结构/API 契约依据。
 - **验证命令**：
   - `rg -n "analysisKey|jobId|runId|Checkpoint|Outbox|UNKNOWN|budget|schemaVersion" docs/adr`
   - `git diff --check -- docs/adr`
   - 人工逐条对照 `docs/PROJECT_ROADMAP.md` 第 5、6、8、13 节和 ADR-0001。
-- **预计影响文件**：新增 `docs/adr/0002-analysis-identity.md`、`docs/adr/0003-analysis-job-state-machine.md`、`docs/adr/0004-checkpoint-and-outbox.md`、`docs/adr/0005-model-adapter-and-budget.md`。
+- **预计影响文件**：新增 `docs/adr/0002-analysis-identity.md`、`docs/adr/0003-analysis-job-state-machine.md`、`docs/adr/0005-model-adapter-and-budget.md`，复核既有 `docs/adr/0001-use-rabbitmq-for-analysis-jobs.md`；ADR-0004 仅保留合并说明。
 - **预计范围**：M。
 
 ### T3：Flyway 与最小真源 schema
@@ -209,7 +209,7 @@ T6/T9 -> T10 CI 与 M0 退出验收
 ### Checkpoint A：T1-T2 完成后
 
 - [ ] Java/Node/Docker 工具链入口确定。
-- [ ] 四份 M0 ADR 与 ADR-0001 一致，身份、状态、Checkpoint、Outbox、错误和预算术语冻结。
+- [ ] 三份新增 M0 ADR 与 ADR-0001 一致，身份、状态、Checkpoint、Outbox、错误和预算术语冻结。
 - [ ] 由人工确认后再落 Flyway schema，避免把未决契约写死。
 
 ### Checkpoint B：T3-T9 完成后

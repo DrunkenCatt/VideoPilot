@@ -18,13 +18,13 @@
 
 - [x] 新增任务身份 ADR。
 - [x] 新增 Job 状态机 ADR。
-- [x] 新增 Checkpoint/Transactional Outbox ADR。
+- [x] 复核 Checkpoint/Transactional Outbox；确认 ADR-0001 已覆盖，无需重复 ADR。
 - [x] 新增模型 Adapter、调用审计与预算 ADR。
-- **验收标准**：四份 ADR 具备决策、替代方案、后果和验证场景；与 ADR-0001 及 Roadmap 一致。
+- **验收标准**：新增 ADR 具备决策、替代方案、后果和验证场景；Checkpoint/Outbox 复用 ADR-0001，且整体与 Roadmap 一致。
 - **验证命令**：`rg -n "analysisKey|jobId|runId|Checkpoint|Outbox|UNKNOWN|budget|schemaVersion" docs/adr`；`git diff --check -- docs/adr`。
-- **预计影响文件**：`docs/adr/0002-*.md` 至 `docs/adr/0005-*.md`。
+- **预计影响文件**：`docs/adr/0002-analysis-identity.md`、`docs/adr/0003-analysis-job-state-machine.md`、`docs/adr/0005-model-adapter-and-budget.md`，以及 ADR-0001；ADR-0004 仅保留合并说明。
 - **依赖**：T1。
-- **完成记录（2026-10-27）**：新增 ADR-0002 至 ADR-0005；必需章节和契约关键词检查、`git diff --check -- docs/adr` 均通过。
+- **完成记录（2026-10-27）**：新增 ADR-0002、0003、0005；Outbox/Checkpoint 继续由 ADR-0001 记录，ADR-0004 仅保留历史指针。必需章节和契约关键词检查、`git diff --check -- docs/adr` 均通过。
 
 ### Checkpoint A
 

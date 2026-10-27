@@ -1,8 +1,10 @@
 # VideoPilot Constraints
 
-Last reviewed: 2026-10-26
+Last reviewed: 2026-10-27
 
-本文件定义项目不可静默降低的质量底线。当前仓库处于 M0，Maven/Vue 工程初始化后，将把下列规则接入项目脚本和 CI。规则尚未接入工具时必须明确标记，不能声称已经自动执行。
+本文件只定义项目不可静默降低的质量底线、架构不变量、检查方式和例外规则，不记录里程碑进度、任务完成情况或下一步工作。项目进度记录在 `tasks/<milestone>/TODO.md` 和对应验收记录中；产品范围与阶段目标记录在 `docs/PROJECT_ROADMAP.md`。
+
+表格中的里程碑编号只表示质量门从哪个能力阶段开始适用，不表示该里程碑已经开始或完成。检查工具是否已经接入，应以构建配置和 CI 文件为准，不能仅凭本文档宣称检查已自动执行。
 
 ## Floor
 
@@ -16,7 +18,7 @@ Last reviewed: 2026-10-26
 - 不把视频、完整转录、Embedding、运行时数据库或模型原始响应提交到 Git。
 - 不修改 `C:\Users\zzm\Desktop\com\DoVideoAI` 参考仓库。
 
-## Enforced Targets
+## Required Engineering Gates
 
 | Dimension | Rule | Check | Runs at | Rationale |
 | --- | --- | --- | --- | --- |
@@ -35,7 +37,7 @@ Last reviewed: 2026-10-26
 
 以下指标由对应里程碑的数据和故障测试验证：
 
-| Dimension | Gate | First enforced |
+| Dimension | Gate | Applicable from |
 | --- | --- | --- |
 | 重复执行 | 同一幂等请求不产生重复高成本模型调用 | M1/M4 |
 | 恢复成功率 | 可恢复故障场景成功率至少 95% | M4 |
@@ -66,9 +68,12 @@ Last reviewed: 2026-10-26
 | Review | 数分钟 | 完整单测、架构测试、秘密扫描、依赖扫描 |
 | CI | 不设本地交互预算 | Docker 集成测试、故障测试和完整构建 |
 
-## Measured, Not Yet Enforced
+## Ratchet Policy
 
-工程骨架尚未生成，目前没有可测的项目覆盖率、前端 Bundle、API 延迟或任务成本基线。首次获得有效结果时记录当前值，并采用“不得下降”的 ratchet；不得事先虚构基线。
+- 没有可信基线的指标不得填写推测值。
+- 首次通过规定测量流程得到的有效结果，记录在版本化评测报告中，作为该指标的基线。
+- 后续变更不得使已建立的基线下降；确需调整时，必须记录原因、影响、负责人和期限。
+- 覆盖率、前端 Bundle、API 延迟、任务成本等测量结果属于评测或验收产物，不写入本文件作为项目进度。
 
 ## Exceptions
 
