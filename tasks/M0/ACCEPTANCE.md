@@ -1,6 +1,6 @@
 # M0 验收记录
 
-日期：2026-10-28  
+日期：2026-10-28
 环境：Windows 11、Java 21.0.12.1、Docker Desktop 29.2.1、Docker Compose 5.0.2、Node.js 22.12+
 
 ## 已执行
