@@ -67,13 +67,14 @@
 
 ### T6 本地一键启动验收
 
-- [ ] 提供启动、等待/检查和保留数据的停止入口。
-- [ ] 验证空业务 MySQL 自动迁移及五项依赖 readiness。
-- [ ] 更新 README 的故障诊断和数据保留说明。
+- [x] 提供启动、等待/检查和保留数据的停止入口。
+- [x] 验证空业务 MySQL 自动迁移及五项依赖 readiness。
+- [x] 更新 README 的故障诊断和数据保留说明。
 - **验收标准**：一条文档化命令可启动并检查空业务环境；失败指出具体依赖；停止不删除命名卷。
 - **验证命令**：`docker compose up -d`；`docker compose ps`；`Invoke-WebRequest http://localhost:8080/actuator/health -UseBasicParsing`；`docker compose config --quiet`；`docker compose down`。
 - **预计影响文件**：`compose.yml`、`README.md`、`scripts/dev-up.ps1`、`scripts/dev-check.ps1`、可能的 `scripts/dev-down.ps1`。
 - **依赖**：T3、T4、T5。
+- **完成记录（2026-10-28）**：新增后端多阶段镜像和 `dev-up.ps1`、`dev-check.ps1`、`dev-down.ps1`；启动脚本等待 readiness，失败时列出五项依赖状态，停止脚本不删除命名卷。使用端口覆盖启动空业务 MySQL 与五项依赖，验证 Flyway V1 自动迁移和 `/actuator/health/readiness` 为 UP；`docker compose config --quiet`、停止后卷保留检查通过。
 
 ### T7 benchmark 与标注规范
 

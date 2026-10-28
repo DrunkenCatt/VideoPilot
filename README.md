@@ -35,19 +35,19 @@
 powershell -ExecutionPolicy Bypass -File .\scripts\check-toolchain.ps1
 ```
 
-启动五项基础设施：
+一键启动后端和五项基础设施（首次启动或代码变更后加 `-Build`）：
 
 ```powershell
-docker compose up -d
-docker compose ps
+powershell -ExecutionPolicy Bypass -File .\scripts\dev-up.ps1 -Build
 ```
 
-启动后端（默认 `http://localhost:8080`，健康端点为 `/actuator/health`）：
+检查状态并在失败时逐项输出依赖：
 
 ```powershell
-cd server
-.\mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=local
+powershell -ExecutionPolicy Bypass -File .\scripts\dev-check.ps1
 ```
+
+后端默认地址为 `http://localhost:8080`。若本机端口被占用，可在 `.env` 中覆盖 `SERVER_PORT` 以及依赖端口。
 
 后端提供三类健康检查：
 
@@ -80,4 +80,10 @@ cd ..
 docker compose config --quiet
 ```
 
-停止本地基础设施使用 `docker compose down`。命名卷会保留数据；只有明确需要清空本地数据时才使用 `docker compose down --volumes`。
+停止本地环境使用下列脚本；它不会删除命名卷，因此 MySQL、Redis、RabbitMQ、MinIO 和 Qdrant 数据会保留：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\dev-down.ps1
+```
+
+只有明确需要清空本地数据时才使用 `docker compose down --volumes`。启动失败时先运行 `docker compose ps`，再运行 `dev-check.ps1` 查看具体依赖；容器日志可用 `docker compose logs <service>` 查询。
