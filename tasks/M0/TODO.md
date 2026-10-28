@@ -56,13 +56,14 @@
 
 ### T5 五项依赖健康
 
-- [ ] 配置 MySQL、Redis、RabbitMQ、MinIO、Qdrant 健康指示器/就绪检查。
-- [ ] 区分 liveness、readiness 和五项依赖诊断。
-- [ ] 为探针配置受控超时和敏感详情保护。
+- [x] 配置 MySQL、Redis、RabbitMQ、MinIO、Qdrant 健康指示器/就绪检查。
+- [x] 区分 liveness、readiness 和五项依赖诊断。
+- [x] 为探针配置受控超时和敏感详情保护。
 - **验收标准**：任一依赖故障能被单独识别；liveness 不与依赖 readiness 混淆。
 - **验证命令**：`cd server; .\\mvnw.cmd test -Dtest=*Health*Test`；`cd server; .\\mvnw.cmd verify -Pintegration`。
 - **预计影响文件**：`server/pom.xml`、`application.yml`、健康 Adapter 及测试。
 - **依赖**：T3、T4。
+- **完成记录（2026-10-27）**：接入 Redis/RabbitMQ Actuator 健康检查，复用 DataSource 检查 MySQL，并以官方 HTTP 健康端点检查 MinIO/Qdrant；liveness 仅反映应用存活，readiness/dependencies 包含五项依赖且逐项显示状态；所有连接/探针均配置有限超时，响应隐藏详情。五类单项故障契约测试、HTTP 超时测试、16 项快速测试及连接真实五项 Compose 服务的 3 项集成测试通过。因本机端口占用，集成验证使用 MySQL 33306、Redis 16379、MinIO 19000/19001、Qdrant 16333/16334；未删除数据卷。
 
 ### T6 本地一键启动验收
 

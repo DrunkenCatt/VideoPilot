@@ -14,6 +14,9 @@ import static org.assertj.core.api.Assertions.assertThat;
     "MYSQL_DATABASE=configured_database",
     "MYSQL_USER=configured_user",
     "MYSQL_PASSWORD=configured_test_value",
+    "management.endpoint.health.validate-group-membership=false",
+    "videopilot.health.mysql.enabled=false",
+    "videopilot.health.external.enabled=false",
     "spring.autoconfigure.exclude="
             + "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,"
             + "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration"

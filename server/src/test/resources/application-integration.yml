@@ -3,5 +3,27 @@ spring:
     url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:videopilot}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
     username: ${MYSQL_USER:videopilot}
     password: ${MYSQL_PASSWORD:videopilot_local}
+    hikari:
+      connection-timeout: ${MYSQL_CONNECTION_TIMEOUT:2000}
+      validation-timeout: ${MYSQL_VALIDATION_TIMEOUT:1000}
   flyway:
     clean-disabled: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:2s}
+      timeout: ${REDIS_COMMAND_TIMEOUT:2s}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:videopilot}
+    password: ${RABBITMQ_PASSWORD:videopilot_local}
+    connection-timeout: ${RABBITMQ_CONNECTION_TIMEOUT:2s}
+
+videopilot:
+  health:
+    external:
+      timeout: ${DEPENDENCY_HEALTH_TIMEOUT:2s}
+      minio-url: ${MINIO_HEALTH_URL:http://localhost:9000/minio/health/ready}
+      qdrant-url: ${QDRANT_HEALTH_URL:http://localhost:6333/healthz}

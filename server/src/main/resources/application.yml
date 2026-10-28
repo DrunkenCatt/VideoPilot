@@ -19,7 +19,28 @@ management:
     health:
       probes:
         enabled: true
+      show-components: always
       show-details: never
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,mysql,redis,rabbit,minio,qdrant
+        dependencies:
+          include: mysql,redis,rabbit,minio,qdrant
+  health:
+    db:
+      enabled: false
+
+videopilot:
+  health:
+    mysql:
+      enabled: true
+    external:
+      enabled: true
+      timeout: ${DEPENDENCY_HEALTH_TIMEOUT:2s}
+      minio-url: ${MINIO_HEALTH_URL:http://localhost:9000/minio/health/ready}
+      qdrant-url: ${QDRANT_HEALTH_URL:http://localhost:6333/healthz}
 
 info:
   application:

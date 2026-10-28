@@ -5,6 +5,20 @@ spring:
       - org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration
 
 management:
+  endpoint:
+    health:
+      validate-group-membership: false
   health:
     db:
+      enabled: false
+    redis:
+      enabled: false
+    rabbit:
+      enabled: false
+
+videopilot:
+  health:
+    mysql:
+      enabled: false
+    external:
       enabled: false

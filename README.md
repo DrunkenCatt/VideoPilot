@@ -49,6 +49,16 @@ cd server
 .\mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
+后端提供三类健康检查：
+
+| 地址 | 用途 |
+| --- | --- |
+| `/actuator/health/liveness` | 只判断应用进程是否存活；外部依赖故障不会触发重启循环 |
+| `/actuator/health/readiness` | 判断应用是否可以承接业务流量；包含五项依赖 |
+| `/actuator/health/dependencies` | 分别诊断 MySQL、Redis、RabbitMQ、MinIO、Qdrant |
+
+健康响应只公开组件名称和 `UP/DOWN`，不公开连接地址、账号、异常消息或响应正文。数据库、Redis、RabbitMQ 和 HTTP 探针均设置了有限连接/响应超时，可通过 `.env.example` 中对应变量覆盖。
+
 启动前端（默认 `http://localhost:5173`）：
 
 ```powershell
