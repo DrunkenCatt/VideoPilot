@@ -100,14 +100,15 @@
 
 ### T9 工程质量门
 
-- [ ] 接入 ArchUnit 包边界检查。
-- [ ] 接入 JaCoCo/前端覆盖率和 `integration` Profile。
-- [ ] 接入 OWASP/npm audit 与 Gitleaks 阻断入口。
-- [ ] 保持统一后端/前端验证命令，不使用 suppression、跳过测试或降低阈值。
+- [x] 接入 ArchUnit 包边界检查。
+- [x] 接入 JaCoCo/前端覆盖率和 `integration` Profile。
+- [x] 接入 OWASP/npm audit 与 Gitleaks 阻断入口。
+- [x] 保持统一后端/前端验证命令，不使用 suppression、跳过测试或降低阈值。
 - **验收标准**：Java 21、单测、架构、迁移/真实边界、覆盖率、High/Critical 漏洞和秘密规则均有可重复检查入口。
 - **验证命令**：`cd server; .\\mvnw.cmd test`；`cd server; .\\mvnw.cmd verify -Pintegration`；`cd client; npm.cmd run check`；`cd client; npm.cmd audit --audit-level=high`；`gitleaks detect --redact`。
 - **预计影响文件**：`server/pom.xml`、架构/覆盖率测试配置、`client/package.json`、可能的 `.gitleaks.toml`、验证说明。
 - **依赖**：T3、T4、T5、T7、T8。
+- **完成记录（2026-10-28）**：ArchUnit 阻断 Controller 越过 application 边界及业务域反向依赖 infrastructure；JaCoCo 与 Vitest 均以 80% 为最低覆盖率；`security` Profile、npm audit 和 Gitleaks 组成秘密/依赖阻断入口。审计发现并升级了存在 High/Critical 公告的 Vue/Vite/Vitest。后端 22 项测试、前端 check、npm High 审计和 3 项真实依赖集成测试通过；本机因 GitHub/Docker Hub 网络不可达未能安装 Gitleaks，已保留 fail-closed 入口并由 CI 执行，详见 M0 验收记录。
 
 ### Checkpoint B
 
