@@ -80,6 +80,8 @@ cd ..
 docker compose config --quiet
 ```
 
+合并前安全检查使用 `powershell -ExecutionPolicy Bypass -File .\scripts\security-check.ps1`。该入口依次运行 Java OWASP Dependency-Check、npm High/Critical 审计和 Gitleaks；任一工具不可用或发现问题都会失败，不会静默跳过。
+
 停止本地环境使用下列脚本；它不会删除命名卷，因此 MySQL、Redis、RabbitMQ、MinIO 和 Qdrant 数据会保留：
 
 ```powershell

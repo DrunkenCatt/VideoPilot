@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Unit, architecture, and coverage gates
+        working-directory: server
+        run: ./mvnw --batch-mode test
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - name: Install from lockfile without lifecycle scripts
+        working-directory: client
+        run: npm ci --ignore-scripts
+      - name: Type, lint, test, coverage, and build gates
+        working-directory: client
+        run: npm run check
+      - name: High and critical dependency audit
+        working-directory: client
+        run: npm audit --audit-level=high --registry=https://registry.npmjs.org
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Generate isolated CI credentials
+        shell: bash
+        run: |
+          echo "MYSQL_PASSWORD=ci-user-${GITHUB_RUN_ID}" >> "$GITHUB_ENV"
+          echo "MYSQL_ROOT_PASSWORD=ci-root-${GITHUB_RUN_ID}" >> "$GITHUB_ENV"
+          echo "RABBITMQ_PASSWORD=ci-rabbit-${GITHUB_RUN_ID}" >> "$GITHUB_ENV"
+          echo "MINIO_ROOT_PASSWORD=ci-minio-${GITHUB_RUN_ID}" >> "$GITHUB_ENV"
+      - name: Validate Compose
+        run: docker compose config --quiet
+      - name: Start five dependencies
+        run: docker compose up -d --wait mysql redis rabbitmq minio qdrant
+      - name: Flyway and dependency integration gates
+        working-directory: server
+        env:
+          MINIO_HEALTH_URL: http://localhost:9000/minio/health/ready
+          QDRANT_HEALTH_URL: http://localhost:6333/healthz
+        run: ./mvnw --batch-mode verify -Pintegration
+      - name: Stop dependencies and retain diagnostics
+        if: always()
+        run: |
+          docker compose ps
+          docker compose logs --no-color > compose.log
+          docker compose down
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: compose-log
+          path: compose.log
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Repository secret scan
+        run: docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.28.0 detect --source=/repo --redact --no-banner
+      - name: Java high and critical dependency audit
+        working-directory: server
+        run: ./mvnw --batch-mode org.owasp:dependency-check-maven:13.0.0:check -DfailBuildOnCVSS=7

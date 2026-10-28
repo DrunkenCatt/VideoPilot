@@ -28,8 +28,8 @@
 
 ### Checkpoint A
 
-- [ ] 人工确认 T1/T2 后再开始 schema 和运行时配置实现。
-- [ ] 确认 M0 不实现真实上传、模型调用、MQ Consumer 或 M1 假任务链。
+- [x] 人工确认 T1/T2 后再开始 schema 和运行时配置实现。
+- [x] 确认 M0 不实现真实上传、模型调用、MQ Consumer 或 M1 假任务链。
 
 ### T3 Flyway 最小 schema
 
@@ -112,25 +112,26 @@
 
 ### Checkpoint B
 
-- [ ] T3-T9 的契约、迁移、配置、健康、评测规范、供应商清单和质量门互相一致。
-- [ ] 确认未引入 M1 的上传、Job Consumer、SSE 进度或真实模型请求。
+- [x] T3-T9 的契约、迁移、配置、健康、评测规范、供应商清单和质量门互相一致。
+- [x] 确认未引入 M1 的上传、Job Consumer、SSE 进度或真实模型请求。
 
 ### T10 CI 与 M0 退出验收
 
-- [ ] 新增 CI workflow：Java 21 编译/单测、Flyway 迁移校验、前端 check、Compose 配置校验、秘密扫描。
-- [ ] 新增 M0 验收记录，记录实际命令、结果、耗时和未执行项。
-- [ ] 运行完整 M0 退出检查并由人工确认是否进入 M1。
+- [x] 新增 CI workflow：Java 21 编译/单测、Flyway 迁移校验、前端 check、Compose 配置校验、秘密扫描。
+- [x] 新增 M0 验收记录，记录实际命令、结果、耗时和未执行项。
+- [ ] 运行完整 M0 退出检查并由人工确认是否进入 M1（本地检查已运行，等待远端 CI 与人工确认）。
 - **验收标准**：CI 在干净环境通过；错误 Java 版本失败；五项健康可区分；无密钥入仓；标注模板满足 Roadmap M0 退出门槛。
 - **验证命令**：`cd server; .\\mvnw.cmd test`；`cd server; .\\mvnw.cmd verify -Pintegration`；`cd client; npm.cmd run check`；`cd client; npm.cmd audit --audit-level=high`；`docker compose config --quiet`；`gitleaks detect --redact`。
 - **预计影响文件**：`.github/workflows/ci.yml`、必要的构建配置、`tasks/M0/ACCEPTANCE.md`。
 - **依赖**：T6、T9。
+- **完成记录（2026-10-28）**：CI 已拆分后端、前端、真实依赖集成和安全四个阻断 Job，固定 Java 21/Node 22.12，使用临时 CI 凭据并在失败时上传 Compose 日志。`ACCEPTANCE.md` 记录了实际结果和耗时；本地可执行门均通过，但 Gitleaks、OWASP 漏洞库和远端 CI 受外部网络/运行环境限制，故人工退出确认及 M0 最终退出门保持未勾选。
 
 ## M0 退出门
 
-- [ ] 空业务环境可一键启动。
-- [ ] 应用存活与 MySQL/Redis/RabbitMQ/MinIO/Qdrant 健康可区分。
-- [ ] CI 完成 Java 21 编译、单测和迁移校验。
-- [ ] 前端 `npm run check` 和 Compose 配置校验通过。
-- [ ] 仓库和日志中无密钥、视频、完整转录、Embedding 或模型原始响应。
-- [ ] 标注模板覆盖问题、相关时间窗、证据通道、必需事实和禁止断言。
+- [x] 空业务环境可一键启动。
+- [x] 应用存活与 MySQL/Redis/RabbitMQ/MinIO/Qdrant 健康可区分。
+- [ ] CI 完成 Java 21 编译、单测和迁移校验（等待首次远端运行）。
+- [x] 前端 `npm run check` 和 Compose 配置校验通过。
+- [ ] 仓库和日志中无密钥、视频、完整转录、Embedding 或模型原始响应（等待 Gitleaks 成功证据）。
+- [x] 标注模板覆盖问题、相关时间窗、证据通道、必需事实和禁止断言。
 - [ ] 未达到以上任一项时，保持 M0 未完成，不进入 M1。
