@@ -89,13 +89,14 @@
 
 ### T8 固定供应商清单与 Adapter 边界
 
-- [ ] 登记 DeepSeek、TeleSpeechASR、BGE-M3、Tesseract 及配置/版本/超时/成本字段。
-- [ ] 定义 Port/Adapter 契约，禁止业务层依赖供应商响应类型。
-- [ ] 记录 Prompt、模型、Embedding、检索公式、Agent Policy 版本 Trace 字段。
+- [x] 登记 DeepSeek、TeleSpeechASR、BGE-M3、Tesseract 及配置/版本/超时/成本字段。
+- [x] 定义 Port/Adapter 契约，禁止业务层依赖供应商响应类型。
+- [x] 记录 Prompt、模型、Embedding、检索公式、Agent Policy 版本 Trace 字段。
 - **验收标准**：无真实外部调用也能启动；MVP 固定方案清晰且未来可替换。
 - **验证命令**：`rg -n "DeepSeek|TeleSpeechASR|BGE-M3|Tesseract|promptVersion|embeddingVersion|provider" docs server/src`；`cd server; .\\mvnw.cmd test`；`git diff --check`。
 - **预计影响文件**：`docs/provider-catalog.md`、`server/.../infrastructure/model/**`、`application.yml`、契约测试。
 - **依赖**：T2、T4。
+- **完成记录（2026-10-28）**：新增四个供应商中立 Port、固定供应商配置目录与文档；业务合同不暴露 SDK 类型，配置只绑定版本、超时和成本计量，不注册真实调用。`ExecutionVersionTrace` 强制五类执行版本非空。先验证缺失合同导致测试编译失败，再实现并通过聚焦测试、完整后端测试与关键词/diff 检查；应用在无真实凭据时可启动。
 
 ### T9 工程质量门
 

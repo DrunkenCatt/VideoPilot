@@ -33,6 +33,31 @@ management:
       enabled: false
 
 videopilot:
+  providers:
+    deepseek:
+      provider: DeepSeek
+      model-version: ${DEEPSEEK_MODEL_VERSION:deepseek-chat}
+      timeout: ${DEEPSEEK_TIMEOUT:30s}
+      cost-unit: token
+      cost-tracking: true
+    telespeech-asr:
+      provider: TeleSpeechASR
+      model-version: ${TELESPEECH_ASR_MODEL_VERSION:fixed-mvp}
+      timeout: ${TELESPEECH_ASR_TIMEOUT:120s}
+      cost-unit: audio-second
+      cost-tracking: true
+    bge-m3:
+      provider: BGE-M3
+      model-version: ${BGE_M3_MODEL_VERSION:bge-m3}
+      timeout: ${BGE_M3_TIMEOUT:30s}
+      cost-unit: token
+      cost-tracking: true
+    tesseract:
+      provider: Tesseract
+      model-version: ${TESSERACT_VERSION:5.x}
+      timeout: ${TESSERACT_TIMEOUT:30s}
+      cost-unit: local-image
+      cost-tracking: false
   health:
     mysql:
       enabled: true
