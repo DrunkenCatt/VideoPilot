@@ -78,13 +78,14 @@
 
 ### T7 benchmark 与标注规范
 
-- [ ] 建立 `benchmark/` 子目录和职责 README。
-- [ ] 建立检索/答案/Agent/反馈 Schema 与示例。
-- [ ] 写明教学视频筛选、版权/使用边界、dev/test 隔离、复核状态和数据版本规则。
+- [x] 建立 `benchmark/` 子目录和职责 README。
+- [x] 建立检索/答案/Agent/反馈 Schema 与示例。
+- [x] 写明教学视频筛选、版权/使用边界、dev/test 隔离、复核状态和数据版本规则。
 - **验收标准**：模板包含问题、时间窗、证据通道、必需事实、禁止断言、可回答性和复核字段；原始资料路径不会入 Git。
 - **验证命令**：`rg --files benchmark`；`git check-ignore benchmark/local/example.mp4 benchmark/local/example.json`；`git diff --check -- benchmark .gitignore`。
 - **预计影响文件**：`benchmark/**`、`.gitignore`。
 - **依赖**：T1。
+- **完成记录（2026-10-28）**：建立检索、答案、Agent、反馈四类 JSON Schema 及可提交示例，统一问题、时间窗、证据通道、必需事实、禁止断言、可回答性、复核状态、数据版本和 dev/test 分区字段；README 明确版权边界、冻结测试集和双人复核规则，`benchmark/local/` 保持忽略。全部 JSON 可解析、字段契约检查、忽略规则和 diff 检查通过。
 
 ### T8 固定供应商清单与 Adapter 边界
 

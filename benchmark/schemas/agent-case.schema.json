@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://videopilot.local/schemas/agent-case.schema.json",
+  "title": "VideoPilot agent benchmark case",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["caseId", "dataVersion", "split", "sourceRights", "question", "timeWindow", "evidenceChannels", "requiredFacts", "forbiddenClaims", "answerability", "allowedTools", "maxToolCalls", "expectedOutcome", "review"],
+  "properties": {
+    "caseId": { "type": "string", "minLength": 1 },
+    "dataVersion": { "type": "string" },
+    "split": { "enum": ["dev", "test"] },
+    "sourceRights": { "enum": ["owned", "licensed", "public_domain", "synthetic"] },
+    "question": { "type": "string", "minLength": 1 },
+    "timeWindow": { "$ref": "#/$defs/timeWindow" },
+    "evidenceChannels": { "$ref": "#/$defs/evidenceChannels" },
+    "requiredFacts": { "$ref": "#/$defs/facts" },
+    "forbiddenClaims": { "$ref": "#/$defs/facts" },
+    "answerability": { "enum": ["answerable", "unanswerable", "disputed"] },
+    "allowedTools": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+    "maxToolCalls": { "type": "integer", "minimum": 0 },
+    "expectedOutcome": { "enum": ["answer", "refuse", "request_clarification"] },
+    "review": { "$ref": "#/$defs/review" }
+  },
+  "$defs": {
+    "timeWindow": { "type": "object", "additionalProperties": false, "required": ["startMs", "endMs"], "properties": { "startMs": { "type": "integer", "minimum": 0 }, "endMs": { "type": "integer", "minimum": 0 } } },
+    "evidenceChannels": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["asr", "ocr", "keyframe"] } },
+    "facts": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "review": { "type": "object", "additionalProperties": false, "required": ["status", "reviewerCount"], "properties": { "status": { "enum": ["draft", "in_review", "approved", "rejected"] }, "reviewerCount": { "type": "integer", "minimum": 0 }, "notes": { "type": "string" } } }
+  }
+}

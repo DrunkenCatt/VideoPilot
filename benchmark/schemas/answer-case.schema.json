@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://videopilot.local/schemas/answer-case.schema.json",
+  "title": "VideoPilot answer benchmark case",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["caseId", "dataVersion", "split", "sourceRights", "question", "timeWindow", "evidenceChannels", "requiredFacts", "forbiddenClaims", "answerability", "referenceAnswer", "requiredCitations", "review"],
+  "properties": {
+    "caseId": { "type": "string", "minLength": 1 },
+    "dataVersion": { "type": "string" },
+    "split": { "enum": ["dev", "test"] },
+    "sourceRights": { "enum": ["owned", "licensed", "public_domain", "synthetic"] },
+    "question": { "type": "string", "minLength": 1 },
+    "timeWindow": { "$ref": "#/$defs/timeWindow" },
+    "evidenceChannels": { "$ref": "#/$defs/evidenceChannels" },
+    "requiredFacts": { "$ref": "#/$defs/facts" },
+    "forbiddenClaims": { "$ref": "#/$defs/facts" },
+    "answerability": { "enum": ["answerable", "unanswerable", "disputed"] },
+    "referenceAnswer": { "type": ["string", "null"] },
+    "requiredCitations": { "type": "array", "items": { "$ref": "#/$defs/citation" } },
+    "review": { "$ref": "#/$defs/review" }
+  },
+  "$defs": {
+    "timeWindow": { "type": "object", "additionalProperties": false, "required": ["startMs", "endMs"], "properties": { "startMs": { "type": "integer", "minimum": 0 }, "endMs": { "type": "integer", "minimum": 0 } } },
+    "evidenceChannels": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["asr", "ocr", "keyframe"] } },
+    "facts": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "citation": { "type": "object", "additionalProperties": false, "required": ["startMs", "endMs", "channel"], "properties": { "startMs": { "type": "integer", "minimum": 0 }, "endMs": { "type": "integer", "minimum": 0 }, "channel": { "enum": ["asr", "ocr", "keyframe"] } } },
+    "review": { "type": "object", "additionalProperties": false, "required": ["status", "reviewerCount"], "properties": { "status": { "enum": ["draft", "in_review", "approved", "rejected"] }, "reviewerCount": { "type": "integer", "minimum": 0 }, "notes": { "type": "string" } } }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "caseId": "feedback-demo-001",
+  "dataVersion": "0.1.0",
+  "split": "dev",
+  "sourceRights": "synthetic",
+  "question": "讲者把学习循环分成哪两个阶段？",
+  "timeWindow": { "startMs": 12000, "endMs": 28000 },
+  "evidenceChannels": ["asr", "ocr"],
+  "requiredFacts": ["输入阶段", "反馈阶段"],
+  "forbiddenClaims": ["视频提出了三个阶段"],
+  "answerability": "answerable",
+  "feedbackType": "bad_citation",
+  "userFeedback": "答案事实正确，但引用时间落在下一页。",
+  "verification": "confirmed",
+  "review": { "status": "approved", "reviewerCount": 2 }
+}

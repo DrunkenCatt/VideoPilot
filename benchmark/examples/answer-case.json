@@ -1,0 +1,17 @@
+{
+  "caseId": "answer-demo-001",
+  "dataVersion": "0.1.0",
+  "split": "dev",
+  "sourceRights": "synthetic",
+  "question": "讲者把学习循环分成哪两个阶段？",
+  "timeWindow": { "startMs": 12000, "endMs": 28000 },
+  "evidenceChannels": ["asr", "ocr"],
+  "requiredFacts": ["输入阶段", "反馈阶段"],
+  "forbiddenClaims": ["视频证明该方法适合所有学习者"],
+  "answerability": "answerable",
+  "referenceAnswer": "讲者将其分为输入阶段和反馈阶段。",
+  "requiredCitations": [
+    { "startMs": 15000, "endMs": 23000, "channel": "asr" }
+  ],
+  "review": { "status": "approved", "reviewerCount": 2 }
+}

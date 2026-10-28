@@ -1,0 +1,16 @@
+{
+  "caseId": "agent-demo-001",
+  "dataVersion": "0.1.0",
+  "split": "dev",
+  "sourceRights": "synthetic",
+  "question": "视频是否说明了课程考试日期？",
+  "timeWindow": { "startMs": 0, "endMs": 60000 },
+  "evidenceChannels": ["asr", "ocr", "keyframe"],
+  "requiredFacts": [],
+  "forbiddenClaims": ["编造考试日期"],
+  "answerability": "unanswerable",
+  "allowedTools": ["search_segments", "inspect_timeline"],
+  "maxToolCalls": 3,
+  "expectedOutcome": "refuse",
+  "review": { "status": "approved", "reviewerCount": 2 }
+}
