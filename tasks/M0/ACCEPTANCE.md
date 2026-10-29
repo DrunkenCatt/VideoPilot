@@ -1,6 +1,6 @@
 # M0 验收记录
 
-日期：2026-10-28
+日期：2026-10-29
 环境：Windows 11、Java 21.0.12.1、Docker Desktop 29.2.1、Docker Compose 5.0.2、Node.js 22.12+
 
 ## 已执行
@@ -17,15 +17,19 @@
 
 本机默认端口存在其他服务占用，因此 Compose 验收使用 18080、33306、16379、15673、19000/19001、16333/16334；容器内服务端口和 CI 默认端口不变。
 
-## 未完成的外部证明
+## 远端 CI 证明
 
-| 检查 | 状态 | 原因与下一步 |
+GitHub Actions：[CI run 40837414790](https://github.com/DrunkenCatt/VideoPilot/actions/runs/40837414790)，提交 `5801f0a`。
+
+| Job / 检查 | 状态 | 证据与结论 |
 | --- | --- | --- |
-| `gitleaks detect --redact` | 未执行 | 本机到 GitHub Release 和 Docker Hub 的连接均失败，无法取得 Gitleaks；`security-check.ps1` 会 fail-closed，CI 使用固定镜像执行 |
-| OWASP Dependency-Check | 未完成 | 插件与测试可运行，但 NVD API 连续 8 次重试仍不可达，已中止；CI 在可联网环境执行并以 CVSS 7 阻断 |
-| GitHub Actions CI | 未执行 | Workflow 已创建但本地不能证明远端运行结果；首次 push/PR 后必须全绿 |
-| M0 人工退出确认 | 等待 | 在 CI 全绿并完成代码评审后，由项目负责人确认是否进入 M1 |
+| backend | 通过（39 秒） | Java 21、22 项测试、ArchUnit 和 JaCoCo 门通过 |
+| frontend | 通过（26 秒） | 类型、Lint、测试、覆盖率、构建和 High/Critical npm audit 通过 |
+| integration | 通过（1 分 27 秒） | 五项 Compose 依赖、Flyway 和真实边界集成测试通过 |
+| Gitleaks | 通过 | 仓库秘密扫描未发现泄露 |
+| OWASP Dependency-Check | 未通过（负责人接受） | CVSS 7 阻断仍发现依赖漏洞；报告作为 CI artifact `dependency-check-report` 保留，工作流和阈值未修改 |
+| M0 人工退出确认 | 已确认 | 2026-10-29，项目负责人要求暂时忽略安全检查失败、结束 M0 并进入 M1 |
 
 ## 退出门结论
 
-本地工程门、空业务环境、五依赖诊断、迁移、前端、覆盖率和 benchmark 合同已通过。由于秘密扫描、OWASP 漏洞库扫描和远端 CI 尚无成功证据，M0 保持“等待外部门禁与人工确认”，不得据此进入 M1。
+M0 的工程骨架、契约、空业务环境、五依赖诊断、迁移、前端、覆盖率、秘密扫描和 benchmark 合同均已取得通过证据。OWASP 高危依赖扫描仍失败，这是已知且未修复的安全债务，不等同于全绿 CI；项目负责人明确接受该例外并批准进入 M1，因此 M0 于 2026-10-29 收尾。后续依赖修复完成前，安全 Job 继续保持失败并保留 CVSS 7 阻断阈值。

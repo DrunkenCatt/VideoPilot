@@ -1,6 +1,6 @@
 # M0 TODO：工程骨架与契约冻结
 
-> 状态：进行中。本文档记录 M0 的实施顺序和验收清单；已存在的骨架和验证基线见 [PLAN.md](./PLAN.md)。
+> 状态：已完成（2026-10-29）。项目负责人明确接受 OWASP 依赖扫描暂未通过的遗留风险，并允许进入 M1；安全 Job 和 CVSS 7 阻断阈值保持不变。
 
 ## 顺序任务
 
@@ -119,19 +119,19 @@
 
 - [x] 新增 CI workflow：Java 21 编译/单测、Flyway 迁移校验、前端 check、Compose 配置校验、秘密扫描。
 - [x] 新增 M0 验收记录，记录实际命令、结果、耗时和未执行项。
-- [ ] 运行完整 M0 退出检查并由人工确认是否进入 M1（本地检查已运行，等待远端 CI 与人工确认）。
+- [x] 运行完整 M0 退出检查并由人工确认进入 M1；安全 Job 的未通过项作为负责人明确接受的遗留风险保留。
 - **验收标准**：CI 在干净环境通过；错误 Java 版本失败；五项健康可区分；无密钥入仓；标注模板满足 Roadmap M0 退出门槛。
 - **验证命令**：`cd server; .\\mvnw.cmd test`；`cd server; .\\mvnw.cmd verify -Pintegration`；`cd client; npm.cmd run check`；`cd client; npm.cmd audit --audit-level=high`；`docker compose config --quiet`；`gitleaks detect --redact`。
 - **预计影响文件**：`.github/workflows/ci.yml`、必要的构建配置、`tasks/M0/ACCEPTANCE.md`。
 - **依赖**：T6、T9。
-- **完成记录（2026-10-28）**：CI 已拆分后端、前端、真实依赖集成和安全四个阻断 Job，固定 Java 21/Node 22.12，使用临时 CI 凭据并在失败时上传 Compose 日志。`ACCEPTANCE.md` 记录了实际结果和耗时；本地可执行门均通过，但 Gitleaks、OWASP 漏洞库和远端 CI 受外部网络/运行环境限制，故人工退出确认及 M0 最终退出门保持未勾选。
+- **完成记录（2026-10-29）**：远端 CI `40837414790` 中后端、前端和真实依赖集成 Job 通过，安全 Job 内 Gitleaks 通过；OWASP 仍因 CVSS 7 以上依赖漏洞失败。项目负责人要求暂时忽略该安全失败并结束 M0；工作流、报告和阻断阈值均保留，未使用 suppression 或降低质量门。
 
 ## M0 退出门
 
 - [x] 空业务环境可一键启动。
 - [x] 应用存活与 MySQL/Redis/RabbitMQ/MinIO/Qdrant 健康可区分。
-- [ ] CI 完成 Java 21 编译、单测和迁移校验（等待首次远端运行）。
+- [x] CI 完成 Java 21 编译、单测和迁移校验。
 - [x] 前端 `npm run check` 和 Compose 配置校验通过。
-- [ ] 仓库和日志中无密钥、视频、完整转录、Embedding 或模型原始响应（等待 Gitleaks 成功证据）。
+- [x] 仓库和日志中无密钥、视频、完整转录、Embedding 或模型原始响应；远端 Gitleaks 通过。
 - [x] 标注模板覆盖问题、相关时间窗、证据通道、必需事实和禁止断言。
-- [ ] 未达到以上任一项时，保持 M0 未完成，不进入 M1。
+- [x] 项目负责人已审阅例外：OWASP 高危依赖门仍失败，但明确接受该遗留风险并允许进入 M1。
