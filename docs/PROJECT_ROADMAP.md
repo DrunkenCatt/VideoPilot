@@ -39,7 +39,7 @@ VideoPilot 首版聚焦教学长视频。它要把课程讲解稳定地转换为
 | 层次 | 技术 | 项目职责 |
 | --- | --- | --- |
 | Web | Vue 3、Vite、SSE、Marked | 上传、视频工作台、进度、问答、证据跳转与学习面板 |
-| Java 单体 | Java 21、Spring Boot 3.5.9、Undertow、MyBatis-Plus | API、任务编排、Agent、权限、状态机和评测入口 |
+| Java 单体 | Java 21、Spring Boot 3.5.16、Undertow、MyBatis-Plus | API、任务编排、Agent、权限、状态机和评测入口 |
 | 异步与协调 | RabbitMQ、Spring AMQP、Redis 7.x、Redisson | 异步任务、发布确认、消费确认、死信、去重、锁、限流和短期状态 |
 | 业务与对象存储 | MySQL 8、MinIO | 业务真源、执行轨迹、Checkpoint、视频与派生产物 |
 | 检索 | Qdrant、BGE-M3 Embedding | 视频片段向量索引与语义召回 |

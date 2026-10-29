@@ -19,7 +19,7 @@ MVP 完成后再建设动态工具型 Agent Loop，以及“用户反馈 -> 复�
 
 ## 核心技术栈
 
-- Java 21、Spring Boot 3.5.9、Undertow、MyBatis-Plus、Flyway
+- Java 21、Spring Boot 3.5.16、Undertow、MyBatis-Plus、Flyway
 - Vue 3、Vite、SSE、Marked
 - MySQL 8、Redis 7.x、Redisson、RabbitMQ、MinIO、Qdrant
 - FFmpeg、Tesseract、LangChain4j、DeepSeek、TeleSpeechASR、BGE-M3

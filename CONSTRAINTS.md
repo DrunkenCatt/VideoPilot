@@ -22,7 +22,7 @@ Last reviewed: 2026-10-27
 
 | Dimension | Rule | Check | Runs at | Rationale |
 | --- | --- | --- | --- | --- |
-| Java version | 构建必须使用 JDK 21 | Maven Enforcer `requireJavaVersion [21,22)` | 每次后端构建、CI | 与 Spring Boot 3.5.9 及项目基线一致，避免开发机漂移 |
+| Java version | 构建必须使用 JDK 21 | Maven Enforcer `requireJavaVersion [21,22)` | 每次后端构建、CI | 与 Spring Boot 3.5.16 及项目基线一致，避免开发机漂移 |
 | Java compile | 零编译错误、零测试失败 | `server\mvnw.cmd test` | 任务结束、CI | 后端最小正确性门槛 |
 | Java integration | MySQL/RabbitMQ/Redis/MinIO 边界测试全部通过 | `server\mvnw.cmd verify -Pintegration` | 合并前、CI | 任务可靠性不能只靠 mock 证明 |
 | Frontend | 类型检查、Lint、单测和构建全部通过 | `client\npm.cmd run check` | 任务结束、CI | 单一可重复的前端交付命令 |
