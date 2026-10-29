@@ -3,6 +3,7 @@ package com.videopilot.infrastructure.web;
 import com.videopilot.infrastructure.error.ErrorCode;
 import com.videopilot.infrastructure.error.VideoPilotException;
 import com.videopilot.infrastructure.trace.TraceContext;
+import com.videopilot.identity.application.IdentityException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -24,6 +25,19 @@ public final class GlobalExceptionHandler {
     ResponseEntity<ApiErrorResponse> handleKnownFailure(VideoPilotException exception) {
         ErrorCode errorCode = exception.errorCode();
         LOGGER.warn("Request failed code={}", errorCode);
+        return response(errorCode, statusFor(errorCode));
+    }
+
+    @ExceptionHandler(IdentityException.class)
+    ResponseEntity<ApiErrorResponse> handleIdentityFailure(IdentityException exception) {
+        ErrorCode errorCode = switch (exception.reason()) {
+            case INVALID_CREDENTIALS -> ErrorCode.INVALID_CREDENTIALS;
+            case AUTHENTICATION_REQUIRED -> ErrorCode.AUTHENTICATION_REQUIRED;
+            case CSRF_REJECTED -> ErrorCode.CSRF_REJECTED;
+            case RATE_LIMITED -> ErrorCode.RATE_LIMITED;
+            case DEPENDENCY_UNAVAILABLE -> ErrorCode.DEPENDENCY_UNAVAILABLE;
+        };
+        LOGGER.warn("Identity request failed code={}", errorCode);
         return response(errorCode, statusFor(errorCode));
     }
 
@@ -62,6 +76,7 @@ public final class GlobalExceptionHandler {
             case RESOURCE_NOT_FOUND -> HttpStatus.NOT_FOUND;
             case IDEMPOTENCY_KEY_REUSED, UPLOAD_EXPIRED, MEDIA_NOT_READY,
                     JOB_NOT_CANCELABLE, CONFLICT -> HttpStatus.CONFLICT;
+            case RATE_LIMITED -> HttpStatus.TOO_MANY_REQUESTS;
             case DEPENDENCY_UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE;
             case INTERNAL_ERROR -> HttpStatus.INTERNAL_SERVER_ERROR;
         };

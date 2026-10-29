@@ -17,6 +17,8 @@ management:
       enabled: false
 
 videopilot:
+  identity:
+    enabled: false
   health:
     mysql:
       enabled: false

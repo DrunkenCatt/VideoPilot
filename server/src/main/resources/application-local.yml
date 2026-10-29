@@ -21,3 +21,7 @@ spring:
     username: ${RABBITMQ_USER:videopilot}
     password: ${RABBITMQ_PASSWORD:videopilot_local}
     connection-timeout: ${RABBITMQ_CONNECTION_TIMEOUT:2s}
+
+videopilot:
+  identity:
+    secure-cookie: ${IDENTITY_SECURE_COOKIE:false}

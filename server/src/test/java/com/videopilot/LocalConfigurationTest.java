@@ -17,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
     "management.endpoint.health.validate-group-membership=false",
     "videopilot.health.mysql.enabled=false",
     "videopilot.health.external.enabled=false",
+    "videopilot.identity.enabled=false",
     "spring.autoconfigure.exclude="
             + "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,"
             + "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration"

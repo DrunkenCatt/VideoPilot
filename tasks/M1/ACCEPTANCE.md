@@ -44,6 +44,7 @@ M1 交付登录与资源归属、MinIO multipart 上传、FFprobe 校验、可�
 | 401 | `AUTHENTICATION_REQUIRED` | 缺少或失效会话 |
 | 401 | `INVALID_CREDENTIALS` | 登录凭据错误；不区分用户名不存在和密码错误 |
 | 403 | `CSRF_REJECTED` | 状态变更请求缺少或使用错误 CSRF Token |
+| 429 | `RATE_LIMITED` | 登录失败次数超过共享窗口限制，可在窗口结束后重试 |
 | 404 | `RESOURCE_NOT_FOUND` | 资源不存在或不属于当前用户 |
 | 409 | `IDEMPOTENCY_KEY_REUSED` | 同一幂等键绑定了不同请求指纹 |
 | 409 | `UPLOAD_EXPIRED` | upload session 已过期或不能继续 |
@@ -197,3 +198,24 @@ M1 只定义一个业务消息：`EXECUTE_JOB`，schema version 为 1。JSON env
 | GREEN：`client\\npm.cmd run check` | 通过，约 20 秒 | 类型、Lint、5 项 Vitest、100% 当前可执行行覆盖率和生产构建通过 |
 
 T1 没有修改数据库、RabbitMQ、MinIO、Redis 或运行时 Controller，因此未运行 `verify -Pintegration`；这些真实边界从 T2/T3/T5/T9 的对应薄切片开始验证。
+
+## 10. T2 身份与归属证据
+
+日期：2026-10-29。
+
+- Flyway V2 新建 `identity_user` 与 `user_session`；账号密码只保存 BCrypt cost 12 哈希，会话 cookie 原值只返回客户端，MySQL 仅保存 SHA-256 摘要。
+- `SessionApplicationService` 统一处理登录、当前会话和精确会话退出；未知用户仍执行 dummy BCrypt，用户名不存在与密码错误统一为 `401 INVALID_CREDENTIALS`。
+- Redis 以用户名和来源地址摘要作为共享失败计数 key，Lua 原子设置计数与窗口 TTL；Redis 不可用时登录限流 fail closed 为可重试 `503 DEPENDENCY_UNAVAILABLE`。
+- `VP_SESSION` 使用 HttpOnly、SameSite=Strict，默认 Secure；仅 local profile 默认允许非 Secure。状态变更使用服务端会话绑定的 `X-CSRF-Token`，重复退出保持 `204`。
+- `OwnerContext` 只能由 `AuthenticatedSession` 构造。双用户测试证明 A/B 上下文互不拥有对方资源；HTTP 合同拒绝请求体 `ownerId`，Header/查询参数也不能覆盖会话 owner。Media/Job 具体资源的 404 隔离仍须在 T4/T7/T9 随资源服务实现继续验证。
+- 本地账号无自助注册。仅当 `IDENTITY_BOOTSTRAP_ENABLED=true` 时，启动流程读取环境变量创建首个账号；用户名/密码不写日志，弱于 12 字符的初始化密码拒绝启动。
+
+| 阶段/命令 | 结果 | 证据摘要 |
+| --- | --- | --- |
+| RED：identity/application、persistence、security 合同测试 | 预期失败 | 先后因身份端口、持久化 Adapter 和安全 Controller/Filter 尚不存在而编译失败 |
+| 变异检查：反转 `OwnerContext.owns` | 预期失败 | 双用户隔离测试在 owner 相等断言处失败，随后恢复生产逻辑 |
+| `server\mvnw.cmd test` | 通过，约 29.0 秒 | 46 项测试、ArchUnit 和 JaCoCo 80% 门通过 |
+| `server\mvnw.cmd clean verify -Pintegration` | 通过，约 55.7 秒 | 使用隔离端口 MySQL 13306、Redis 16379、MinIO 19000、Qdrant 16333；46 项单测和 4 项真实依赖/Flyway/身份持久化集成测试通过 |
+| `client\npm.cmd run check` | 通过，约 23.7 秒 | 类型、Lint、5 项 Vitest、100% 当前可执行行覆盖率和构建通过 |
+
+集成验证前两次运行分别暴露并修复了条件装配时序与 final Repository 代理问题；随后宿主机默认端口服务与 Compose 配置不一致，因此最终成功运行使用上述隔离端口。测试容器不构成产品运行环境。

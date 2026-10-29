@@ -26,13 +26,14 @@
 
 ## T2：实现本地账号登录与资源归属
 
-- [ ] 以前进 Flyway 迁移建立最小用户/会话所需真源字段，不修改 V1；密码只保存强哈希。
-- [ ] 通过 identity application service 实现登录/退出及当前用户读取，安全配置统一处理未认证、CSRF 和 cookie 属性。
-- [ ] 用两个用户证明媒体/Job application service 的 owner 上下文不可由请求体伪造。
+- [x] 以前进 Flyway 迁移建立最小用户/会话所需真源字段，不修改 V1；密码只保存强哈希。
+- [x] 通过 identity application service 实现登录/退出及当前用户读取，安全配置统一处理未认证、CSRF 和 cookie 属性。
+- [x] 用两个用户证明可信 owner 上下文不可由请求体、Header 或查询参数伪造；具体 Media/Job 资源隔离继续由 T4/T7/T9 验证。
 - **验收标准**：正确凭据可登录，错误凭据返回统一错误；未认证请求被拒绝；用户 ID 只来自可信认证上下文；日志和响应不泄露密码哈希。
 - **验证**：聚焦 identity/security 测试；`server\mvnw.cmd test`；ArchUnit 仍通过。
 - **预计文件**：用户迁移、identity domain/application/port、security Adapter、认证合同测试。
 - **依赖/规模**：T1 / M。
+- **完成记录（2026-10-29）**：V2 建立账号与会话真源；交付 BCrypt 账号、摘要会话 token、HttpOnly/Strict/Secure cookie、服务端 CSRF、Redis 共享登录限流和受控本地账号初始化。双用户 `OwnerContext` 与 HTTP 合同证明请求不能选择 owner。后端 46 项快速测试、4 项真实依赖集成测试、ArchUnit、JaCoCo 和前端 `check` 通过；Media/Job 资源级 404 隔离仍按依赖任务继续验证，不在 T2 虚构尚不存在的资源服务。
 
 ## T3：实现 Job 领域模型、统一状态机与前进迁移
 

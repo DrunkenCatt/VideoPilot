@@ -1,6 +1,9 @@
 spring:
   application:
     name: videopilot-server
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
   flyway:
     enabled: true
     locations: classpath:db/migration
@@ -33,6 +36,15 @@ management:
       enabled: false
 
 videopilot:
+  identity:
+    session-ttl: ${IDENTITY_SESSION_TTL:8h}
+    cookie-name: ${IDENTITY_COOKIE_NAME:VP_SESSION}
+    secure-cookie: ${IDENTITY_SECURE_COOKIE:true}
+    login-attempt-limit: ${IDENTITY_LOGIN_ATTEMPT_LIMIT:10}
+    login-attempt-window: ${IDENTITY_LOGIN_ATTEMPT_WINDOW:15m}
+    bootstrap-enabled: ${IDENTITY_BOOTSTRAP_ENABLED:false}
+    bootstrap-username: ${IDENTITY_BOOTSTRAP_USERNAME:}
+    bootstrap-password: ${IDENTITY_BOOTSTRAP_PASSWORD:}
   providers:
     deepseek:
       provider: DeepSeek
