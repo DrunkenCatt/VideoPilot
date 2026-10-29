@@ -92,6 +92,21 @@ jobs:
           cache: maven
       - name: Repository secret scan
         run: docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.28.0 detect --source=/repo --redact --no-banner
-      - name: Java high and critical dependency audit
+      - name: Package backend for dependency analysis
         working-directory: server
-        run: ./mvnw --batch-mode verify -Psecurity
+        run: ./mvnw --batch-mode package
+      - name: Java high and critical dependency audit
+        uses: dependency-check/Dependency-Check_Action@1e54355a8b4c8abaa8cc7d0b70aa655a3bb15a6c
+        env:
+          JAVA_HOME: /opt/jdk
+        with:
+          project: VideoPilot Server
+          path: server
+          format: HTML
+          out: dependency-check-report
+          args: --failOnCVSS 7 --enableRetired
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-check-report
+          path: dependency-check-report
