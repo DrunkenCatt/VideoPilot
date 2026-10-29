@@ -38,7 +38,9 @@ class DatabaseMigrationIT {
                     'analysis_job',
                     'job_stage_attempt',
                     'job_event_outbox',
-                    'model_call'
+                    'model_call',
+                    'identity_user',
+                    'user_session'
                   )
                 ORDER BY table_name
                 """)
@@ -47,10 +49,12 @@ class DatabaseMigrationIT {
 
         assertThat(tables).containsExactly(
                 "analysis_job",
+                "identity_user",
                 "job_event_outbox",
                 "job_stage_attempt",
                 "media_asset",
-                "model_call");
+                "model_call",
+                "user_session");
     }
 
     @Test
