@@ -35,6 +35,17 @@
 - **依赖/规模**：T1 / M。
 - **完成记录（2026-10-29）**：V2 建立账号与会话真源；交付 BCrypt 账号、摘要会话 token、HttpOnly/Strict/Secure cookie、服务端 CSRF、Redis 共享登录限流和受控本地账号初始化。双用户 `OwnerContext` 与 HTTP 合同证明请求不能选择 owner。后端 46 项快速测试、4 项真实依赖集成测试、ArchUnit、JaCoCo 和前端 `check` 通过；Media/Job 资源级 404 隔离仍按依赖任务继续验证，不在 T2 虚构尚不存在的资源服务。
 
+## T2F：交付登录与会话前端验收面
+
+- [x] 提供真实的登录、页面刷新会话恢复和退出操作，使用同源 HttpOnly Cookie；CSRF 值只保留在页面内存，不把密码或会话令牌写入浏览器存储。
+- [x] 覆盖加载、错误凭据、限流/依赖不可用和已登录状态；错误不区分账号是否存在，失败后清空密码。
+- [x] 建立 M1 响应式工作台外壳和视觉 Token，在未交付上传能力前明确显示“下一能力”，不渲染可点击的伪功能。
+- **验收标准**：用户能通过页面调用真实 Session API 登录、刷新恢复和安全退出；320px 与桌面布局可用；键盘标签/焦点清晰；无 Console error/warning。
+- **验证**：先写失败的 API/组件测试；`client\npm.cmd run check`；真实浏览器联调 GET/POST/DELETE session 网络请求及桌面/手机视口。
+- **预计文件**：`client/src/api/session.ts`、`client/src/App.vue`、全局样式和测试。
+- **依赖/规模**：T2 / S。
+- **完成记录（2026-10-29）**：按 RED/GREEN 新增 Session API client 与登录/会话恢复/退出工作台；16 项前端测试和 `npm run check` 全部通过，Statements 95.77%、Branches 92.53%、Functions 100%、Lines 98.36%。在 Compose 内网依赖和全新 Flyway schema 上完成真实浏览器 POST 登录、刷新 GET 恢复、CSRF DELETE 退出；桌面及 375 x 812 手机视口的可访问 DOM、布局和零 Console error/warning 已验证。
+
 ## T3：实现 Job 领域模型、统一状态机与前进迁移
 
 - [x] 为 `AnalysisJob`、`JobStageAttempt`、`JobEvent` 建立领域类型、稳定错误分类和合法迁移表。
@@ -95,13 +106,13 @@
 
 ## T8：交付假任务工作台纵向闭环
 
-- [ ] 前端建立认证状态、Job 提交/列表/详情 API client 和类型化错误处理。
-- [ ] 工作台显示真实状态、阶段、事件、失败原因和取消按钮；SSE 断开采用有界退避并携带最后 event id。
-- [ ] 用测试媒体记录跑通“提交 -> 实时进度 -> 刷新补拉 -> 完成/取消/失败”页面流程。
+- [ ] 在已完成的 T4F/T7F 操作面上用测试媒体记录跑通“提交 -> 实时进度 -> 刷新补拉 -> 完成/取消/失败”。
+- [ ] 以桌面和手机视口检查关键布局、键盘主路径、可访问名称、Console 和 REST/SSE 网络请求。
+- [ ] 记录页面结果与 MySQL 持久化事件一致，证明前端没有本地计时或假数据状态。
 - **验收标准**：页面不根据本地计时伪造进度；刷新后状态来自服务端；失败和取消可访问且明确；无 Console error。
-- **验证**：Vitest 组件/API 测试；`client\npm.cmd run check`；浏览器手工验收核心流程。
-- **预计文件**：前端 API/types、认证与 Job views/components、样式、测试。
-- **依赖/规模**：T7 / M。
+- **验证**：`client\npm.cmd run check`；真实浏览器 + RabbitMQ/MySQL 冒烟验收并记录网络/Console 证据。
+- **预计文件**：浏览器验收记录、必要的前端缺陷修复和测试。
+- **依赖/规模**：T7F / S。
 
 ### Checkpoint B：可靠假任务
 
@@ -119,6 +130,16 @@
 - **预计文件**：media domain/application/port、MinIO/persistence Adapter、迁移/配置、集成测试。
 - **依赖/规模**：T2 / M。
 
+## T9F：交付视频选择、分片上传与进度前端验收面
+
+- [ ] 实现 Media upload session API client、文件选择和分片上传；文件名/大小/MIME 仅作提示，服务端仍负责可信校验。
+- [ ] 显示真实字节进度、分片重试/过期/中止状态；短期预签名 URL 只在请求期间使用，不持久化 MinIO 凭据。
+- [ ] 用小 fixture 和超过客户端限制的文件覆盖成功、失败与取消，页面保持键盘可操作和移动端可读。
+- **验收标准**：登录用户能通过页面把视频上传至服务端限定的 object key；刷新或错误不会错误宣称已完成；跨用户信息不进入请求。
+- **验证**：API/组件失败测试；`client\npm.cmd run check`；真实浏览器检查 MinIO 分片网络请求和 Console。
+- **预计文件**：media API client、upload feature/component、样式和测试。
+- **依赖/规模**：T9 / M。
+
 ## T10：实现 FFprobe 校验并连接真实媒体与 Job
 
 - [ ] 用受控进程 Adapter 执行 FFprobe，限制超时、输出大小和并发，校验容器/视频流/时长并解析为供应商无关结果。
@@ -129,15 +150,45 @@
 - **预计文件**：media probe port/application service、FFprobe Adapter、配置、测试 fixture/测试。
 - **依赖/规模**：T3、T9 / M。
 
+## T10F：交付媒体校验状态前端验收面
+
+- [ ] 上传完成后从服务端读取并展示 `UPLOADED/PROBING/READY/FAILED`、可信时长和安全错误摘要，不在客户端推断 READY。
+- [ ] 校验中提供刷新/轮询边界，失败状态明确不可分析；有效媒体只显示当前已交付的下一操作。
+- [ ] 以有效视频、损坏文件和服务不可用覆盖页面状态及恢复行为。
+- **验收标准**：页面状态与 MediaAsset 真源一致，READY 前不能提交 Job，错误可理解且不泄露 FFprobe 命令/路径。
+- **验证**：组件/API 测试；`client\npm.cmd run check`；真实浏览器核对媒体请求和状态转换。
+- **预计文件**：media status API/组件、样式和测试。
+- **依赖/规模**：T9F、T10 / S。
+
+## T4F：交付 Job 提交与查询前端验收面
+
+- [ ] 对 READY 且归属当前用户的媒体提供目标/模式提交表单，按一次提交意图生成并复用 `Idempotency-Key`。
+- [ ] 提供 owner-scoped Job 列表/详情 API client，统一处理重复提交、同 key 异请求、媒体未就绪和认证过期。
+- [ ] 成功提交后使用服务端 links 导航到 Job，不由客户端拼装或推断任务状态。
+- **验收标准**：用户能从已校验媒体提交 Job 并刷新读取；重复点击/网络重试不创建第二个逻辑任务；请求不携带 ownerId。
+- **验证**：API/组件失败测试；`client\npm.cmd run check`；浏览器核对 202、幂等 Header 和恢复请求。
+- **预计文件**：jobs API client、submit/list/detail feature 和测试。
+- **依赖/规模**：T4、T10F / S。
+
+## T7F：交付 Job 状态、SSE、取消与失败前端验收面
+
+- [ ] Job 详情显示服务端状态、阶段、持久化事件、稳定失败摘要和合法取消操作；不以本地计时生成进度。
+- [ ] SSE 断线采用有界退避并携带最后 event id，先补拉再接热流；终态关闭连接并对屏幕阅读器播报关键变化。
+- [ ] 会话过期、越权 404、可重试/不可重试失败和取消竞态均有明确页面语义。
+- **验收标准**：刷新/重连后事件不丢、不乱序、不重复展示；取消结果由服务端 CAS 裁决；跨用户 URL 不泄露存在性。
+- **验证**：API/组件/SSE 测试；`client\npm.cmd run check`；真实浏览器核对 EventSource/补拉、Console 和可访问树。
+- **预计文件**：job detail/timeline feature、SSE client、样式和测试。
+- **依赖/规模**：T7、T4F / M。
+
 ## T11：交付真实上传与进度页面纵向闭环
 
-- [ ] 登录页/会话恢复和视频选择、上传进度、校验状态、分析目标/模式提交形成一条用户路径。
-- [ ] 客户端只持有 upload session 返回的短期凭据，重试同一意图复用 idempotency key；取消上传和错误恢复语义明确。
-- [ ] Job 页面展示真实媒体名、时长、状态和可补拉进度，用户不能在 URL/请求体切换 owner。
+- [ ] 组合已完成的 T2F/T9F/T10F/T4F/T7F，形成登录、视频选择、上传、校验、分析提交和 Job 进度的一条连续用户路径。
+- [ ] 用真实浏览器和 Compose 依赖验证成功、刷新恢复、上传失败和分析失败，不在此任务集中补造尚未随薄片交付的页面。
+- [ ] Job 页面展示真实媒体名、时长、状态和可补拉进度，网络请求中不存在可由用户切换的 owner。
 - **验收标准**：用户可从空页面完成“登录 -> 上传 -> 校验 -> 提交 -> 查看进度”；刷新不丢 Job；上传和分析错误均可恢复或明确终止。
 - **验证**：前端单测；`client\npm.cmd run check`；真实浏览器 + MinIO/RabbitMQ/MySQL 冒烟验收。
-- **预计文件**：前端 auth/upload/workspace views、API/types、路由/样式、测试。
-- **依赖/规模**：T8、T10 / M。
+- **预计文件**：端到端验收记录、必要的跨 feature 导航和缺陷修复。
+- **依赖/规模**：T8、T9F、T10F / S。
 
 ## T12：加入 Redis active key 并证明可重建
 

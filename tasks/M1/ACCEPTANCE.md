@@ -162,6 +162,7 @@ M1 只定义一个业务消息：`EXECUTE_JOB`，schema version 为 1。JSON env
 
 | ID | Given | When | Then |
 | --- | --- | --- | --- |
+| M1-A00 | 浏览器无有效会话且本地账号已初始化 | 页面登录、刷新并退出 | POST 创建 HttpOnly 会话；刷新通过 GET 恢复；DELETE 携带 CSRF 后回到登录页；客户端不持久化密码或会话令牌 |
 | M1-A01 | 用户 A 有已通过 FFprobe 的媒体 | 同一 key、同一请求串行提交两次 | 两次返回同一 jobId；数据库只有一个逻辑 Job 和一个初始阶段 |
 | M1-A02 | 用户 A 有已通过 FFprobe 的媒体 | 同一 key、同一请求并发提交 | 唯一约束只允许一个创建者；另一请求返回同一 Job |
 | M1-A03 | key 已绑定请求指纹 X | 同一用户用该 key 提交指纹 Y | 返回 `409 IDEMPOTENCY_KEY_REUSED`，既有 Job 不变 |
@@ -219,3 +220,18 @@ T1 没有修改数据库、RabbitMQ、MinIO、Redis 或运行时 Controller，�
 | `client\npm.cmd run check` | 通过，约 23.7 秒 | 类型、Lint、5 项 Vitest、100% 当前可执行行覆盖率和构建通过 |
 
 集成验证前两次运行分别暴露并修复了条件装配时序与 final Repository 代理问题；随后宿主机默认端口服务与 Compose 配置不一致，因此最终成功运行使用上述隔离端口。测试容器不构成产品运行环境。
+
+## 11. T2F 登录前端验收面证据
+
+日期：2026-10-29。
+
+- `client/src/api/session.ts` 只调用冻结的 `/api/v1/sessions` 与 `/current` 资源；请求使用同源 Cookie，退出携带内存中的 `X-CSRF-Token`，未引入 localStorage/sessionStorage 会话状态。
+- 页面覆盖会话恢复、登录、统一错误、密码失败后清空和退出；已登录页只显示当前已交付能力，并明确把上传标成“下一能力”，没有伪造 M1 后续状态。
+- 视觉采用 Roadmap 4.1 的教学档案工作台方向；桌面与 375 x 812 手机视口均完成截图/DOM 检查，标题层级、表单标签、按钮可访问名称存在，Console error/warning 为 0。
+- 浏览器在 Compose 内网依赖与全新 `videopilot_browser` schema 上完成真实 POST 登录、刷新 GET 恢复和带 CSRF 的 DELETE 退出；Flyway 从空库应用 V1-V3，登录成功后会话到期时间来自服务端。
+
+| 阶段/命令 | 结果 | 证据摘要 |
+| --- | --- | --- |
+| RED：`client\npm.cmd run test -- --run` | 预期失败 | Session API 模块不存在，旧 M0 页面没有账号、密码、登录与退出操作；4 个页面场景失败 |
+| GREEN：`client\npm.cmd run check` | 通过，约 9.2 秒 | 类型与零 warning Lint 通过；16 项测试通过；Statements 95.77%、Branches 92.53%、Functions 100%、Lines 98.36%；生产构建成功 |
+| 真实浏览器：桌面与 375 x 812 | 通过 | 登录、刷新恢复、退出均连接真实后端；桌面/手机布局可用，可访问 DOM 完整，Console error/warning 为 0 |
