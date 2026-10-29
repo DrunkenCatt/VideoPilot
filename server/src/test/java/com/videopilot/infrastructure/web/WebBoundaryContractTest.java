@@ -117,6 +117,19 @@ class WebBoundaryContractTest {
                 .andExpect(jsonPath("$.requestId").value(matchesPattern("[0-9a-f]{32}")));
     }
 
+    @Test
+    void mapsM1AuthenticationAndIdempotencyFailuresToStableStatuses() throws Exception {
+        mockMvc.perform(get("/test/known-failure").param("code", "AUTHENTICATION_REQUIRED"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+        mockMvc.perform(get("/test/known-failure").param("code", "CSRF_REJECTED"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_REJECTED"));
+        mockMvc.perform(get("/test/known-failure").param("code", "IDEMPOTENCY_KEY_REUSED"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_REUSED"));
+    }
+
     @RestController
     private static class ProbeController {
 
@@ -145,6 +158,11 @@ class WebBoundaryContractTest {
         @GetMapping("/test/required")
         String required(@RequestParam String value) {
             return value;
+        }
+
+        @GetMapping("/test/known-failure")
+        String knownFailure(@RequestParam ErrorCode code) {
+            throw new VideoPilotException(code);
         }
     }
 }

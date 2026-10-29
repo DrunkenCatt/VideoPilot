@@ -57,8 +57,11 @@ public final class GlobalExceptionHandler {
     private HttpStatus statusFor(ErrorCode errorCode) {
         return switch (errorCode) {
             case INVALID_REQUEST -> HttpStatus.BAD_REQUEST;
+            case AUTHENTICATION_REQUIRED, INVALID_CREDENTIALS -> HttpStatus.UNAUTHORIZED;
+            case CSRF_REJECTED -> HttpStatus.FORBIDDEN;
             case RESOURCE_NOT_FOUND -> HttpStatus.NOT_FOUND;
-            case CONFLICT -> HttpStatus.CONFLICT;
+            case IDEMPOTENCY_KEY_REUSED, UPLOAD_EXPIRED, MEDIA_NOT_READY,
+                    JOB_NOT_CANCELABLE, CONFLICT -> HttpStatus.CONFLICT;
             case DEPENDENCY_UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE;
             case INTERNAL_ERROR -> HttpStatus.INTERNAL_SERVER_ERROR;
         };
