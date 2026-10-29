@@ -58,6 +58,36 @@ class DatabaseMigrationIT {
     }
 
     @Test
+    void addsForwardOnlyJobTransitionConstraintsAndEventTime() {
+        List<String> columns = jdbcClient.sql("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = DATABASE()
+                  AND table_name = 'job_event_outbox'
+                  AND column_name = 'occurred_at'
+                """)
+                .query(String.class)
+                .list();
+        List<String> checks = jdbcClient.sql("""
+                SELECT constraint_name
+                FROM information_schema.table_constraints
+                WHERE table_schema = DATABASE()
+                  AND table_name IN ('analysis_job', 'job_stage_attempt', 'job_event_outbox')
+                  AND constraint_type = 'CHECK'
+                ORDER BY constraint_name
+                """)
+                .query(String.class)
+                .list();
+
+        assertThat(columns).containsExactly("occurred_at");
+        assertThat(checks).contains(
+                "chk_analysis_job_status",
+                "chk_job_stage_status",
+                "chk_job_event_sequence",
+                "chk_job_event_schema_version");
+    }
+
+    @Test
     @Transactional
     void enforcesJobIdentityAndStageFingerprintUniqueness() {
         insertMedia("00000000-0000-0000-0000-000000000001");

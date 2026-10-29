@@ -32,5 +32,9 @@ public record JobTransitionCommand(
         if (stageAttempt.isPresent() && !stageAttempt.orElseThrow().jobId().equals(jobId)) {
             throw new IllegalArgumentException("stageAttempt must belong to the transitioned job");
         }
+        if ((targetStatus == JobStatus.FAILED || targetStatus == JobStatus.RETRY_WAIT)
+                && failure.isEmpty()) {
+            throw new IllegalArgumentException(targetStatus + " transition requires a stable failure");
+        }
     }
 }

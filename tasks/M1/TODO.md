@@ -37,13 +37,14 @@
 
 ## T3：实现 Job 领域模型、统一状态机与前进迁移
 
-- [ ] 为 `AnalysisJob`、`JobStageAttempt`、`JobEvent` 建立领域类型、稳定错误分类和合法迁移表。
-- [ ] 实现唯一的 `JobTransitionService`：校验前置状态、version CAS、阶段输入指纹，并在同一事务写 Job、阶段和事件/Outbox。
-- [ ] 用新迁移补足 V1 为 M1 所需的字段/约束/索引；不得回写或重命名 V1。
+- [x] 为 `AnalysisJob`、`JobStageAttempt`、`JobEvent` 建立领域类型、稳定错误分类和合法迁移表。
+- [x] 实现唯一的 `JobTransitionService`：校验前置状态、version CAS、阶段输入指纹，并在同一事务写 Job、阶段和事件/Outbox。
+- [x] 用新迁移补足 V1 为 M1 所需的字段/约束/索引；不得回写或重命名 V1。
 - **验收标准**：所有合法边有单测；非法边和终态推进被拒绝；并发旧 version 只有一个成功；Controller/Consumer/Mapper 不能绕过迁移入口更新状态。
 - **验证**：状态机参数化测试、CAS 集成测试、ArchUnit；`server\mvnw.cmd test`；`server\mvnw.cmd verify -Pintegration`。
 - **预计文件**：analysis domain/application/port、MyBatis-Plus persistence Adapter、V2+ 迁移、状态机/集成测试。
 - **依赖/规模**：T1 / M。
+- **完成记录（2026-10-29）**：按 ADR-0003 实现完整合法迁移表、稳定错误分类与唯一 `JobTransitionService`；MyBatis-Plus Adapter 以 `status + version` CAS 裁决并发，并在同一 Spring 事务中写 Job、可选阶段记录和事件/Outbox。V3 仅以前进方式增加状态/错误/事件游标约束、事件发生时间及 owner 查询索引。状态机条件变异会触发 34 项测试失败，证明合法/非法边断言有效；后端 90 项快速测试、全新 MySQL schema 上 8 项集成测试、ArchUnit 与 JaCoCo 门均通过。
 
 ## T4：幂等创建 Job 与事务 Outbox
 

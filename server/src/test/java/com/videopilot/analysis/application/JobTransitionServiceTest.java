@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.videopilot.analysis.domain.AnalysisJob;
 import com.videopilot.analysis.domain.JobEventType;
+import com.videopilot.analysis.domain.JobErrorCategory;
+import com.videopilot.analysis.domain.JobFailure;
 import com.videopilot.analysis.domain.JobStage;
 import com.videopilot.analysis.domain.JobStageAttempt;
 import com.videopilot.analysis.domain.JobStageStatus;
@@ -97,6 +99,31 @@ class JobTransitionServiceTest {
                 JOB_ID, JobStage.SUBMISSION, " ", 1, NOW))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("inputFingerprint");
+    }
+
+    @Test
+    void failedAndRetryWaitTransitionsRequireAStableFailure() {
+        assertThatThrownBy(() -> command(JobStatus.CONSUMING, 3, JobStatus.FAILED))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("failure");
+        assertThatThrownBy(() -> command(JobStatus.PROBING, 3, JobStatus.RETRY_WAIT))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("failure");
+
+        JobFailure retryable = new JobFailure(
+                JobErrorCategory.RETRYABLE, "DEPENDENCY_TIMEOUT", "Provider timed out", true);
+        JobTransitionCommand retry = new JobTransitionCommand(
+                JOB_ID,
+                JobStatus.PROBING,
+                3,
+                JobStatus.RETRY_WAIT,
+                Optional.empty(),
+                Optional.of(retryable),
+                JobEventType.JOB_FAILED,
+                "request-123",
+                "{}");
+
+        assertThat(retry.failure()).contains(retryable);
     }
 
     private JobTransitionCommand command(JobStatus expected, long version, JobStatus target) {

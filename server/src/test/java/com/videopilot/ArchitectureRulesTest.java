@@ -3,6 +3,7 @@ package com.videopilot;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
+import com.videopilot.analysis.port.JobTransitionStore;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
@@ -28,7 +29,28 @@ class ArchitectureRulesTest {
     @ArchTest
     static final ArchRule businessModulesDoNotDependOnInfrastructure = noClasses()
             .that().resideInAnyPackage(
-                    "..identity..", "..media..", "..analysis..", "..context..", "..retrieval..",
-                    "..answer..", "..agent..", "..feedback..", "..evaluation..")
+                    "com.videopilot.identity..",
+                    "com.videopilot.media..",
+                    "com.videopilot.analysis..",
+                    "com.videopilot.context..",
+                    "com.videopilot.retrieval..",
+                    "com.videopilot.answer..",
+                    "com.videopilot.agent..",
+                    "com.videopilot.feedback..",
+                    "com.videopilot.evaluation..")
             .should().dependOnClassesThat().resideInAPackage("..infrastructure..");
+
+    @ArchTest
+    static final ArchRule boundaryCallersCannotBypassTheJobTransitionService = noClasses()
+            .that().haveSimpleNameEndingWith("Controller")
+            .or().haveSimpleNameEndingWith("Consumer")
+            .or().haveSimpleNameEndingWith("Mapper")
+            .should().dependOnClassesThat().areAssignableTo(JobTransitionStore.class)
+            .allowEmptyShould(true);
+
+    @ArchTest
+    static final ArchRule jobMappersStayInsideThePersistenceAdapterPackage = classes()
+            .that().haveSimpleNameEndingWith("Mapper")
+            .and().resideInAPackage("..analysis..")
+            .should().resideInAPackage("..infrastructure.analysis.persistence..");
 }
