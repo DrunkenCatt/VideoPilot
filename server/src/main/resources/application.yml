@@ -36,6 +36,8 @@ management:
       enabled: false
 
 videopilot:
+  analysis:
+    pipeline-version: ${ANALYSIS_PIPELINE_VERSION:m1-fake-v1}
   identity:
     session-ttl: ${IDENTITY_SESSION_TTL:8h}
     cookie-name: ${IDENTITY_COOKIE_NAME:VP_SESSION}

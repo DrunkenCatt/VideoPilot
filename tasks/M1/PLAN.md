@@ -4,7 +4,7 @@
 
 M1 要在 M0 已冻结的契约上交付第一个真实用户闭环：用户登录后上传本地教学视频，系统保存资源归属和媒体元数据，通过统一状态迁移与 Transactional Outbox 把 `AnalysisJob` 可靠投递到 RabbitMQ，Consumer 在至少一次投递下幂等推进任务，并由持久化事件向页面提供可补拉的 SSE 进度、取消和失败信息。
 
-当前 `main` 已完成 T0-T3：M0 退出、M1 合同、本地身份/资源归属、Job 领域状态机和 MySQL 原子迁移均已有测试证据；登录与会话恢复页面作为 T2F 首个前端验收面交付。MinIO 业务 Adapter、FFprobe、Job 提交、Outbox Relay、RabbitMQ Consumer、Redisson 锁、SSE 和后续 M1 操作面仍待实现。
+当前 `main` 已完成 T0-T4：M0 退出、M1 合同、本地身份/资源归属、Job 领域状态机、MySQL 原子迁移，以及幂等 Job 提交和事务 Outbox 均已有测试证据；登录与会话恢复页面作为 T2F 首个前端验收面交付。MinIO 业务 Adapter、FFprobe、Outbox Relay、RabbitMQ Consumer、Redisson 锁、SSE 和后续 M1 操作面仍待实现。
 
 M0 已于 2026-10-29 由项目负责人确认退出。远端 CI run `40837414790` 的 backend、frontend、integration 与 Gitleaks 已通过；OWASP Dependency-Check 仍发现 CVSS 7 以上依赖漏洞，项目负责人明确接受该遗留风险并允许进入 M1。安全 Job、报告和 CVSS 7 阻断阈值保持不变，该风险不视为已修复。
 
@@ -53,10 +53,10 @@ T13 -> T14 文档、质量门与退出记录
 | --- | --- | --- | --- |
 | T0 | 关闭 M0 外部门禁并取得人工确认（已完成） | 无 | S |
 | T1 | 冻结 M1 验收场景与 REST/SSE/MQ 契约（已完成） | T0 | M |
-| T2 | 本地账号登录与资源归属 | T1 | M |
+| T2 | 本地账号登录与资源归属（已完成） | T1 | M |
 | T2F | 登录、会话恢复与退出前端验收面（已完成） | T2 | S |
-| T3 | Job 领域模型、统一状态机与前进迁移 | T1 | M |
-| T4 | 幂等创建 Job 与事务 Outbox | T2、T3 | M |
+| T3 | Job 领域模型、统一状态机与前进迁移（已完成） | T1 | M |
+| T4 | 幂等创建 Job 与事务 Outbox（已完成） | T2、T3 | M |
 | T4F | Job 提交/查询前端验收面 | T4、T10F | S |
 | T5 | RabbitMQ 拓扑与可靠 Outbox Relay | T4 | M |
 | T6 | 幂等 Consumer、Redisson 锁与阶段 CAS | T5 | M |

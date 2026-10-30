@@ -17,6 +17,8 @@ management:
       enabled: false
 
 videopilot:
+  analysis:
+    enabled: false
   identity:
     enabled: false
   health:

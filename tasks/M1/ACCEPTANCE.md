@@ -235,3 +235,24 @@ T1 没有修改数据库、RabbitMQ、MinIO、Redis 或运行时 Controller，�
 | RED：`client\npm.cmd run test -- --run` | 预期失败 | Session API 模块不存在，旧 M0 页面没有账号、密码、登录与退出操作；4 个页面场景失败 |
 | GREEN：`client\npm.cmd run check` | 通过，约 9.2 秒 | 类型与零 warning Lint 通过；16 项测试通过；Statements 95.77%、Branches 92.53%、Functions 100%、Lines 98.36%；生产构建成功 |
 | 真实浏览器：桌面与 375 x 812 | 通过 | 登录、刷新恢复、退出均连接真实后端；桌面/手机布局可用，可访问 DOM 完整，Console error/warning 为 0 |
+
+## 12. T4 幂等创建与事务 Outbox 证据
+
+日期：2026-10-30。
+
+- `AnalysisJobApplicationService` 先按当前 owner 与 `Idempotency-Key` 查找既有请求，再校验媒体归属和 READY 状态；因此已成功请求的网络重试不会因媒体后续状态变化而改变结果。
+- 目标文本先经 NFKC 规范化并折叠空白，再与 mediaId、模式共同生成请求指纹；逻辑分析键额外绑定媒体内容指纹与 pipeline version，避免显示文本差异或供应链升级意外复用执行。
+- MySQL V1 已具备 `owner_id + idempotency_key` 与 `owner_id + analysis_key` 唯一约束，T4 直接以这两项约束裁决并发，无需篡改旧迁移或新增重复索引。
+- 持久化 Adapter 在一个 Spring 事务中写入 `CREATED` Job、已完成 `SUBMISSION` 阶段、sequence=1 的 `JOB_CREATED` 事件和 `PENDING` Outbox。后续写入故障会回滚整个事务，不留下孤立 Job 或 Outbox。
+- `POST /api/v1/jobs` 返回 `202 Accepted`、`Location` 与服务端生成的稳定 links；详情和分页查询始终从认证会话取得 owner。跨用户读取与不存在资源统一为 404。
+
+| 阶段/命令 | 结果 | 证据摘要 |
+| --- | --- | --- |
+| RED：application service 测试 | 预期失败 | 创建命令、Port 与服务尚不存在，测试编译失败 |
+| RED：`AnalysisJobCreationIT` | 预期失败 | MySQL 场景因创建服务未装配而失败 |
+| RED：幂等重试回归测试 | 预期失败 | 初版先检查媒体 READY，导致已成功请求在媒体状态变化后错误返回 `MEDIA_NOT_READY`；调整为先查既有幂等请求后通过 |
+| 变异检查：反转媒体 READY 条件 | 预期失败 | 5 项 application 测试中 2 项断言失败、3 项报错，恢复正确条件后通过 |
+| `server\mvnw.cmd clean test` | 通过，约 36.9 秒 | 103 项测试通过，包含 application、Controller、持久化 Adapter、ArchUnit；JaCoCo 80% 门通过 |
+| `server\mvnw.cmd clean verify -Pintegration` | 通过，约 57.7 秒 | 隔离端口与全新 `videopilot_t4` schema 上 103 项单测、13 项 Flyway/真实依赖/MySQL 集成测试通过 |
+
+T4 不改动 `client`，且按已冻结依赖需等待 T10F 提供真实 READY 媒体操作面后再实施 T4F，因此本任务未运行前端 `check` 或浏览器联调。RabbitMQ 发布仍属于 T5；T4 只保证待发布 Outbox 与 Job 事实同事务落库。

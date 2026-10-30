@@ -12,6 +12,12 @@ final class AnalysisJobRow {
     private String jobId;
     private String ownerId;
     private String mediaId;
+    private String analysisKey;
+    private String idempotencyKey;
+    private String requestFingerprint;
+    private String goal;
+    private String mode;
+    private String pipelineVersion;
     private String status;
     private String currentStage;
     private int attempt;
@@ -35,6 +41,30 @@ final class AnalysisJobRow {
 
     String getMediaId() {
         return mediaId;
+    }
+
+    String getAnalysisKey() {
+        return analysisKey;
+    }
+
+    String getIdempotencyKey() {
+        return idempotencyKey;
+    }
+
+    String getRequestFingerprint() {
+        return requestFingerprint;
+    }
+
+    String getGoal() {
+        return goal;
+    }
+
+    String getMode() {
+        return mode;
+    }
+
+    String getPipelineVersion() {
+        return pipelineVersion;
     }
 
     String getStatus() {

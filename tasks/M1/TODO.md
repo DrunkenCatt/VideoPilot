@@ -59,20 +59,21 @@
 
 ## T4：幂等创建 Job 与事务 Outbox
 
-- [ ] 实现创建 Job application service，在单事务原子写入 Job、初始阶段/事件和待发布 Outbox。
-- [ ] 以数据库唯一约束裁决 `ownerId + idempotencyKey` 和逻辑执行冲突，校验规范化请求指纹。
-- [ ] 提供提交与查询端点，Controller 只调用 application service，响应使用 `202 Accepted` 和稳定 status/events URL。
+- [x] 实现创建 Job application service，在单事务原子写入 Job、初始阶段/事件和待发布 Outbox。
+- [x] 以数据库唯一约束裁决 `ownerId + idempotencyKey` 和逻辑执行冲突，校验规范化请求指纹。
+- [x] 提供提交与查询端点，Controller 只调用 application service，响应使用 `202 Accepted` 和稳定 status/events URL。
 - **验收标准**：并发同 key/同请求只产生一个 Job；同 key/不同请求稳定冲突；数据库提交失败不留下孤立 Outbox，成功提交一定有待发布消息。
 - **验证**：先写并发失败测试；聚焦 application 测试；MySQL 集成测试；`server\mvnw.cmd test`。
 - **预计文件**：analysis application service、web Controller/DTO、persistence Adapter、幂等集成测试。
 - **依赖/规模**：T2、T3 / M。
+- **完成记录（2026-10-30）**：新增 owner-scoped Job 提交、详情和分页查询；目标文本经 NFKC 与空白折叠后参与 SHA-256 请求指纹和逻辑分析键。创建事务原子写入 `CREATED` Job、`SUBMISSION` 完成阶段、首个 `JOB_CREATED` 事件及 `PENDING` Outbox；数据库唯一约束裁决同 key 和同逻辑分析的并发竞争。相同 key/相同请求返回既有 Job，相同 key/不同请求返回稳定 `409 IDEMPOTENCY_KEY_REUSED`，跨用户媒体/Job 均返回不泄露存在性的 404。后端 103 项快速测试、全新 MySQL schema 上 13 项集成测试、ArchUnit 与 JaCoCo 门均通过。
 
 ### Checkpoint A：契约与真源
 
 - [x] M0 已正式退出。
 - [x] M1 接口合同已由 T1 冻结。
-- [ ] Job 创建、状态迁移、阶段和 Outbox 的单事务/CAS 行为有真实 MySQL 证据。
-- [ ] `server\mvnw.cmd test` 与相关 integration 测试通过。
+- [x] Job 创建、状态迁移、阶段和 Outbox 的单事务/CAS 行为有真实 MySQL 证据。
+- [x] `server\mvnw.cmd test` 与相关 integration 测试通过。
 
 ## T5：声明 RabbitMQ 拓扑并实现可靠 Outbox Relay
 

@@ -1,9 +1,11 @@
 package com.videopilot.infrastructure.web;
 
+import com.videopilot.analysis.application.AnalysisJobException;
+import com.videopilot.identity.application.IdentityException;
 import com.videopilot.infrastructure.error.ErrorCode;
 import com.videopilot.infrastructure.error.VideoPilotException;
 import com.videopilot.infrastructure.trace.TraceContext;
-import com.videopilot.identity.application.IdentityException;
+import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -11,9 +13,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
-import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.bind.MissingRequestHeaderException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestControllerAdvice
@@ -41,11 +45,27 @@ public final class GlobalExceptionHandler {
         return response(errorCode, statusFor(errorCode));
     }
 
+    @ExceptionHandler(AnalysisJobException.class)
+    ResponseEntity<ApiErrorResponse> handleAnalysisJobFailure(AnalysisJobException exception) {
+        ErrorCode errorCode = switch (exception.reason()) {
+            case INVALID_REQUEST -> ErrorCode.INVALID_REQUEST;
+            case RESOURCE_NOT_FOUND -> ErrorCode.RESOURCE_NOT_FOUND;
+            case MEDIA_NOT_READY -> ErrorCode.MEDIA_NOT_READY;
+            case IDEMPOTENCY_KEY_REUSED -> ErrorCode.IDEMPOTENCY_KEY_REUSED;
+            case CONFLICT -> ErrorCode.CONFLICT;
+        };
+        LOGGER.warn("Analysis job request failed code={}", errorCode);
+        return response(errorCode, statusFor(errorCode));
+    }
+
     @ExceptionHandler({
         BindException.class,
         HttpMessageNotReadableException.class,
         MethodArgumentTypeMismatchException.class,
-        MissingServletRequestParameterException.class
+        MissingServletRequestParameterException.class,
+        MissingRequestHeaderException.class,
+        HandlerMethodValidationException.class,
+        ConstraintViolationException.class
     })
     ResponseEntity<ApiErrorResponse> handleInvalidRequest(Exception exception) {
         LOGGER.warn("Invalid request type={}", exception.getClass().getName());
