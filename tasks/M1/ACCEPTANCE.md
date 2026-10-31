@@ -277,3 +277,23 @@ T4 不改动 `client`，且按已冻结依赖需等待 T10F 提供真实 READY �
 | `server\mvnw.cmd clean verify -Pintegration` | 通过 | 隔离端口与 `videopilot_t5` schema 上 114 项单测、19 项真实依赖/Flyway/MySQL/RabbitMQ 集成测试通过 |
 
 T5 是内部可靠性薄片，没有修改 `client`，因此未运行前端 `check` 或浏览器联调。Consumer 手动 ACK、消息重投幂等、Retry Queue/DLQ 消费路径和 Job 状态推进属于 T6；本任务只完成 Outbox 到 Broker 的可靠发布边界。
+
+## 14. T6 幂等 Consumer、Redisson 锁与阶段 CAS 证据
+
+日期：2026-10-31。
+
+- Rabbit listener 使用手动 ACK；只有 handler 完成数据库事务或识别为确定 no-op 后才 ACK。锁忙时 reject 到主队列 DLX，经 TTL retry queue 延迟返回，不在消费者线程 sleep。
+- `AnalysisJobExecutionHandler` 先按 jobId 回查 MySQL，再尝试 Redisson 短租约。Redis 不可用时锁返回 `UNAVAILABLE` 并继续执行，MySQL 状态、version CAS 和阶段唯一约束仍是唯一并发裁决。
+- M1 假处理器把 `CREATED -> QUEUED -> CONSUMING` 分成两个可恢复事务，并原子写入 `JOB_QUEUED`、`STAGE_STARTED` Outbox 事件和确定性 `CONSUMPTION` 输入指纹；提交后重投不会新增阶段或再次推进 version。
+- Consumer 直接读取原始 Rabbit `Message` 后执行严格 JSON/schema/字段和 4096 字节上限校验。消息正文不进入日志或 MySQL；失败审计只保存 SHA-256、可解析标识、稳定错误码、受限摘要和投递次数。
+- 合同错误和重试耗尽由 confirm/return 保护的 publisher 转发原消息到 DLQ，成功后才 ACK 原消息；DLQ 发布未确认时原消息保持可重投。`x-death` 只按主队列 rejected 计数读取并钳制到配置上限。
+
+| 阶段/命令 | 结果 | 证据摘要 |
+| --- | --- | --- |
+| RED：handler application 测试 | 预期失败 | `AnalysisJobExecutionHandler` 与 `JobExecutionLock` 尚不存在，5 项行为测试编译失败 |
+| RED：consumer Adapter 测试 | 预期失败 | 手动 ACK Consumer、失败审计 Port 与 DLQ publisher 尚不存在，测试编译失败 |
+| 变异检查：反转 `QUEUED` 状态条件 | 预期失败 | 5 项 handler 测试中 3 项失败，证明阶段抢占和重投收敛断言有效 |
+| `server\mvnw.cmd clean test` | 通过，约 47.3 秒 | 132 项测试、ArchUnit 与 JaCoCo 80% 门通过 |
+| `server\mvnw.cmd clean verify -Pintegration` | 通过，约 79 秒 | 隔离端口和 `videopilot_t6` schema 上 132 项单元/架构测试、23 项真实 MySQL/Redis/RabbitMQ/Flyway 集成测试及 JaCoCo 80% 门通过 |
+
+T6 是内部可靠性薄片，没有修改 `client`，因此不运行前端 `check` 或浏览器联调。页面可见的持久化进度、失败与取消验收面从 T7/T7F 开始。

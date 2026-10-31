@@ -88,13 +88,14 @@
 
 ## T6：实现幂等 Consumer、Redisson 锁与阶段 CAS
 
-- [ ] Consumer 手动 ACK，先按 jobId 回查 MySQL；Redisson 锁只降低同 Job 并发冲突。
-- [ ] 用期望状态、version CAS 和 `jobId + stage + inputFingerprint` 唯一约束取得执行资格；重复/乱序消息成为成功 no-op。
-- [ ] 实现不调用模型的 M1 假任务处理器，记录阶段与事件；业务事务成功后 ACK，异常按稳定分类进入有限重试或失败路径。
+- [x] Consumer 手动 ACK，先按 jobId 回查 MySQL；Redisson 锁只降低同 Job 并发冲突。
+- [x] 用期望状态、version CAS 和 `jobId + stage + inputFingerprint` 唯一约束取得执行资格；重复/乱序消息成为成功 no-op。
+- [x] 实现不调用模型的 M1 假任务处理器，记录阶段与事件；业务事务成功后 ACK，异常按稳定分类进入有限重试或失败路径。
 - **验收标准**：同一消息并发/串行重投都不会重复推进阶段；锁丢失时数据库仍防重；ACK 前进程退出后重投可安全收敛。
 - **验证**：重复消息、并发 Consumer、锁失效和 ACK 边界集成测试；`server\mvnw.cmd verify -Pintegration`。
 - **预计文件**：analysis handler、Rabbit consumer Adapter、Redisson 配置/Adapter、集成测试。
 - **依赖/规模**：T5 / M。
+- **完成记录（2026-10-31）**：新增手动 ACK Rabbit listener 与不调用模型的 `AnalysisJobExecutionHandler`。Handler 先回查 MySQL，再以 Redisson 短租约降低同 Job 并发；Redis 锁不可用时降级继续，以统一状态迁移的期望状态/version CAS 和 `jobId + CONSUMPTION + inputFingerprint` 唯一约束裁决。重复、乱序及业务提交后 ACK 前退出的重投成为成功 no-op。锁忙经 TTL retry queue 有限重试；合同错误、Job 不可执行和重试耗尽经 confirm 后进入 DLQ，并由 V5 `analysis_message_failure` 保存哈希键和安全错误摘要，不保存原始正文。真实 MySQL/Redis/RabbitMQ 测试覆盖并发及串行重投、锁竞争恢复、非法 schema 审计和 DLQ 原消息。
 
 ## T7：实现 Job 查询、持久化 SSE、取消与失败语义
 

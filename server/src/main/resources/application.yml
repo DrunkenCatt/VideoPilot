@@ -50,6 +50,14 @@ videopilot:
     dead-letter-queue: ${RABBITMQ_ANALYSIS_DLQ:videopilot.analysis.dead-letter.queue}
     retry-ttl: ${RABBITMQ_ANALYSIS_RETRY_TTL:10s}
     confirm-timeout: ${RABBITMQ_CONFIRM_TIMEOUT:5s}
+    consumer:
+      enabled: ${ANALYSIS_CONSUMER_ENABLED:false}
+      max-retries: ${ANALYSIS_CONSUMER_MAX_RETRIES:3}
+      max-payload-bytes: ${ANALYSIS_CONSUMER_MAX_PAYLOAD_BYTES:4096}
+      prefetch: ${ANALYSIS_CONSUMER_PREFETCH:1}
+      concurrency: ${ANALYSIS_CONSUMER_CONCURRENCY:1}
+      lock-wait: ${ANALYSIS_CONSUMER_LOCK_WAIT:100ms}
+      lock-lease: ${ANALYSIS_CONSUMER_LOCK_LEASE:30s}
     relay:
       batch-size: ${OUTBOX_RELAY_BATCH_SIZE:50}
       lease-duration: ${OUTBOX_RELAY_LEASE_DURATION:30s}

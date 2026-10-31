@@ -107,6 +107,8 @@ class RabbitAnalysisMessagePublisherTest {
                         Duration.ofSeconds(1),
                         Duration.ofMinutes(1),
                         Duration.ofSeconds(1)),
+                new MessagingProperties.Consumer(
+                        false, 3, 4_096, 1, 1, Duration.ZERO, Duration.ofSeconds(30)),
                 timeout);
     }
 

@@ -38,6 +38,7 @@ class DatabaseMigrationIT {
                     'analysis_job',
                     'job_stage_attempt',
                     'job_event_outbox',
+                    'analysis_message_failure',
                     'model_call',
                     'identity_user',
                     'user_session'
@@ -49,12 +50,26 @@ class DatabaseMigrationIT {
 
         assertThat(tables).containsExactly(
                 "analysis_job",
+                "analysis_message_failure",
                 "identity_user",
                 "job_event_outbox",
                 "job_stage_attempt",
                 "media_asset",
                 "model_call",
                 "user_session");
+    }
+
+    @Test
+    void addsDurableMessageFailureAudit() {
+        List<String> checks = jdbcClient.sql("""
+                SELECT constraint_name
+                FROM information_schema.table_constraints
+                WHERE table_schema = DATABASE()
+                  AND table_name = 'analysis_message_failure'
+                  AND constraint_type = 'CHECK'
+                """).query(String.class).list();
+
+        assertThat(checks).containsExactly("chk_message_failure_attempts");
     }
 
     @Test

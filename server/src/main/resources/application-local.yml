@@ -25,5 +25,7 @@ spring:
 videopilot:
   messaging:
     enabled: ${MESSAGING_ENABLED:true}
+    consumer:
+      enabled: ${ANALYSIS_CONSUMER_ENABLED:true}
   identity:
     secure-cookie: ${IDENTITY_SECURE_COOKIE:false}

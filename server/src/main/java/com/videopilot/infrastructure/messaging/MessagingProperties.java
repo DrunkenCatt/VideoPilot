@@ -15,6 +15,7 @@ public record MessagingProperties(
         String deadLetterQueue,
         Duration retryTtl,
         Relay relay,
+        Consumer consumer,
         Duration confirmTimeout) {
 
     public MessagingProperties {
@@ -25,7 +26,7 @@ public record MessagingProperties(
                 || deadLetterExchange == null || deadLetterExchange.isBlank()
                 || deadLetterQueue == null || deadLetterQueue.isBlank()
                 || retryTtl == null || retryTtl.isNegative() || retryTtl.isZero()
-                || relay == null || confirmTimeout == null || confirmTimeout.isNegative()
+                || relay == null || consumer == null || confirmTimeout == null || confirmTimeout.isNegative()
                 || confirmTimeout.isZero()) {
             throw new IllegalArgumentException("Invalid messaging configuration");
         }
@@ -39,6 +40,23 @@ public record MessagingProperties(
                     || maxRetryDelay == null || maxRetryDelay.compareTo(retryDelay) < 0
                     || fixedDelay == null || fixedDelay.isZero() || fixedDelay.isNegative()) {
                 throw new IllegalArgumentException("Invalid relay configuration");
+            }
+        }
+    }
+
+    public record Consumer(
+            boolean enabled,
+            int maxRetries,
+            int maxPayloadBytes,
+            int prefetch,
+            int concurrency,
+            Duration lockWait,
+            Duration lockLease) {
+        public Consumer {
+            if (maxRetries < 0 || maxPayloadBytes < 1 || prefetch < 1 || concurrency < 1
+                    || lockWait == null || lockWait.isNegative()
+                    || lockLease == null || lockLease.isZero() || lockLease.isNegative()) {
+                throw new IllegalArgumentException("Invalid consumer configuration");
             }
         }
     }

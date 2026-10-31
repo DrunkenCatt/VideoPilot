@@ -1,7 +1,7 @@
 package com.videopilot.analysis.port;
 
-import java.util.UUID;
 import java.util.Objects;
+import java.util.UUID;
 
 @FunctionalInterface
 public interface JobExecutionLock {
