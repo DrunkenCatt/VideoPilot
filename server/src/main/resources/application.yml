@@ -8,6 +8,9 @@ spring:
     enabled: true
     locations: classpath:db/migration
     validate-migration-naming: true
+  rabbitmq:
+    publisher-confirm-type: correlated
+    publisher-returns: true
 
 server:
   port: ${SERVER_PORT:8080}
@@ -36,6 +39,25 @@ management:
       enabled: false
 
 videopilot:
+  messaging:
+    enabled: ${MESSAGING_ENABLED:false}
+    exchange: ${RABBITMQ_ANALYSIS_EXCHANGE:videopilot.analysis.exchange}
+    queue: ${RABBITMQ_ANALYSIS_QUEUE:videopilot.analysis.queue}
+    routing-key: ${RABBITMQ_ANALYSIS_ROUTING_KEY:analysis.execute}
+    retry-exchange: ${RABBITMQ_ANALYSIS_RETRY_EXCHANGE:videopilot.analysis.retry.exchange}
+    retry-queue: ${RABBITMQ_ANALYSIS_RETRY_QUEUE:videopilot.analysis.retry.queue}
+    dead-letter-exchange: ${RABBITMQ_ANALYSIS_DLX:videopilot.analysis.dlx}
+    dead-letter-queue: ${RABBITMQ_ANALYSIS_DLQ:videopilot.analysis.dead-letter.queue}
+    retry-ttl: ${RABBITMQ_ANALYSIS_RETRY_TTL:10s}
+    confirm-timeout: ${RABBITMQ_CONFIRM_TIMEOUT:5s}
+    relay:
+      batch-size: ${OUTBOX_RELAY_BATCH_SIZE:50}
+      lease-duration: ${OUTBOX_RELAY_LEASE_DURATION:30s}
+      max-attempts: ${OUTBOX_RELAY_MAX_ATTEMPTS:5}
+      retry-delay: ${OUTBOX_RELAY_RETRY_DELAY:5s}
+      max-retry-delay: ${OUTBOX_RELAY_MAX_RETRY_DELAY:5m}
+      fixed-delay: ${OUTBOX_RELAY_FIXED_DELAY:2s}
+      initial-delay: ${OUTBOX_RELAY_INITIAL_DELAY:2s}
   analysis:
     pipeline-version: ${ANALYSIS_PIPELINE_VERSION:m1-fake-v1}
   identity:

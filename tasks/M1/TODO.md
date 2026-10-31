@@ -77,13 +77,14 @@
 
 ## T5：声明 RabbitMQ 拓扑并实现可靠 Outbox Relay
 
-- [ ] 按 ADR-0001 声明持久化 direct exchange、主队列、TTL retry queue 和 DLQ，配置 publisher confirm/return。
-- [ ] Relay 批量抢占到期 PENDING 记录，发布精简 envelope；仅在 confirm 成功后标记已发布，失败/超时/不可路由时有限退避重试。
-- [ ] 多实例 Relay 不会同时发布同一轮记录；进程在数据库提交后或 confirm 前退出时，记录仍可再次发布。
+- [x] 按 ADR-0001 声明持久化 direct exchange、主队列、TTL retry queue 和 DLQ，配置 publisher confirm/return。
+- [x] Relay 批量抢占到期 PENDING 记录，发布精简 envelope；仅在 confirm 成功后标记已发布，失败/超时/不可路由时有限退避重试。
+- [x] 多实例 Relay 不会同时发布同一轮记录；进程在数据库提交后或 confirm 前退出时，记录仍可再次发布。
 - **验收标准**：成功、nack、return、confirm timeout 均有确定状态；消息体不含视频/完整上下文/模型输出；Relay 重发被视为正常语义。
 - **验证**：RabbitMQ + MySQL 集成测试；停止/重启 Relay 的故障场景；`server\mvnw.cmd verify -Pintegration`。
 - **预计文件**：messaging 配置、Outbox relay Adapter、配置项、集成测试。
 - **依赖/规模**：T4 / M。
+- **完成记录（2026-10-31）**：声明持久化主 exchange/queue、TTL retry exchange/queue 与 DLX/DLQ，开启 correlated publisher confirm 和 mandatory return。V4 以前进迁移为 Outbox 增加租约及受限发布状态；Relay 使用 `FOR UPDATE SKIP LOCKED` 批量抢占，只有 ACK confirm 才写 `PUBLISHED`，nack、return、超时与发布异常进入有上限的指数退避，耗尽后记录 `DEAD_LETTERED`。真实 MySQL/RabbitMQ 测试证明多实例只有一个租约、过期租约可由重启实例回收、旧租约不能提交新持有者结果，消息体只有冻结的六字段 envelope。
 
 ## T6：实现幂等 Consumer、Redisson 锁与阶段 CAS
 

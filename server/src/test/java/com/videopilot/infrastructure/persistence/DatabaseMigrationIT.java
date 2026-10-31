@@ -88,6 +88,28 @@ class DatabaseMigrationIT {
     }
 
     @Test
+    void addsRecoverableOutboxRelayLeaseAndStatusConstraint() {
+        List<String> columns = jdbcClient.sql("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = DATABASE()
+                  AND table_name = 'job_event_outbox'
+                  AND column_name IN ('lease_id', 'lease_until')
+                ORDER BY column_name
+                """).query(String.class).list();
+        List<String> checks = jdbcClient.sql("""
+                SELECT constraint_name
+                FROM information_schema.table_constraints
+                WHERE table_schema = DATABASE()
+                  AND table_name = 'job_event_outbox'
+                  AND constraint_type = 'CHECK'
+                """).query(String.class).list();
+
+        assertThat(columns).containsExactly("lease_id", "lease_until");
+        assertThat(checks).contains("chk_outbox_publish_status");
+    }
+
+    @Test
     @Transactional
     void enforcesJobIdentityAndStageFingerprintUniqueness() {
         insertMedia("00000000-0000-0000-0000-000000000001");

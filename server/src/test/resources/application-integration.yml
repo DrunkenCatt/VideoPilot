@@ -22,6 +22,10 @@ spring:
     connection-timeout: ${RABBITMQ_CONNECTION_TIMEOUT:2s}
 
 videopilot:
+  messaging:
+    enabled: ${MESSAGING_ENABLED:true}
+    relay:
+      initial-delay: ${OUTBOX_RELAY_INITIAL_DELAY:1h}
   health:
     external:
       timeout: ${DEPENDENCY_HEALTH_TIMEOUT:2s}

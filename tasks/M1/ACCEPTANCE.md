@@ -256,3 +256,24 @@ T1 没有修改数据库、RabbitMQ、MinIO、Redis 或运行时 Controller，�
 | `server\mvnw.cmd clean verify -Pintegration` | 通过，约 57.7 秒 | 隔离端口与全新 `videopilot_t4` schema 上 103 项单测、13 项 Flyway/真实依赖/MySQL 集成测试通过 |
 
 T4 不改动 `client`，且按已冻结依赖需等待 T10F 提供真实 READY 媒体操作面后再实施 T4F，因此本任务未运行前端 `check` 或浏览器联调。RabbitMQ 发布仍属于 T5；T4 只保证待发布 Outbox 与 Job 事实同事务落库。
+
+## 13. T5 RabbitMQ 拓扑与可靠 Outbox Relay 证据
+
+日期：2026-10-31。
+
+- Spring AMQP 声明持久化主 direct exchange/queue、TTL retry exchange/queue 和 DLX/DLQ；队列、routing key、TTL、确认超时与 Relay 参数均可由环境变量覆盖。
+- publisher 使用 mandatory return 与 correlated confirm。只有 Broker ACK 且消息未 return 时才返回 `CONFIRMED`；nack、不可路由、confirm timeout 和客户端异常都不会把 Outbox 标为成功。
+- V4 以前进迁移增加 `lease_id`、`lease_until`、租约索引和发布状态约束。Relay 通过 `FOR UPDATE SKIP LOCKED` 原子抢占到期 `PENDING/RETRY` 或过期 `PUBLISHING` 记录；状态更新同时校验当前 lease，旧实例不能覆盖新实例结果。
+- 失败发布按已执行次数指数退避并受最大间隔和最大次数限制；耗尽后写 `DEAD_LETTERED`。MySQL 仍是发布事实真源，租约过期允许至少一次重发，不承诺恰好一次。
+- RabbitMQ 消息由内部 `AnalysisDispatchMessage` 映射为冻结的 `AnalysisMessageEnvelope`，只包含 `messageId/jobId/eventType/schemaVersion/requestId/occurredAt`，不携带目标文本、媒体、上下文、模型输出或 owner 凭据。
+
+| 阶段/命令 | 结果 | 证据摘要 |
+| --- | --- | --- |
+| RED：真实迁移/上下文测试 | 预期失败 | `JdbcOutboxRelayStore` 为 final，Spring 无法创建事务代理；移除 final 后 V4 与上下文通过 |
+| RED：真实 RabbitMQ 发布测试 | 预期失败 | 未启用 correlated publisher confirm 时 Outbox 留在 `RETRY`；启用 confirm/return 后消息确认并写 `PUBLISHED` |
+| RED：完整集成测试 | 预期失败 | 0ms receive 用于清队列会在 RabbitMQ consumer-ok 前超时；改用 RabbitAdmin 同步 purge 后稳定通过 |
+| 变异检查：反转 confirm 成功条件 | 预期失败 | 5 项 Relay application 测试中 4 项失败，恢复正确分支后通过 |
+| `server\mvnw.cmd clean test` | 通过 | 114 项测试、ArchUnit 与 JaCoCo 80% 门通过 |
+| `server\mvnw.cmd clean verify -Pintegration` | 通过 | 隔离端口与 `videopilot_t5` schema 上 114 项单测、19 项真实依赖/Flyway/MySQL/RabbitMQ 集成测试通过 |
+
+T5 是内部可靠性薄片，没有修改 `client`，因此未运行前端 `check` 或浏览器联调。Consumer 手动 ACK、消息重投幂等、Retry Queue/DLQ 消费路径和 Job 状态推进属于 T6；本任务只完成 Outbox 到 Broker 的可靠发布边界。

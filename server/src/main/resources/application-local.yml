@@ -23,5 +23,7 @@ spring:
     connection-timeout: ${RABBITMQ_CONNECTION_TIMEOUT:2s}
 
 videopilot:
+  messaging:
+    enabled: ${MESSAGING_ENABLED:true}
   identity:
     secure-cookie: ${IDENTITY_SECURE_COOKIE:false}
