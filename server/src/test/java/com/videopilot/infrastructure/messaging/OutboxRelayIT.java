@@ -123,6 +123,20 @@ class OutboxRelayIT {
     }
 
     @Test
+    void publishesAndConfirmsMultipleOutboxRowsInOneBatch() {
+        for (int sequence = 2; sequence <= 10; sequence++) {
+            insertOutboxEvent(sequence);
+        }
+
+        assertThat(relay.relayOnce()).isEqualTo(10);
+
+        for (int index = 0; index < 10; index++) {
+            assertThat(rabbitTemplate.receive(properties.queue(), 5_000)).isNotNull();
+        }
+        assertThat(publishedOutboxCount()).isEqualTo(10);
+    }
+
+    @Test
     void declaresMainRetryAndDeadLetterQueuesInRabbitMq() {
         assertThat(analysisRabbitAdmin.getQueueProperties(properties.queue())).isNotNull();
         assertThat(analysisRabbitAdmin.getQueueProperties(properties.retryQueue())).isNotNull();
@@ -174,6 +188,32 @@ class OutboxRelayIT {
     private String outboxStatus() {
         return jdbc.sql("SELECT publish_status FROM job_event_outbox WHERE job_id = :jobId")
                 .param("jobId", jobId.toString()).query(String.class).single();
+    }
+
+    private void insertOutboxEvent(int sequence) {
+        jdbc.sql("""
+                INSERT INTO job_event_outbox (
+                    message_id, job_id, event_type, schema_version, job_sequence,
+                    request_id, payload, occurred_at
+                ) VALUES (:messageId, :jobId, 'STAGE_STARTED', 1, :sequence, :requestId,
+                    JSON_OBJECT('sequence', :sequence), :occurredAt)
+                """)
+                .param("messageId", UUID.randomUUID().toString())
+                .param("jobId", jobId.toString())
+                .param("sequence", sequence)
+                .param("requestId", "relay-batch-" + sequence)
+                .param("occurredAt", Instant.parse("2026-10-31T00:00:00Z").plusSeconds(sequence))
+                .update();
+    }
+
+    private long publishedOutboxCount() {
+        return jdbc.sql("""
+                SELECT COUNT(*) FROM job_event_outbox
+                WHERE job_id = :jobId AND publish_status = 'PUBLISHED'
+                """)
+                .param("jobId", jobId.toString())
+                .query(Long.class)
+                .single();
     }
 
     private void drainQueue() {

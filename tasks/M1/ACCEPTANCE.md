@@ -278,6 +278,25 @@ T4 不改动 `client`，且按已冻结依赖需等待 T10F 提供真实 READY �
 
 T5 是内部可靠性薄片，没有修改 `client`，因此未运行前端 `check` 或浏览器联调。Consumer 手动 ACK、消息重投幂等、Retry Queue/DLQ 消费路径和 Job 状态推进属于 T6；本任务只完成 Outbox 到 Broker 的可靠发布边界。
 
+### T5 后续修正：批量异步 Publisher Confirm
+
+日期：2026-10-31。
+
+- 修正 Relay 在批内逐条阻塞等待 Confirm 的问题：先发送本次抢占的全部 Outbox，再收集每条消息的有界异步 Confirm 并按原租约逐条结算；批次最坏 Confirm 等待由各条超时之和收敛为一个并行超时窗口。
+- `AnalysisMessagePublisher` 返回 `CompletionStage<PublishResult>`；Rabbit Adapter 将 ACK、NACK、Return、超时、同步发送异常和异步异常映射为稳定结果，不新增线程池或依赖。
+- 配置拒绝 `lease-duration <= confirm-timeout`，避免 Relay 在等待 Broker Confirm 前租约已经确定过期；默认 30 秒租约和 5 秒 Confirm 超时保持不变。
+- 确定性单元测试证明第一条 Confirm 未完成时整个批次已经发出，并覆盖乱序 Confirm 与混合结果；真实 RabbitMQ 集成测试证明同一批 10 条消息均收到 Confirm、进入队列并落为 `PUBLISHED`。
+
+本修正不改变消息 envelope、至少一次投递语义、数据库 Schema 或 Consumer 幂等规则；租约过期后的重复发布仍由 T6 数据库状态/version CAS 和阶段输入指纹安全收敛。
+
+| 阶段/命令 | 结果 | 证据摘要 |
+| --- | --- | --- |
+| RED：批次并行发布回归测试 | 预期失败 | 第一条发布阻塞时，200ms 内后续两条没有进入 publisher，复现批内串行等待 Confirm |
+| 变异检查：反转租约/Confirm 超时条件 | 预期失败 | 合法配置被拒绝且非法配置被接受，2 项配置测试分别报错/失败 |
+| 聚焦单元测试 | 通过 | `OutboxRelayTest`、`RabbitAnalysisMessagePublisherTest`、`MessagingConfigurationTest` 共 15 项通过 |
+| 聚焦真实 RabbitMQ 集成测试 | 通过 | `OutboxRelayIT` 6 项通过，包含单批 10 条消息发布与持久化确认 |
+| `server\mvnw.cmd clean verify -Pintegration` | 通过，约 71 秒 | 136 项单元/架构测试、24 项真实依赖集成测试及 JaCoCo 80% 门通过 |
+
 ## 14. T6 幂等 Consumer、Redisson 锁与阶段 CAS 证据
 
 日期：2026-10-31。

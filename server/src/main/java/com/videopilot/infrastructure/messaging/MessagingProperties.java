@@ -30,6 +30,9 @@ public record MessagingProperties(
                 || confirmTimeout.isZero()) {
             throw new IllegalArgumentException("Invalid messaging configuration");
         }
+        if (relay.leaseDuration().compareTo(confirmTimeout) <= 0) {
+            throw new IllegalArgumentException("Relay lease duration must exceed publisher confirm timeout");
+        }
     }
 
     public record Relay(int batchSize, Duration leaseDuration, int maxAttempts, Duration retryDelay,

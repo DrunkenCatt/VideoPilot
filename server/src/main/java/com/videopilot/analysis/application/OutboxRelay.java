@@ -7,7 +7,12 @@ import com.videopilot.analysis.port.OutboxRelayStore.ClaimedOutboxMessage;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
 
 public final class OutboxRelay {
 
@@ -46,14 +51,11 @@ public final class OutboxRelay {
     public int relayOnce() {
         Instant now = clock.instant();
         List<ClaimedOutboxMessage> messages = store.claimBatch(batchSize, leaseDuration, now);
+        List<PendingPublish> pending = dispatch(messages);
         int processed = 0;
-        for (ClaimedOutboxMessage message : messages) {
-            PublishResult result;
-            try {
-                result = publisher.publish(message.message());
-            } catch (RuntimeException exception) {
-                result = PublishResult.PUBLISH_ERROR;
-            }
+        for (PendingPublish publish : pending) {
+            ClaimedOutboxMessage message = publish.message();
+            PublishResult result = await(publish.result());
             if (result == PublishResult.CONFIRMED) {
                 store.markPublished(message.outboxId(), message.leaseId(), clock.instant());
             } else {
@@ -71,6 +73,28 @@ public final class OutboxRelay {
         return processed;
     }
 
+    private List<PendingPublish> dispatch(List<ClaimedOutboxMessage> messages) {
+        List<PendingPublish> pending = new ArrayList<>(messages.size());
+        for (ClaimedOutboxMessage message : messages) {
+            CompletionStage<PublishResult> result;
+            try {
+                result = publisher.publish(message.message());
+            } catch (RuntimeException exception) {
+                result = CompletableFuture.completedFuture(PublishResult.PUBLISH_ERROR);
+            }
+            pending.add(new PendingPublish(message, result));
+        }
+        return pending;
+    }
+
+    private PublishResult await(CompletionStage<PublishResult> result) {
+        try {
+            return result.toCompletableFuture().join();
+        } catch (CompletionException | CancellationException exception) {
+            return PublishResult.PUBLISH_ERROR;
+        }
+    }
+
     private Duration backoff(int attempt) {
         int shift = Math.min(Math.max(attempt - 1, 0), 30);
         long multiplier = 1L << shift;
@@ -80,5 +104,8 @@ public final class OutboxRelay {
         } catch (ArithmeticException exception) {
             return maxRetryDelay;
         }
+    }
+
+    private record PendingPublish(ClaimedOutboxMessage message, CompletionStage<PublishResult> result) {
     }
 }

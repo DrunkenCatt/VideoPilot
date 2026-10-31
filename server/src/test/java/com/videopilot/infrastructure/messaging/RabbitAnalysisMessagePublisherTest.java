@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 
 import com.videopilot.analysis.domain.AnalysisDispatchMessage;
@@ -26,26 +27,26 @@ class RabbitAnalysisMessagePublisherTest {
     void reportsConfirmedPublisherAcknowledgement() {
         completeConfirm(true, null, false);
 
-        assertThat(publisher(Duration.ofSeconds(1)).publish(envelope())).isEqualTo(PublishResult.CONFIRMED);
+        assertThat(result(Duration.ofSeconds(1))).isEqualTo(PublishResult.CONFIRMED);
     }
 
     @Test
     void reportsNegativePublisherAcknowledgement() {
         completeConfirm(false, "broker rejected publish", false);
 
-        assertThat(publisher(Duration.ofSeconds(1)).publish(envelope())).isEqualTo(PublishResult.NEGATIVE_ACK);
+        assertThat(result(Duration.ofSeconds(1))).isEqualTo(PublishResult.NEGATIVE_ACK);
     }
 
     @Test
     void givesReturnedMessagesPrecedenceOverAcknowledgements() {
         completeConfirm(true, null, true);
 
-        assertThat(publisher(Duration.ofSeconds(1)).publish(envelope())).isEqualTo(PublishResult.UNROUTABLE);
+        assertThat(result(Duration.ofSeconds(1))).isEqualTo(PublishResult.UNROUTABLE);
     }
 
     @Test
     void reportsConfirmTimeoutWithoutMarkingSuccess() {
-        assertThat(publisher(Duration.ofMillis(1)).publish(envelope())).isEqualTo(PublishResult.CONFIRM_TIMEOUT);
+        assertThat(result(Duration.ofMillis(1))).isEqualTo(PublishResult.CONFIRM_TIMEOUT);
     }
 
     @Test
@@ -61,7 +62,20 @@ class RabbitAnalysisMessagePublisherTest {
                 any(),
                 any(CorrelationData.class));
 
-        assertThat(publisher(Duration.ofSeconds(1)).publish(envelope())).isEqualTo(PublishResult.PUBLISH_ERROR);
+        assertThat(result(Duration.ofSeconds(1))).isEqualTo(PublishResult.PUBLISH_ERROR);
+    }
+
+    @Test
+    void reportsSynchronousSendFailureAsPublishError() {
+        doThrow(new IllegalStateException("connection unavailable"))
+                .when(template).convertAndSend(
+                        eq("exchange"),
+                        eq("analysis.execute"),
+                        any(),
+                        any(),
+                        any(CorrelationData.class));
+
+        assertThat(result(Duration.ofSeconds(1))).isEqualTo(PublishResult.PUBLISH_ERROR);
     }
 
     private void completeConfirm(boolean acknowledged, String reason, boolean returned) {
@@ -87,6 +101,10 @@ class RabbitAnalysisMessagePublisherTest {
 
     private RabbitAnalysisMessagePublisher publisher(Duration timeout) {
         return new RabbitAnalysisMessagePublisher(template, properties(timeout));
+    }
+
+    private PublishResult result(Duration timeout) {
+        return publisher(timeout).publish(envelope()).toCompletableFuture().join();
     }
 
     private MessagingProperties properties(Duration timeout) {

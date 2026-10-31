@@ -1,6 +1,7 @@
 package com.videopilot.infrastructure.messaging;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
@@ -31,7 +32,18 @@ class MessagingConfigurationTest {
                 .containsEntry("x-dead-letter-routing-key", properties.routingKey());
     }
 
+    @Test
+    void rejectsLeaseThatCannotOutliveThePublisherConfirmTimeout() {
+        assertThatThrownBy(() -> properties(Duration.ofSeconds(5), Duration.ofSeconds(5)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Relay lease duration must exceed publisher confirm timeout");
+    }
+
     private MessagingProperties properties() {
+        return properties(Duration.ofSeconds(30), Duration.ofSeconds(5));
+    }
+
+    private MessagingProperties properties(Duration leaseDuration, Duration confirmTimeout) {
         return new MessagingProperties(
                 true,
                 "analysis.exchange",
@@ -44,13 +56,13 @@ class MessagingConfigurationTest {
                 Duration.ofSeconds(10),
                 new MessagingProperties.Relay(
                         10,
-                        Duration.ofSeconds(30),
+                        leaseDuration,
                         3,
                         Duration.ofSeconds(1),
                         Duration.ofMinutes(1),
                         Duration.ofSeconds(1)),
                 new MessagingProperties.Consumer(
                         false, 3, 4_096, 1, 1, Duration.ZERO, Duration.ofSeconds(30)),
-                Duration.ofSeconds(5));
+                confirmTimeout);
     }
 }

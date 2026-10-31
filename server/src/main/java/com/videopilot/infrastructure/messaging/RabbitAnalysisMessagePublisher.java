@@ -2,7 +2,9 @@ package com.videopilot.infrastructure.messaging;
 
 import com.videopilot.analysis.domain.AnalysisDispatchMessage;
 import com.videopilot.analysis.port.AnalysisMessagePublisher;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -19,7 +21,7 @@ public final class RabbitAnalysisMessagePublisher implements AnalysisMessagePubl
     }
 
     @Override
-    public PublishResult publish(AnalysisDispatchMessage message) {
+    public CompletionStage<PublishResult> publish(AnalysisDispatchMessage message) {
         AnalysisMessageEnvelope envelope = new AnalysisMessageEnvelope(
                 message.messageId(),
                 message.jobId(),
@@ -28,30 +30,38 @@ public final class RabbitAnalysisMessagePublisher implements AnalysisMessagePubl
                 message.requestId(),
                 message.occurredAt());
         CorrelationData correlation = new CorrelationData(message.messageId().toString());
-        rabbitTemplate.convertAndSend(
-                properties.exchange(),
-                properties.routingKey(),
-                envelope,
-                amqpMessage -> {
-                    amqpMessage.getMessageProperties().setHeader("requestId", envelope.requestId());
-                    amqpMessage.getMessageProperties().setHeader("schemaVersion", envelope.schemaVersion());
-                    return amqpMessage;
-                },
-                correlation);
         try {
-            CorrelationData.Confirm confirm = correlation.getFuture()
-                    .get(properties.confirmTimeout().toMillis(), TimeUnit.MILLISECONDS);
-            if (correlation.getReturned() != null) {
-                return PublishResult.UNROUTABLE;
-            }
-            return confirm.isAck() ? PublishResult.CONFIRMED : PublishResult.NEGATIVE_ACK;
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            return PublishResult.CONFIRM_TIMEOUT;
-        } catch (TimeoutException exception) {
-            return PublishResult.CONFIRM_TIMEOUT;
-        } catch (ExecutionException exception) {
-            return PublishResult.PUBLISH_ERROR;
+            rabbitTemplate.convertAndSend(
+                    properties.exchange(),
+                    properties.routingKey(),
+                    envelope,
+                    amqpMessage -> {
+                        amqpMessage.getMessageProperties().setHeader("requestId", envelope.requestId());
+                        amqpMessage.getMessageProperties().setHeader("schemaVersion", envelope.schemaVersion());
+                        return amqpMessage;
+                    },
+                    correlation);
+        } catch (RuntimeException exception) {
+            return CompletableFuture.completedFuture(PublishResult.PUBLISH_ERROR);
         }
+        return correlation.getFuture()
+                .orTimeout(properties.confirmTimeout().toMillis(), TimeUnit.MILLISECONDS)
+                .handle((confirm, failure) -> result(correlation, confirm, failure));
+    }
+
+    private PublishResult result(
+            CorrelationData correlation,
+            CorrelationData.Confirm confirm,
+            Throwable failure) {
+        if (failure != null) {
+            Throwable cause = failure instanceof CompletionException ? failure.getCause() : failure;
+            return cause instanceof TimeoutException
+                    ? PublishResult.CONFIRM_TIMEOUT
+                    : PublishResult.PUBLISH_ERROR;
+        }
+        if (correlation.getReturned() != null) {
+            return PublishResult.UNROUTABLE;
+        }
+        return confirm.isAck() ? PublishResult.CONFIRMED : PublishResult.NEGATIVE_ACK;
     }
 }
