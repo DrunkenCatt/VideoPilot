@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.videopilot.analysis.application.JobTransitionCommand;
+import com.videopilot.analysis.application.AnalysisJobEventApplicationService;
+import com.videopilot.analysis.application.AnalysisJobException;
 import com.videopilot.analysis.application.JobTransitionConflictException;
 import com.videopilot.analysis.application.JobTransitionService;
 import com.videopilot.analysis.domain.AnalysisJob;
@@ -11,6 +13,8 @@ import com.videopilot.analysis.domain.JobEventType;
 import com.videopilot.analysis.domain.JobStage;
 import com.videopilot.analysis.domain.JobStageAttempt;
 import com.videopilot.analysis.domain.JobStatus;
+import com.videopilot.identity.application.OwnerContext;
+import com.videopilot.identity.domain.OwnerId;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -32,11 +36,15 @@ import org.springframework.test.context.ActiveProfiles;
 @ActiveProfiles("integration")
 class AnalysisJobPersistenceAdapterIT {
 
+    private static final UUID OWNER_ID = UUID.fromString("20000000-0000-0000-0000-000000000001");
     private final UUID mediaId = UUID.randomUUID();
     private final UUID jobId = UUID.randomUUID();
 
     @Autowired
     private JobTransitionService service;
+
+    @Autowired
+    private AnalysisJobEventApplicationService jobEvents;
 
     @Autowired
     private JdbcClient jdbcClient;
@@ -124,6 +132,67 @@ class AnalysisJobPersistenceAdapterIT {
         assertThat(count("job_event_outbox")).isZero();
     }
 
+    @Test
+    void resumesPersistedEventsBySequenceAndHidesForeignOwnership() {
+        insertCreatedJob();
+        service.transition(transition(Optional.empty()));
+        OwnerContext owner = new OwnerContext(new OwnerId(OWNER_ID));
+
+        var batch = jobEvents.readAfter(owner, jobId, 0, 100);
+
+        assertThat(batch.currentSequence()).isEqualTo(1);
+        assertThat(batch.events()).singleElement().satisfies(event -> {
+            assertThat(event.sequence()).isEqualTo(1);
+            assertThat(event.status()).isEqualTo(JobStatus.QUEUED);
+            assertThat(event.eventType()).isEqualTo(JobEventType.JOB_QUEUED);
+        });
+        OwnerContext foreign = new OwnerContext(new OwnerId(UUID.randomUUID()));
+        assertThatThrownBy(() -> jobEvents.readAfter(foreign, jobId, 0, 100))
+                .isInstanceOf(AnalysisJobException.class)
+                .extracting(exception -> ((AnalysisJobException) exception).reason())
+                .isEqualTo(AnalysisJobException.Reason.RESOURCE_NOT_FOUND);
+    }
+
+    @Test
+    void cancellationAndConsumerRaceEndsOnALegalCasBranch() throws Exception {
+        insertCreatedJob();
+        service.transition(transition(Optional.empty()));
+        AnalysisJob queued = serviceSnapshot();
+        JobTransitionCommand consume = new JobTransitionCommand(
+                jobId,
+                JobStatus.QUEUED,
+                queued.version(),
+                JobStatus.CONSUMING,
+                Optional.empty(),
+                Optional.empty(),
+                JobEventType.STAGE_STARTED,
+                "request-consumer",
+                "{\"stage\":\"CONSUMPTION\",\"status\":\"STARTED\"}");
+        OwnerContext owner = new OwnerContext(new OwnerId(OWNER_ID));
+        CountDownLatch start = new CountDownLatch(1);
+
+        try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+            Future<?> consumer = executor.submit(() -> {
+                start.await();
+                try {
+                    return service.transition(consume);
+                } catch (JobTransitionConflictException conflict) {
+                    return conflict;
+                }
+            });
+            Future<?> cancellation = executor.submit(() -> {
+                start.await();
+                return jobEvents.cancel(owner, jobId, "request-cancel");
+            });
+            start.countDown();
+            consumer.get();
+            cancellation.get();
+        }
+
+        assertThat(serviceSnapshot().status())
+                .isIn(JobStatus.CANCELED, JobStatus.CANCEL_REQUESTED);
+    }
+
     private JobTransitionCommand transition(Optional<JobStageAttempt> stage) {
         return new JobTransitionCommand(
                 jobId,
@@ -142,9 +211,10 @@ class AnalysisJobPersistenceAdapterIT {
                 INSERT INTO media_asset (
                     media_id, owner_id, media_fingerprint, object_key,
                     original_filename, media_status
-                ) VALUES (:mediaId, 'learner-it', REPEAT('a', 64), :objectKey, 'test.mp4', 'UPLOADED')
+                ) VALUES (:mediaId, :ownerId, REPEAT('a', 64), :objectKey, 'test.mp4', 'UPLOADED')
                 """)
                 .param("mediaId", mediaId.toString())
+                .param("ownerId", OWNER_ID.toString())
                 .param("objectKey", "media/" + mediaId + ".mp4")
                 .update();
         jdbcClient.sql("""
@@ -152,15 +222,35 @@ class AnalysisJobPersistenceAdapterIT {
                     job_id, owner_id, media_id, analysis_key, idempotency_key,
                     request_fingerprint, goal, mode, pipeline_version, status
                 ) VALUES (
-                    :jobId, 'learner-it', :mediaId, :analysisKey, :idempotencyKey,
+                    :jobId, :ownerId, :mediaId, :analysisKey, :idempotencyKey,
                     REPEAT('b', 64), 'Summarize', 'STANDARD', 'pipeline-v1', 'CREATED'
                 )
                 """)
                 .param("jobId", jobId.toString())
+                .param("ownerId", OWNER_ID.toString())
                 .param("mediaId", mediaId.toString())
                 .param("analysisKey", "analysis-" + jobId)
                 .param("idempotencyKey", "idempotency-" + jobId)
                 .update();
+    }
+
+    private AnalysisJob serviceSnapshot() {
+        return jdbcClient.sql("SELECT status, version, event_sequence FROM analysis_job WHERE job_id = :jobId")
+                .param("jobId", jobId.toString())
+                .query((resultSet, rowNum) -> new AnalysisJob(
+                        jobId,
+                        OWNER_ID.toString(),
+                        mediaId,
+                        JobStatus.valueOf(resultSet.getString("status")),
+                        Optional.empty(),
+                        0,
+                        resultSet.getLong("version"),
+                        resultSet.getLong("event_sequence"),
+                        Optional.empty(),
+                        Instant.now(),
+                        Instant.now(),
+                        Optional.empty()))
+                .single();
     }
 
     private void insertStage(String fingerprint) {

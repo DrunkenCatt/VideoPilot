@@ -88,9 +88,10 @@ class OutboxRelayIT {
         jdbc.sql("""
                 INSERT INTO job_event_outbox (
                     message_id, job_id, event_type, schema_version, job_sequence,
-                    request_id, payload, occurred_at
+                    request_id, payload, occurred_at, job_status, public_message, terminal
                 ) VALUES (:messageId, :jobId, 'JOB_CREATED', 1, 1, :requestId,
-                    JSON_OBJECT('status', 'CREATED'), :occurredAt)
+                    JSON_OBJECT('status', 'CREATED'), :occurredAt,
+                    'CREATED', 'Analysis job created.', FALSE)
                 """)
                 .param("messageId", UUID.randomUUID().toString())
                 .param("jobId", jobId.toString())
@@ -194,9 +195,10 @@ class OutboxRelayIT {
         jdbc.sql("""
                 INSERT INTO job_event_outbox (
                     message_id, job_id, event_type, schema_version, job_sequence,
-                    request_id, payload, occurred_at
+                    request_id, payload, occurred_at, job_status, public_message, terminal
                 ) VALUES (:messageId, :jobId, 'STAGE_STARTED', 1, :sequence, :requestId,
-                    JSON_OBJECT('sequence', :sequence), :occurredAt)
+                    JSON_OBJECT('sequence', :sequence), :occurredAt,
+                    'CONSUMING', 'Analysis stage started.', FALSE)
                 """)
                 .param("messageId", UUID.randomUUID().toString())
                 .param("jobId", jobId.toString())

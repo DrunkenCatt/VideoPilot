@@ -1,5 +1,6 @@
 package com.videopilot.infrastructure.analysis.persistence;
 
+import com.videopilot.analysis.application.AnalysisJobEventView;
 import com.videopilot.analysis.domain.AnalysisJob;
 import com.videopilot.analysis.domain.AnalysisMode;
 import com.videopilot.analysis.domain.JobErrorCategory;
@@ -8,6 +9,7 @@ import com.videopilot.analysis.domain.JobStage;
 import com.videopilot.analysis.domain.JobStatus;
 import com.videopilot.analysis.domain.StoredAnalysisJob;
 import com.videopilot.analysis.port.AnalysisJobStore;
+import com.videopilot.analysis.port.AnalysisJobEventStore;
 import com.videopilot.analysis.port.JobTransitionStore;
 import com.videopilot.identity.domain.OwnerId;
 import java.util.List;
@@ -16,7 +18,7 @@ import java.util.UUID;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.transaction.annotation.Transactional;
 
-public class AnalysisJobPersistenceAdapter implements JobTransitionStore, AnalysisJobStore {
+public class AnalysisJobPersistenceAdapter implements JobTransitionStore, AnalysisJobStore, AnalysisJobEventStore {
 
     private final AnalysisJobMapper mapper;
 
@@ -47,7 +49,7 @@ public class AnalysisJobPersistenceAdapter implements JobTransitionStore, Analys
             throw new CreationRaceException();
         }
         mapper.insertStage(TransitionWriteRows.stage(creation.initialStage()));
-        mapper.insertEvent(TransitionWriteRows.event(creation.initialEvent()));
+        mapper.insertEvent(TransitionWriteRows.event(creation.initialEvent(), creation.job()));
     }
 
     @Override
@@ -81,14 +83,39 @@ public class AnalysisJobPersistenceAdapter implements JobTransitionStore, Analys
     }
 
     @Override
+    public List<AnalysisJobEventView> findAfter(
+            OwnerId ownerId,
+            UUID jobId,
+            long afterSequence,
+            int limit) {
+        return mapper.selectEventsAfter(
+                        ownerId.value().toString(), jobId.toString(), afterSequence, limit)
+                .stream()
+                .map(this::toEventView)
+                .toList();
+    }
+
+    @Override
     @Transactional
     public boolean apply(TransitionCommit commit) {
         if (mapper.compareAndSet(TransitionWriteRows.job(commit)) != 1) {
             return false;
         }
         commit.stageAttempt().map(TransitionWriteRows::stage).ifPresent(mapper::insertStage);
-        mapper.insertEvent(TransitionWriteRows.event(commit.event()));
+        mapper.insertEvent(TransitionWriteRows.event(commit.event(), commit.nextJob()));
         return true;
+    }
+
+    private AnalysisJobEventView toEventView(AnalysisJobEventRow row) {
+        return new AnalysisJobEventView(
+                UUID.fromString(row.getJobId()),
+                row.getJobSequence(),
+                com.videopilot.analysis.domain.JobEventType.valueOf(row.getEventType()),
+                JobStatus.valueOf(row.getJobStatus()),
+                optionalEnum(JobStage.class, row.getJobStage()),
+                row.getPublicMessage(),
+                row.getOccurredAt(),
+                row.isTerminal());
     }
 
     private AnalysisJob toDomain(AnalysisJobRow row) {

@@ -1,5 +1,6 @@
 package com.videopilot.infrastructure.analysis.persistence;
 
+import com.videopilot.analysis.domain.AnalysisJob;
 import com.videopilot.analysis.domain.JobEvent;
 import com.videopilot.analysis.domain.JobFailure;
 import com.videopilot.analysis.domain.JobStageAttempt;
@@ -46,7 +47,7 @@ final class TransitionWriteRows {
                 stage.completedAt().orElse(null));
     }
 
-    static EventWrite event(JobEvent event) {
+    static EventWrite event(JobEvent event, AnalysisJob job) {
         return new EventWrite(
                 event.messageId().toString(),
                 event.jobId().toString(),
@@ -55,7 +56,31 @@ final class TransitionWriteRows {
                 event.sequence(),
                 event.requestId(),
                 event.payload(),
-                event.occurredAt());
+                event.occurredAt(),
+                job.status().name(),
+                job.currentStage().map(Enum::name).orElse(null),
+                publicMessage(event, job),
+                isTerminal(job));
+    }
+
+    private static String publicMessage(JobEvent event, AnalysisJob job) {
+        return switch (event.eventType()) {
+            case JOB_CREATED -> "Analysis job created.";
+            case JOB_QUEUED -> "Analysis job queued.";
+            case STAGE_STARTED -> "Analysis stage started.";
+            case STAGE_COMPLETED -> "Analysis stage completed.";
+            case JOB_CANCEL_REQUESTED -> "Analysis job cancellation requested.";
+            case JOB_CANCELED -> "Analysis job canceled.";
+            case JOB_FAILED -> job.failure().map(JobFailure::summary).orElse("Analysis job failed.");
+            case JOB_READY -> "Analysis job ready.";
+        };
+    }
+
+    private static boolean isTerminal(AnalysisJob job) {
+        return switch (job.status()) {
+            case READY, COMPLETED, COMPLETED_WITH_WARNINGS, CANCELED, FAILED, DEAD_LETTERED -> true;
+            default -> false;
+        };
     }
 
     record JobWrite(
@@ -97,6 +122,10 @@ final class TransitionWriteRows {
             long sequence,
             String requestId,
             String payload,
-            Instant occurredAt) {
+            Instant occurredAt,
+            String jobStatus,
+            String jobStage,
+            String publicMessage,
+            boolean terminal) {
     }
 }

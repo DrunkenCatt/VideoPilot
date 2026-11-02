@@ -316,3 +316,24 @@ T5 是内部可靠性薄片，没有修改 `client`，因此未运行前端 `che
 | `server\mvnw.cmd clean verify -Pintegration` | 通过，约 79 秒 | 隔离端口和 `videopilot_t6` schema 上 132 项单元/架构测试、23 项真实 MySQL/Redis/RabbitMQ/Flyway 集成测试及 JaCoCo 80% 门通过 |
 
 T6 是内部可靠性薄片，没有修改 `client`，因此不运行前端 `check` 或浏览器联调。页面可见的持久化进度、失败与取消验收面从 T7/T7F 开始。
+
+## 15. T7 Job 查询、持久化 SSE、取消与失败语义证据
+
+日期：2026-11-02。
+
+- V6 以前进迁移为 `job_event_outbox` 增加 `job_status`、`job_stage`、`public_message` 和 `terminal`，并回填既有 T4-T6 事件；事件历史与 Outbox 继续在 Job 状态迁移事务内原子写入，MySQL 是唯一顺序真源。
+- `AnalysisJobEventApplicationService` 在读取事件和每次取消 CAS 前都按认证 owner 回查 Job；不存在与跨用户统一为 `RESOURCE_NOT_FOUND`，事件 SQL 再以 owner join 做纵深约束。
+- SSE 未带游标时从 sequence 1 回放，`Last-Event-ID: N` 只读取 `> N`；负数、非数字和未来游标返回 `400 INVALID_REQUEST`。连接通过 MySQL 增量查询继续追踪新事件，不依赖 Redis 或进程内通知，因此没有补拉/订阅空窗，应用重启后仍可恢复。
+- 每条 SSE 的 `id` 与 JSON `sequence` 一致，Controller 丢弃不大于当前游标的记录；15 秒心跳使用 comment，不占 sequence、不写数据库。M1 假任务的 `JOB_READY`、取消和失败事件发送完毕后连接正常结束。
+- `POST /api/v1/analysis-jobs/{jobId}/cancellations` 受会话与 CSRF 保护。CREATED/QUEUED 经状态机进入 CANCELED，运行中状态进入 CANCEL_REQUESTED；CAS 冲突后最多重读三次最新 owner 快照，已取消请求幂等返回，其他不可取消状态返回稳定 `JOB_NOT_CANCELABLE`。
+- Job 详情只公开稳定 failure code、retryable 和受控摘要；事件公开消息在持久化时确定，不向页面暴露异常类名、内部路径或原始供应商输出。
+
+| 阶段/命令 | 结果 | 证据摘要 |
+| --- | --- | --- |
+| RED：事件/取消 application 测试 | 预期失败 | owner-scoped 事件 Port、游标批次和取消服务尚不存在，测试编译失败 |
+| RED：MockMvc SSE 合同 | 预期失败 | 初版 SSE 错误经 JSON ExceptionHandler 协商为 406；改为在 SSE 通道返回带稳定错误结构的 400/404 后通过 |
+| RED：真实集成验证 | 预期失败 | V6 新增必填事件快照列后，T5 Outbox 测试 fixture 未提供列值；补齐 fixture 后 Relay 回归通过 |
+| 聚焦真实 RabbitMQ 回归 | 通过 | `OutboxRelayIT` 6 项通过，证明新增事件投影列不改变 Outbox claim/publish/confirm 语义 |
+| `server\mvnw.cmd clean verify -Pintegration` | 通过，约 65 秒 | 隔离端口与全新 `videopilot_t7_final` schema 从 V1 迁移到 V6；148 项单元/架构测试、27 项真实 MySQL/Redis/RabbitMQ/Flyway 集成测试及 JaCoCo 80% 门通过 |
+
+T7 未修改 `client`，因此未运行前端 `check` 或浏览器联调；Job 状态、SSE、取消与失败的可视化验收面由紧随其后的 T7F 实现。

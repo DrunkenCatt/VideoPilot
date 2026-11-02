@@ -18,6 +18,7 @@ public final class AnalysisJobException extends RuntimeException {
         RESOURCE_NOT_FOUND,
         MEDIA_NOT_READY,
         IDEMPOTENCY_KEY_REUSED,
+        JOB_NOT_CANCELABLE,
         CONFLICT
     }
 }

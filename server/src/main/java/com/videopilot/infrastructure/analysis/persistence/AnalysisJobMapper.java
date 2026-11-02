@@ -81,6 +81,23 @@ interface AnalysisJobMapper extends BaseMapper<AnalysisJobRow> {
             """)
     long countOwned(@Param("ownerId") String ownerId, @Param("status") String status);
 
+    @Select("""
+            SELECT event.job_id, event.job_sequence, event.event_type, event.job_status,
+                   event.job_stage, event.public_message, event.terminal, event.occurred_at
+            FROM job_event_outbox event
+            INNER JOIN analysis_job job ON job.job_id = event.job_id
+            WHERE job.owner_id = #{ownerId}
+              AND event.job_id = #{jobId}
+              AND event.job_sequence > #{afterSequence}
+            ORDER BY event.job_sequence ASC
+            LIMIT #{limit}
+            """)
+    List<AnalysisJobEventRow> selectEventsAfter(
+            @Param("ownerId") String ownerId,
+            @Param("jobId") String jobId,
+            @Param("afterSequence") long afterSequence,
+            @Param("limit") int limit);
+
     @Update("""
             UPDATE analysis_job
             SET status = #{row.status},
@@ -117,10 +134,11 @@ interface AnalysisJobMapper extends BaseMapper<AnalysisJobRow> {
     @Insert("""
             INSERT INTO job_event_outbox (
                 message_id, job_id, event_type, schema_version, job_sequence,
-                request_id, payload, occurred_at
+                request_id, payload, occurred_at, job_status, job_stage, public_message, terminal
             ) VALUES (
                 #{row.messageId}, #{row.jobId}, #{row.eventType}, #{row.schemaVersion},
-                #{row.sequence}, #{row.requestId}, CAST(#{row.payload} AS JSON), #{row.occurredAt}
+                #{row.sequence}, #{row.requestId}, CAST(#{row.payload} AS JSON), #{row.occurredAt},
+                #{row.jobStatus}, #{row.jobStage}, #{row.publicMessage}, #{row.terminal}
             )
             """)
     int insertEvent(@Param("row") EventWrite row);

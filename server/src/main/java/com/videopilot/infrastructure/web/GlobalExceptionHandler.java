@@ -52,6 +52,7 @@ public final class GlobalExceptionHandler {
             case RESOURCE_NOT_FOUND -> ErrorCode.RESOURCE_NOT_FOUND;
             case MEDIA_NOT_READY -> ErrorCode.MEDIA_NOT_READY;
             case IDEMPOTENCY_KEY_REUSED -> ErrorCode.IDEMPOTENCY_KEY_REUSED;
+            case JOB_NOT_CANCELABLE -> ErrorCode.JOB_NOT_CANCELABLE;
             case CONFLICT -> ErrorCode.CONFLICT;
         };
         LOGGER.warn("Analysis job request failed code={}", errorCode);

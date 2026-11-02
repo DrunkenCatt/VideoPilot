@@ -16,6 +16,7 @@ import com.videopilot.analysis.domain.JobStageAttempt;
 import com.videopilot.analysis.domain.JobStageStatus;
 import com.videopilot.analysis.domain.JobStatus;
 import com.videopilot.analysis.domain.StoredAnalysisJob;
+import com.videopilot.analysis.application.AnalysisJobEventView;
 import com.videopilot.analysis.port.AnalysisJobStore;
 import com.videopilot.analysis.port.AnalysisJobStore.JobCreation;
 import com.videopilot.analysis.port.JobTransitionStore.TransitionCommit;
@@ -110,6 +111,31 @@ class AnalysisJobPersistenceAdapterTest {
 
         when(mapper.compareAndSet(any())).thenReturn(0);
         assertThat(adapter.apply(commit)).isFalse();
+    }
+
+    @Test
+    void mapsTheOwnedPersistedEventFeedInSequenceOrder() {
+        AnalysisJobEventRow row = new AnalysisJobEventRow();
+        set(row, "jobId", JOB_ID.toString());
+        set(row, "jobSequence", 3L);
+        set(row, "eventType", "STAGE_STARTED");
+        set(row, "jobStatus", "PROBING");
+        set(row, "jobStage", "PROBING");
+        set(row, "publicMessage", "Analysis stage started.");
+        set(row, "terminal", false);
+        set(row, "occurredAt", NOW);
+        when(mapper.selectEventsAfter(OWNER_ID.toString(), JOB_ID.toString(), 2, 100))
+                .thenReturn(List.of(row));
+
+        List<AnalysisJobEventView> result = adapter.findAfter(
+                new OwnerId(OWNER_ID), JOB_ID, 2, 100);
+
+        assertThat(result).singleElement().satisfies(event -> {
+            assertThat(event.sequence()).isEqualTo(3);
+            assertThat(event.status()).isEqualTo(JobStatus.PROBING);
+            assertThat(event.stage()).contains(JobStage.PROBING);
+            assertThat(event.message()).isEqualTo("Analysis stage started.");
+        });
     }
 
     private JobCreation creation() {

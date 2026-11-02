@@ -2,9 +2,12 @@ package com.videopilot.infrastructure.analysis.persistence;
 
 import com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration;
 import com.videopilot.analysis.application.AnalysisJobApplicationService;
+import com.videopilot.analysis.application.AnalysisJobEventApplicationService;
 import com.videopilot.analysis.application.JobTransitionService;
 import com.videopilot.analysis.domain.JobStateMachine;
 import java.time.Clock;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.UUID;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,6 +28,18 @@ public class AnalysisJobAutoConfiguration {
     JobTransitionService jobTransitionService(AnalysisJobPersistenceAdapter store) {
         Clock clock = Clock.systemUTC();
         return new JobTransitionService(store, new JobStateMachine(), clock::instant);
+    }
+
+    @Bean
+    AnalysisJobEventApplicationService analysisJobEventApplicationService(
+            AnalysisJobPersistenceAdapter store,
+            JobTransitionService transitions) {
+        return new AnalysisJobEventApplicationService(store, store, transitions);
+    }
+
+    @Bean(destroyMethod = "close")
+    ExecutorService analysisJobSseExecutor() {
+        return Executors.newVirtualThreadPerTaskExecutor();
     }
 
     @Bean

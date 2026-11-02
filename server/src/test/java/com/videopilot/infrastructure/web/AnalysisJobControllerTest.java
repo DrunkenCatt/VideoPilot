@@ -10,11 +10,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.videopilot.analysis.application.AnalysisJobApplicationService;
+import com.videopilot.analysis.application.AnalysisJobEventApplicationService;
+import com.videopilot.analysis.application.AnalysisJobEventBatch;
+import com.videopilot.analysis.application.AnalysisJobEventView;
 import com.videopilot.analysis.application.AnalysisJobException;
 import com.videopilot.analysis.application.AnalysisJobPage;
 import com.videopilot.analysis.application.AnalysisJobView;
 import com.videopilot.analysis.domain.AnalysisMode;
 import com.videopilot.analysis.domain.JobStatus;
+import com.videopilot.analysis.domain.JobEventType;
+import com.videopilot.analysis.domain.JobFailure;
+import com.videopilot.analysis.domain.JobErrorCategory;
 import com.videopilot.identity.application.SessionApplicationService;
 import com.videopilot.identity.domain.AuthenticatedSession;
 import com.videopilot.identity.domain.OwnerId;
@@ -23,6 +29,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.Executor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -50,6 +57,12 @@ class AnalysisJobControllerTest {
 
     @MockitoBean
     private AnalysisJobApplicationService jobs;
+
+    @MockitoBean
+    private AnalysisJobEventApplicationService jobEvents;
+
+    @MockitoBean(name = "analysisJobSseExecutor")
+    private Executor analysisJobSseExecutor;
 
     @MockitoBean
     private SessionApplicationService sessions;
@@ -98,7 +111,8 @@ class AnalysisJobControllerTest {
                                  "goal":"Explain","mode":"STANDARD"}
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                        .string(org.hamcrest.Matchers.containsString("\"code\":\"INVALID_REQUEST\"")));
     }
 
     @Test
@@ -140,6 +154,97 @@ class AnalysisJobControllerTest {
                                 """))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_REUSED"));
+    }
+
+    @Test
+    void cancelsThroughTheStateMachineAndReturnsTheLatestOwnedView() throws Exception {
+        when(jobEvents.cancel(any(), org.mockito.ArgumentMatchers.eq(JOB_ID), any()))
+                .thenReturn(null);
+        when(jobs.get(any(), org.mockito.ArgumentMatchers.eq(JOB_ID))).thenReturn(view());
+
+        mockMvc.perform(post("/api/v1/analysis-jobs/{jobId}/cancellations", JOB_ID)
+                        .cookie(new jakarta.servlet.http.Cookie("VP_SESSION", "opaque-session-token"))
+                        .header("X-CSRF-Token", "csrf-token"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.jobId").value(JOB_ID.toString()));
+
+        verify(jobEvents).cancel(any(), org.mockito.ArgumentMatchers.eq(JOB_ID), any());
+    }
+
+    @Test
+    void replaysSseEventsStrictlyAfterLastEventIdAndClosesAtTerminalState() throws Exception {
+        AnalysisJobEventView terminal = new AnalysisJobEventView(
+                JOB_ID,
+                5,
+                JobEventType.JOB_CANCELED,
+                JobStatus.CANCELED,
+                Optional.empty(),
+                "Analysis job canceled.",
+                Instant.parse("2026-11-02T08:00:00Z"),
+                true);
+        when(jobEvents.readAfter(any(), org.mockito.ArgumentMatchers.eq(JOB_ID),
+                org.mockito.ArgumentMatchers.eq(4L), org.mockito.ArgumentMatchers.eq(100)))
+                .thenReturn(new AnalysisJobEventBatch(5, true, List.of(terminal)));
+
+        mockMvc.perform(get("/api/v1/analysis-jobs/{jobId}/events", JOB_ID)
+                        .cookie(new jakarta.servlet.http.Cookie("VP_SESSION", "opaque-session-token"))
+                        .header("Last-Event-ID", "4")
+                        .accept(MediaType.TEXT_EVENT_STREAM))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CONTENT_TYPE, "text/event-stream"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                        .string(org.hamcrest.Matchers.containsString("id:5")))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                        .string(org.hamcrest.Matchers.containsString("\"sequence\":5")));
+    }
+
+    @Test
+    void rejectsMalformedLastEventIdBeforeOpeningAStream() throws Exception {
+        mockMvc.perform(get("/api/v1/analysis-jobs/{jobId}/events", JOB_ID)
+                        .cookie(new jakarta.servlet.http.Cookie("VP_SESSION", "opaque-session-token"))
+                        .header("Last-Event-ID", "not-a-sequence")
+                        .accept(MediaType.TEXT_EVENT_STREAM))
+                .andExpect(status().isBadRequest())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                        .string(org.hamcrest.Matchers.containsString("\"code\":\"INVALID_REQUEST\"")));
+    }
+
+    @Test
+    void hidesForeignEventStreamsWithTheSameNotFoundSemantic() throws Exception {
+        when(jobEvents.readAfter(any(), org.mockito.ArgumentMatchers.eq(JOB_ID),
+                org.mockito.ArgumentMatchers.eq(0L), org.mockito.ArgumentMatchers.eq(100)))
+                .thenThrow(new AnalysisJobException(AnalysisJobException.Reason.RESOURCE_NOT_FOUND));
+
+        mockMvc.perform(get("/api/v1/analysis-jobs/{jobId}/events", JOB_ID)
+                        .cookie(new jakarta.servlet.http.Cookie("VP_SESSION", "opaque-session-token"))
+                        .accept(MediaType.TEXT_EVENT_STREAM))
+                .andExpect(status().isNotFound())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                        .string(org.hamcrest.Matchers.containsString("\"code\":\"RESOURCE_NOT_FOUND\"")));
+    }
+
+    @Test
+    void exposesOnlyStableFailureFields() throws Exception {
+        AnalysisJobView failed = new AnalysisJobView(
+                JOB_ID, MEDIA_ID, "Explain chapter one", AnalysisMode.STANDARD,
+                JobStatus.FAILED, Optional.empty(), 1, 5,
+                Optional.of(new JobFailure(
+                        JobErrorCategory.NON_RETRYABLE,
+                        "MEDIA_PROBE_INVALID",
+                        "The uploaded video could not be analyzed.",
+                        false)),
+                Instant.parse("2026-10-30T08:00:00Z"),
+                Instant.parse("2026-10-30T08:01:00Z"),
+                Optional.empty());
+        when(jobs.get(any(), org.mockito.ArgumentMatchers.eq(JOB_ID))).thenReturn(failed);
+
+        mockMvc.perform(get("/api/v1/analysis-jobs/{jobId}", JOB_ID)
+                        .cookie(new jakarta.servlet.http.Cookie("VP_SESSION", "opaque-session-token")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.failure.code").value("MEDIA_PROBE_INVALID"))
+                .andExpect(jsonPath("$.failure.retryable").value(false))
+                .andExpect(jsonPath("$.failure.summary")
+                        .value("The uploaded video could not be analyzed."));
     }
 
     private AnalysisJobView view() {

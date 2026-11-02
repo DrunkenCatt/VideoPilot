@@ -103,6 +103,20 @@ class DatabaseMigrationIT {
     }
 
     @Test
+    void addsDurableFieldsForTheOwnerScopedEventFeed() {
+        List<String> columns = jdbcClient.sql("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = DATABASE()
+                  AND table_name = 'job_event_outbox'
+                  AND column_name IN ('job_status', 'job_stage', 'public_message', 'terminal')
+                ORDER BY ordinal_position
+                """).query(String.class).list();
+
+        assertThat(columns).containsExactly("job_status", "job_stage", "public_message", "terminal");
+    }
+
+    @Test
     void addsRecoverableOutboxRelayLeaseAndStatusConstraint() {
         List<String> columns = jdbcClient.sql("""
                 SELECT column_name

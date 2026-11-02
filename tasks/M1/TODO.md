@@ -99,13 +99,14 @@
 
 ## T7：实现 Job 查询、持久化 SSE、取消与失败语义
 
-- [ ] 提供 owner-scoped Job 详情/分页列表和事件补拉；不存在与无权访问采用不泄露资源存在性的统一语义。
-- [ ] SSE 以 MySQL `job_sequence` 为 event id，先补拉缺口再订阅热事件；断线和应用重启后支持 `Last-Event-ID` 恢复。
-- [ ] 取消端点通过状态机处理 CREATED/QUEUED 与运行中状态；失败响应展示稳定 error code、retryable 和安全摘要。
+- [x] 提供 owner-scoped Job 详情/分页列表和事件补拉；不存在与无权访问采用不泄露资源存在性的统一语义。
+- [x] SSE 以 MySQL `job_sequence` 为 event id，先补拉缺口再订阅热事件；断线和应用重启后支持 `Last-Event-ID` 恢复。
+- [x] 取消端点通过状态机处理 CREATED/QUEUED 与运行中状态；失败响应展示稳定 error code、retryable 和安全摘要。
 - **验收标准**：刷新或重连不丢、不乱序、不重复展示事件；终态 SSE 正常结束；取消竞态由 CAS 裁决；跨用户无法读取 Job 或事件。
 - **验证**：MockMvc 合同测试、MySQL/SSE 集成测试、取消竞态测试；`server\mvnw.cmd test`。
 - **预计文件**：analysis query/application service、web Controller/SSE、事件发布 Adapter、测试。
 - **依赖/规模**：T6 / M。
+- **完成记录（2026-11-02）**：V6 为 Outbox/事件表增加事件发生时的稳定 Job 状态、阶段、安全公开消息和流终止标记；owner-scoped 应用服务只按认证 owner 查询 Job 与递增事件。SSE 使用 MySQL `job_sequence` 作为 `id`，无游标从 1 回放、有游标只查 `> N`，250ms 增量查询消除进程内热事件丢失和补拉/订阅间隙，15 秒 comment 心跳不落库；M1 的 `JOB_READY` 及取消/失败终态发送后正常关闭。取消接口全部经统一状态机与 version CAS，QUEUED/Consumer 竞态会重读最新 owner 快照并收敛到 `CANCELED` 或 `CANCEL_REQUESTED`。MockMvc 覆盖 CSRF、SSE 游标/终态、越权 404 和安全失败字段；真实 MySQL 覆盖事件恢复、跨用户隔离和取消竞态。完整验证在隔离端口与全新 `videopilot_t7_final` schema 上通过 148 项单元/架构测试、27 项集成测试和 JaCoCo 80% 门。
 
 ## T8：交付假任务工作台纵向闭环
 
