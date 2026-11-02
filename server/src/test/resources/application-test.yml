@@ -17,6 +17,8 @@ management:
       enabled: false
 
 videopilot:
+  media:
+    enabled: false
   analysis:
     enabled: false
   identity:

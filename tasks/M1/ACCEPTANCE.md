@@ -359,3 +359,25 @@ T7 未修改 `client`，因此未运行前端 `check` 或浏览器联调；Job �
 | 真实浏览器 | 通过 | 完成/刷新/取消/失败、桌面/手机、键盘/可访问树通过；Console error/warning 为 0，页面事件与 MySQL 一致 |
 
 详细环境、场景与事实边界见 `tasks/M1/T8_BROWSER_ACCEPTANCE.md`。
+
+## 17. T9 MediaAsset 与 MinIO upload session 证据
+
+日期：2026-11-02。
+
+- `MediaAsset` 与 upload session 由独立 domain/application/port 管理，Controller 只调用 application service。V7 新增持久化 session、内容长度和声明 MIME；对象 key 改为 ASCII binary 语义并具备完整唯一约束，只能按 `media/{ownerId}/{mediaId}/source` 由服务端生成。
+- MinIO multipart 会话只向客户端返回指定 object key、uploadId 和 partNumber 绑定的短期 PUT URL，不返回长期 access/secret key。完成前以服务端 `ListParts` 核对有序 part/etag 和总字节数，再核对对象长度与客户端 SHA 元数据；错误对象不会进入可分析状态。
+- 数据库唯一键决定同 owner/SHA 的赢家，不依赖 MySQL `ON DUPLICATE KEY UPDATE` 的受影响行数。重复创建会中止输家的 provider upload 并返回既有 session；重复完成直接返回既有媒体事实。
+- session 过期既在后续访问时立即中止，也由有界定时批次扫描并释放 MinIO multipart；中止和过期状态只通过 owner-scoped session 更新。跨 owner 的读取、签名和完成统一表现为资源不存在。
+- T9 完成后媒体仅为 `UPLOADED`，不会伪装成 `READY`。客户端 SHA、文件名和 MIME 都不是可信内容证明；T10 仍须用 FFprobe 和服务端可信哈希/元数据校验后才能允许提交分析。
+
+| 阶段/命令 | 结果 | 证据摘要 |
+| --- | --- | --- |
+| RED：application/API 测试 | 预期失败 | Media upload domain、Port 和 Controller 尚不存在，测试先以编译失败固定 owner、分片、幂等与响应契约 |
+| RED：首次真实迁移 | 预期失败 | `utf8mb4 VARCHAR(1024)` 唯一索引超过 InnoDB 3072 字节；将对象键收紧为真实的 ASCII binary 协议后，V1-V7 全量迁移通过 |
+| RED：首次重复创建 | 预期失败 | MySQL 驱动把重复 upsert 报告为受影响 1 行，误插入 loser session；改为读取唯一键赢家并比较 mediaId，回归测试显式锁定该行为 |
+| 变异检查：反转分片总长度条件 | 预期失败 | MinIO Adapter 的成功完成与错误总长度测试均失败，恢复条件后 6 项存储边界测试通过 |
+| `server\mvnw.cmd clean test` | 通过，约 46 秒 | 175 项单元/Controller/持久化/架构测试及 JaCoCo 80% 门通过 |
+| `server\mvnw.cmd clean verify -Pintegration` | 通过，约 80 秒 | 隔离端口与全新 `videopilot_t9_final` schema 上 175 项单元/架构测试、29 项真实 MySQL/Redis/RabbitMQ/MinIO/Flyway 集成测试及打包通过 |
+| OWASP Dependency-Check | 未形成结论 | 无 NVD API Key 的全量更新持续无进度，按 M0 已接受的遗留风险终止；未把无结论扫描描述为通过 |
+
+T9 没有修改 `client`，因此未运行前端 `check` 或浏览器联调；文件选择、分片进度、重试和中止的用户验收面由紧随其后的 T9F 实现。

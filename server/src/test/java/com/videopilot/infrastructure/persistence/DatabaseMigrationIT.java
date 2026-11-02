@@ -35,6 +35,7 @@ class DatabaseMigrationIT {
                 WHERE table_schema = DATABASE()
                   AND table_name IN (
                     'media_asset',
+                    'media_upload_session',
                     'analysis_job',
                     'job_stage_attempt',
                     'job_event_outbox',
@@ -55,6 +56,7 @@ class DatabaseMigrationIT {
                 "job_event_outbox",
                 "job_stage_attempt",
                 "media_asset",
+                "media_upload_session",
                 "model_call",
                 "user_session");
     }

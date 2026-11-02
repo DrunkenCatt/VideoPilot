@@ -39,6 +39,8 @@ management:
       enabled: false
 
 videopilot:
+  media:
+    enabled: ${MEDIA_API_ENABLED:true}
   messaging:
     enabled: ${MESSAGING_ENABLED:false}
     exchange: ${RABBITMQ_ANALYSIS_EXCHANGE:videopilot.analysis.exchange}
@@ -68,6 +70,21 @@ videopilot:
       initial-delay: ${OUTBOX_RELAY_INITIAL_DELAY:2s}
   analysis:
     pipeline-version: ${ANALYSIS_PIPELINE_VERSION:m1-fake-v1}
+  storage:
+    media:
+      enabled: ${MEDIA_STORAGE_ENABLED:false}
+      endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+      public-endpoint: ${MINIO_PUBLIC_ENDPOINT:http://localhost:9000}
+      access-key: ${MINIO_ACCESS_KEY:}
+      secret-key: ${MINIO_SECRET_KEY:}
+      bucket: ${MINIO_MEDIA_BUCKET:videopilot-media}
+      region: ${MINIO_REGION:us-east-1}
+      part-size: ${MEDIA_UPLOAD_PART_SIZE:8MB}
+      max-parts: ${MEDIA_UPLOAD_MAX_PARTS:10000}
+      session-ttl: ${MEDIA_UPLOAD_SESSION_TTL:1h}
+      part-url-ttl: ${MEDIA_UPLOAD_PART_URL_TTL:15m}
+      expiry-sweep-delay: ${MEDIA_UPLOAD_EXPIRY_SWEEP_DELAY:1m}
+      expiry-batch-size: ${MEDIA_UPLOAD_EXPIRY_BATCH_SIZE:100}
   identity:
     session-ttl: ${IDENTITY_SESSION_TTL:8h}
     cookie-name: ${IDENTITY_COOKIE_NAME:VP_SESSION}

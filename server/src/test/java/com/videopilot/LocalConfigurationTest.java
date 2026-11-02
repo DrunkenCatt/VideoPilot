@@ -19,7 +19,8 @@ import static org.assertj.core.api.Assertions.assertThat;
     "videopilot.health.external.enabled=false",
     "videopilot.identity.enabled=false",
     "videopilot.analysis.enabled=false",
-        "videopilot.messaging.enabled=false",
+    "videopilot.media.enabled=false",
+    "videopilot.messaging.enabled=false",
     "spring.autoconfigure.exclude="
             + "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,"
             + "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration"

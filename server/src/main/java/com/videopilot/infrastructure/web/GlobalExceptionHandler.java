@@ -5,6 +5,7 @@ import com.videopilot.identity.application.IdentityException;
 import com.videopilot.infrastructure.error.ErrorCode;
 import com.videopilot.infrastructure.error.VideoPilotException;
 import com.videopilot.infrastructure.trace.TraceContext;
+import com.videopilot.media.application.MediaUploadException;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,6 +57,19 @@ public final class GlobalExceptionHandler {
             case CONFLICT -> ErrorCode.CONFLICT;
         };
         LOGGER.warn("Analysis job request failed code={}", errorCode);
+        return response(errorCode, statusFor(errorCode));
+    }
+
+    @ExceptionHandler(MediaUploadException.class)
+    ResponseEntity<ApiErrorResponse> handleMediaUploadFailure(MediaUploadException exception) {
+        ErrorCode errorCode = switch (exception.reason()) {
+            case INVALID_REQUEST -> ErrorCode.INVALID_REQUEST;
+            case RESOURCE_NOT_FOUND -> ErrorCode.RESOURCE_NOT_FOUND;
+            case UPLOAD_EXPIRED -> ErrorCode.UPLOAD_EXPIRED;
+            case CONFLICT -> ErrorCode.CONFLICT;
+            case DEPENDENCY_UNAVAILABLE -> ErrorCode.DEPENDENCY_UNAVAILABLE;
+        };
+        LOGGER.warn("Media upload request failed code={}", errorCode);
         return response(errorCode, statusFor(errorCode));
     }
 

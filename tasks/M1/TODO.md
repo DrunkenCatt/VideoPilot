@@ -127,13 +127,14 @@
 
 ## T9：实现 MediaAsset 与 MinIO upload session
 
-- [ ] 实现 MediaAsset domain/application/port 和 MyBatis-Plus Adapter；对象 key 只能由服务端生成并绑定 owner/mediaId。
-- [ ] 实现 MinIO Adapter 和 upload session 的创建、完成、过期/中止语义；签名权限仅覆盖目标对象且短期有效。
-- [ ] 以客户端 SHA-256、服务端对象元数据和数据库唯一约束处理重复上传，不信任文件名/MIME 作为真实性依据。
+- [x] 实现 MediaAsset domain/application/port 和 MyBatis-Plus Adapter；对象 key 只能由服务端生成并绑定 owner/mediaId。
+- [x] 实现 MinIO Adapter 和 upload session 的创建、完成、过期/中止语义；签名权限仅覆盖目标对象且短期有效。
+- [x] 以客户端 SHA-256、服务端对象元数据和数据库唯一约束处理重复上传，不信任文件名/MIME 作为真实性依据。
 - **验收标准**：视频可流式上传且应用不持有 MinIO 密钥的前端副本；完成前不能提交分析；重复完成幂等；跨用户不能读取、完成或覆盖对象。
 - **验证**：MinIO + MySQL 集成测试；大于内存阈值的流式上传测试；owner 隔离测试；`server\mvnw.cmd verify -Pintegration`。
 - **预计文件**：media domain/application/port、MinIO/persistence Adapter、迁移/配置、集成测试。
 - **依赖/规模**：T2 / M。
+- **完成记录（2026-11-02）**：新增 owner-scoped `MediaAsset`/upload session 领域与应用层、MyBatis-Plus 持久化、V7 前进迁移和 MinIO multipart Adapter。对象 key 只由服务端按 owner/mediaId 生成，预签名 URL 只覆盖目标 part 且不超过 session TTL；完成前核对服务端分片清单、总字节数和对象元数据，重复创建/完成幂等。过期 session 既在访问时释放，也由有界定时批次回收；跨 owner 统一不可见。真实 MinIO/MySQL 测试以约 9 MiB 两分片流式上传验证完成、重复、隔离、中止及未 READY 禁止分析。客户端 SHA-256 仍是候选声明，可信内容校验和进入 READY 由 T10 完成；T9F 前端上传面保持独立未提前实现。
 
 ## T9F：交付视频选择、分片上传与进度前端验收面
 
