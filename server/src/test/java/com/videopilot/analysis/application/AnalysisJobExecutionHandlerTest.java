@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.videopilot.analysis.domain.AnalysisDispatchMessage;
 import com.videopilot.analysis.domain.AnalysisJob;
+import com.videopilot.analysis.domain.JobEventType;
 import com.videopilot.analysis.domain.JobStage;
+import com.videopilot.analysis.domain.JobStageAttempt;
 import com.videopilot.analysis.domain.JobStateMachine;
 import com.videopilot.analysis.domain.JobStatus;
 import com.videopilot.analysis.port.JobExecutionLock;
@@ -23,19 +25,27 @@ class AnalysisJobExecutionHandlerTest {
     private static final Instant NOW = Instant.parse("2026-10-31T08:00:00Z");
 
     @Test
-    void claimsCreatedJobAndRecordsOneConsumptionStage() {
+    void advancesTheM1FakePipelineToReadyThroughPersistedStages() {
         FakeStore store = new FakeStore(job(JobStatus.CREATED, 0, 0));
         AnalysisJobExecutionHandler handler = handler(store, JobExecutionLock.AcquireResult.ACQUIRED);
 
         AnalysisJobExecutionHandler.Result result = handler.handle(message());
 
         assertThat(result).isEqualTo(AnalysisJobExecutionHandler.Result.ACK);
-        assertThat(store.job.status()).isEqualTo(JobStatus.CONSUMING);
-        assertThat(store.commits).hasSize(2);
+        assertThat(store.job.status()).isEqualTo(JobStatus.READY);
+        assertThat(store.commits).hasSize(6);
         assertThat(store.commits.get(1).stageAttempt()).get().satisfies(stage -> {
             assertThat(stage.stage()).isEqualTo(JobStage.CONSUMPTION);
             assertThat(stage.inputFingerprint()).hasSize(64);
         });
+        assertThat(store.commits.stream()
+                .flatMap(commit -> commit.stageAttempt().stream())
+                .map(JobStageAttempt::stage))
+                .containsExactly(
+                        JobStage.CONSUMPTION,
+                        JobStage.PROBING,
+                        JobStage.CONTEXT_BUILDING,
+                        JobStage.INDEXING);
     }
 
     @Test
@@ -46,7 +56,7 @@ class AnalysisJobExecutionHandlerTest {
         assertThat(handler.handle(message())).isEqualTo(AnalysisJobExecutionHandler.Result.ACK);
         assertThat(handler.handle(message())).isEqualTo(AnalysisJobExecutionHandler.Result.ACK);
 
-        assertThat(store.commits).hasSize(2);
+        assertThat(store.commits).hasSize(6);
     }
 
     @Test
@@ -65,8 +75,8 @@ class AnalysisJobExecutionHandlerTest {
 
         assertThat(handler.handle(message())).isEqualTo(AnalysisJobExecutionHandler.Result.ACK);
 
-        assertThat(store.job.status()).isEqualTo(JobStatus.CONSUMING);
-        assertThat(store.commits).hasSize(2);
+        assertThat(store.job.status()).isEqualTo(JobStatus.READY);
+        assertThat(store.commits).hasSize(6);
     }
 
     @Test
@@ -76,6 +86,18 @@ class AnalysisJobExecutionHandlerTest {
 
         assertThat(handler.handle(message())).isEqualTo(AnalysisJobExecutionHandler.Result.DEAD_LETTER);
         assertThat(store.commits).isEmpty();
+    }
+
+    @Test
+    void acknowledgesAConcurrentCancellationThroughTheStateMachine() {
+        FakeStore store = new FakeStore(job(JobStatus.CANCEL_REQUESTED, 3, 3));
+        AnalysisJobExecutionHandler handler = handler(store, JobExecutionLock.AcquireResult.ACQUIRED);
+
+        assertThat(handler.handle(message())).isEqualTo(AnalysisJobExecutionHandler.Result.ACK);
+
+        assertThat(store.job.status()).isEqualTo(JobStatus.CANCELED);
+        assertThat(store.commits).singleElement().satisfies(commit ->
+                assertThat(commit.event().eventType()).isEqualTo(JobEventType.JOB_CANCELED));
     }
 
     private AnalysisJobExecutionHandler handler(

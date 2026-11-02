@@ -9,9 +9,11 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.videopilot.identity.application.IdentityException;
@@ -20,8 +22,10 @@ import com.videopilot.identity.application.SessionApplicationService.LoginResult
 import com.videopilot.identity.domain.AuthenticatedSession;
 import com.videopilot.identity.domain.OwnerId;
 import com.videopilot.infrastructure.security.IdentitySecurityConfiguration;
+import com.videopilot.infrastructure.security.IdentityPrincipal;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,9 +35,13 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 @WebMvcTest(value = SessionController.class, properties = "videopilot.identity.enabled=true")
-@Import(IdentitySecurityConfiguration.class)
+@Import({IdentitySecurityConfiguration.class, SessionSecurityContractTest.AsyncSecurityProbe.class})
 class SessionSecurityContractTest {
 
     private static final UUID SESSION_ID = UUID.fromString("30000000-0000-0000-0000-000000000001");
@@ -148,5 +156,26 @@ class SessionSecurityContractTest {
         mockMvc.perform(delete("/api/v1/sessions/current"))
                 .andExpect(status().isNoContent())
                 .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("Max-Age=0")));
+    }
+
+    @Test
+    void authenticatesTheAsyncDispatchUsedByPersistedEventStreams() throws Exception {
+        MvcResult initial = mockMvc.perform(get("/test/async-owner")
+                        .cookie(new jakarta.servlet.http.Cookie("VP_SESSION", "opaque-session-token")))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        mockMvc.perform(asyncDispatch(initial))
+                .andExpect(status().isOk())
+                .andExpect(content().string(SESSION.ownerId().value().toString()));
+    }
+
+    @RestController
+    static class AsyncSecurityProbe {
+
+        @GetMapping("/test/async-owner")
+        Callable<String> owner(@AuthenticationPrincipal IdentityPrincipal principal) {
+            return () -> principal.ownerContext().ownerId().value().toString();
+        }
     }
 }

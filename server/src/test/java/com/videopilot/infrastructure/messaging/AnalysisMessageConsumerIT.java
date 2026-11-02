@@ -103,23 +103,23 @@ class AnalysisMessageConsumerIT {
     }
 
     @Test
-    void concurrentAndSerialRedeliveryConvergeOnOneDatabaseStage() throws Exception {
+    void concurrentAndSerialRedeliveryConvergeOnOneFakePipeline() throws Exception {
         AnalysisMessageEnvelope envelope = envelope();
         for (int index = 0; index < 5; index++) {
             rabbitTemplate.convertAndSend(properties.exchange(), properties.routingKey(), envelope);
         }
 
-        await(Duration.ofSeconds(10), () -> "CONSUMING".equals(status()));
+        await(Duration.ofSeconds(10), () -> "READY".equals(status()));
         Thread.sleep(750);
 
-        assertThat(stageCount()).isOne();
-        assertThat(jobVersion()).isEqualTo(2);
-        assertThat(eventCount()).isEqualTo(2);
+        assertThat(stageCount()).isEqualTo(4);
+        assertThat(jobVersion()).isEqualTo(6);
+        assertThat(eventCount()).isEqualTo(6);
 
         rabbitTemplate.convertAndSend(properties.exchange(), properties.routingKey(), envelope);
         Thread.sleep(750);
-        assertThat(stageCount()).isOne();
-        assertThat(jobVersion()).isEqualTo(2);
+        assertThat(stageCount()).isEqualTo(4);
+        assertThat(jobVersion()).isEqualTo(6);
     }
 
     @Test
@@ -136,8 +136,8 @@ class AnalysisMessageConsumerIT {
             }
         }
 
-        await(Duration.ofSeconds(10), () -> "CONSUMING".equals(status()));
-        assertThat(stageCount()).isOne();
+        await(Duration.ofSeconds(10), () -> "READY".equals(status()));
+        assertThat(stageCount()).isEqualTo(4);
     }
 
     @Test

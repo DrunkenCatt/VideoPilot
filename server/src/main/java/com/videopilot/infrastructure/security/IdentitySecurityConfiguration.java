@@ -105,6 +105,11 @@ public class IdentitySecurityConfiguration {
             filterChain.doFilter(request, response);
         }
 
+        @Override
+        protected boolean shouldNotFilterAsyncDispatch() {
+            return false;
+        }
+
         private static String findCookie(HttpServletRequest request, String name) {
             Cookie[] cookies = request.getCookies();
             if (cookies == null) {

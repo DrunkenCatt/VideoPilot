@@ -337,3 +337,25 @@ T6 是内部可靠性薄片，没有修改 `client`，因此不运行前端 `che
 | `server\mvnw.cmd clean verify -Pintegration` | 通过，约 65 秒 | 隔离端口与全新 `videopilot_t7_final` schema 从 V1 迁移到 V6；148 项单元/架构测试、27 项真实 MySQL/Redis/RabbitMQ/Flyway 集成测试及 JaCoCo 80% 门通过 |
 
 T7 未修改 `client`，因此未运行前端 `check` 或浏览器联调；Job 状态、SSE、取消与失败的可视化验收面由紧随其后的 T7F 实现。
+
+## 16. T8 假任务工作台纵向闭环证据
+
+日期：2026-11-02。
+
+- T4F/T7F 工作台使用冻结的 owner-scoped Job、事件与取消契约；提交携带一次意图一个幂等键和 CSRF，导航只使用服务端 links，请求不包含 ownerId。
+- 页面状态、阶段、失败摘要和时间线只来自 REST/SSE。fetch-based SSE 显式携带最后 event id，校验 id/sequence、跨重连去重并采用 400/800/1600ms 有界退避；刷新终态页面仍从 MySQL 回放完整事件。
+- 真实浏览器在 1440x900 与 375x812 视口通过完成、刷新、取消和失败展示；键盘主路径、可访问名称/区域、live region 均通过，最终 Console error/warning 为 0。
+- 完成 Job 的页面与 MySQL 均显示 READY、version=6、event_sequence=7，七条事件类型和顺序一致。失败场景明确使用持久化 fixture，仅验收安全读取/展示，不冒充后续真实媒体失败生产链路。
+- 联调修复了两个纵向缺陷：Consumer 对运行中 `CANCEL_REQUESTED` 不收敛，以及 SSE async dispatch 丢失认证。二者均增加失败优先的回归测试。
+
+| 阶段/命令 | 结果 | 证据摘要 |
+| --- | --- | --- |
+| RED：Job API/工作台组件测试 | 预期失败 | API 模块与工作台不存在；先固定提交、事件、取消、失败和刷新恢复行为 |
+| RED：取消收敛测试 | 预期失败 | handler 遇到 `CANCEL_REQUESTED` 后 Job 仍停在请求态；修复后推进到 CANCELED 并写终态事件 |
+| RED：SSE async 安全回归 | 预期失败 | 初始请求认证成功，但 async dispatch 返回 401；修复过滤器分派后保持认证且不放宽授权 |
+| 变异检查：移除 `CANCEL_REQUESTED` 收敛 | 预期失败 | `acknowledgesAConcurrentCancellationThroughTheStateMachine` 明确失败；恢复分支后 6 项 handler 测试通过 |
+| `server\mvnw.cmd clean verify -Pintegration` | 通过，约 77 秒 | 150 项单元/架构测试、27 项真实 MySQL/Redis/RabbitMQ/Flyway 集成测试、JaCoCo 80% 门和打包通过 |
+| `client\npm.cmd run check` | 通过 | 类型检查、零 warning Lint、29 项 Vitest、Statements 82.88%、Branches 80.35%、Functions 90.19%、Lines 89.43% 和生产构建通过 |
+| 真实浏览器 | 通过 | 完成/刷新/取消/失败、桌面/手机、键盘/可访问树通过；Console error/warning 为 0，页面事件与 MySQL 一致 |
+
+详细环境、场景与事实边界见 `tasks/M1/T8_BROWSER_ACCEPTANCE.md`。

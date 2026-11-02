@@ -11,6 +11,11 @@ const activeSession: Session = {
   expiresAt: '2026-10-30T08:00:00Z',
 }
 
+const emptyJobPage = {
+  data: [],
+  pagination: { page: 1, pageSize: 20, totalItems: 0, totalPages: 0 },
+}
+
 function jsonResponse(status: number, body?: unknown): Response {
   return new Response(body === undefined ? null : JSON.stringify(body), {
     status,
@@ -40,6 +45,7 @@ describe('App session flow', () => {
       .fn()
       .mockResolvedValueOnce(jsonResponse(401))
       .mockResolvedValueOnce(jsonResponse(201, activeSession))
+      .mockResolvedValueOnce(jsonResponse(200, emptyJobPage))
     vi.stubGlobal('fetch', fetchMock)
 
     const wrapper = mount(App)
@@ -49,7 +55,8 @@ describe('App session flow', () => {
     await wrapper.get('form').trigger('submit')
     await flushPromises()
 
-    expect(fetchMock).toHaveBeenLastCalledWith(
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
       '/api/v1/sessions',
       expect.objectContaining({
         method: 'POST',
@@ -57,8 +64,8 @@ describe('App session flow', () => {
         credentials: 'same-origin',
       }),
     )
-    expect(wrapper.get('h1').text()).toContain('teacher')
-    expect(wrapper.text()).toContain('M1 · 上传与异步任务')
+    expect(wrapper.get('.session-actions').text()).toContain('teacher')
+    expect(wrapper.get('h1').text()).toContain('假任务工作台')
     expect(wrapper.text()).not.toContain('a local password')
   })
 
@@ -129,12 +136,13 @@ describe('App session flow', () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(200, activeSession))
+      .mockResolvedValueOnce(jsonResponse(200, emptyJobPage))
       .mockResolvedValueOnce(jsonResponse(204))
     vi.stubGlobal('fetch', fetchMock)
 
     const wrapper = mount(App)
     await flushPromises()
-    expect(wrapper.get('h1').text()).toContain('teacher')
+    expect(wrapper.get('.session-actions').text()).toContain('teacher')
 
     await wrapper.get('[data-test="logout"]').trigger('click')
     await flushPromises()
@@ -154,6 +162,7 @@ describe('App session flow', () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(200, activeSession))
+      .mockResolvedValueOnce(jsonResponse(200, emptyJobPage))
       .mockResolvedValueOnce(
         jsonResponse(503, {
           code: 'DEPENDENCY_UNAVAILABLE',
@@ -169,7 +178,7 @@ describe('App session flow', () => {
     await wrapper.get('[data-test="logout"]').trigger('click')
     await flushPromises()
 
-    expect(wrapper.get('h1').text()).toContain('teacher')
+    expect(wrapper.get('.session-actions').text()).toContain('teacher')
     expect(wrapper.get('[role="alert"]').text()).toContain('登录服务暂时不可用')
   })
 })

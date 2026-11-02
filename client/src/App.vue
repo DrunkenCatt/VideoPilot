@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 
 import type { Session } from './api/contracts'
 import { ApiClientError, createSessionApi } from './api/session'
+import JobWorkbench from './features/jobs/JobWorkbench.vue'
 
 const sessionApi = createSessionApi()
 const session = ref<Session | null>(null)
@@ -56,6 +57,11 @@ async function logout() {
     status.value = 'ready'
   }
 }
+
+function sessionExpired() {
+  session.value = null
+  errorMessage.value = '会话已过期，请重新登录。'
+}
 </script>
 
 <template>
@@ -66,7 +72,24 @@ async function logout() {
         href="/"
         aria-label="VideoPilot 首页"
       >VIDEOPILOT</a>
-      <span class="environment">LOCAL WORKSPACE</span>
+      <div
+        v-if="session"
+        class="session-actions"
+      >
+        <span>{{ session.username }}</span>
+        <button
+          class="text-button"
+          data-test="logout"
+          :disabled="status === 'submitting'"
+          @click="logout"
+        >
+          {{ status === 'submitting' ? '正在退出…' : '退出' }}
+        </button>
+      </div>
+      <span
+        v-else
+        class="environment"
+      >LOCAL WORKSPACE</span>
     </header>
 
     <main
@@ -165,51 +188,19 @@ async function logout() {
       </section>
     </main>
 
-    <main
-      v-else
-      class="workspace-shell"
-    >
-      <section class="workspace-heading">
-        <p class="kicker">
-          M1 · 上传与异步任务
-        </p>
-        <h1>欢迎回来，{{ session.username }}。</h1>
-        <p>身份与资源归属已经就绪。下一薄切片将从这里接入视频上传。</p>
-      </section>
-      <section
-        class="readiness"
-        aria-labelledby="readiness-title"
+    <template v-else>
+      <p
+        v-if="errorMessage"
+        class="form-error app-alert"
+        role="alert"
       >
-        <div>
-          <p class="section-index">
-            CURRENT CAPABILITY
-          </p>
-          <h2 id="readiness-title">
-            本地会话已验证
-          </h2>
-        </div>
-        <dl>
-          <div><dt>账号</dt><dd>{{ session.username }}</dd></div>
-          <div><dt>会话有效至</dt><dd>{{ new Date(session.expiresAt).toLocaleString('zh-CN') }}</dd></div>
-          <div><dt>下一能力</dt><dd>视频上传与媒体校验</dd></div>
-        </dl>
-        <p
-          v-if="errorMessage"
-          class="form-error"
-          role="alert"
-        >
-          {{ errorMessage }}
-        </p>
-        <button
-          class="text-button"
-          data-test="logout"
-          :disabled="status === 'submitting'"
-          @click="logout"
-        >
-          {{ status === 'submitting' ? '正在退出…' : '退出当前账号' }}
-        </button>
-      </section>
-    </main>
+        {{ errorMessage }}
+      </p>
+      <JobWorkbench
+        :session="session"
+        @unauthenticated="sessionExpired"
+      />
+    </template>
 
     <footer><span>VideoPilot / M1</span><span>Local-first · Evidence-bound</span></footer>
   </div>

@@ -1,0 +1,283 @@
+<script setup lang="ts">
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+
+import type { AnalysisJob, JobEvent, MediaId, Session } from '../../api/contracts'
+import { ApiClientError } from '../../api/session'
+import { createJobsApi } from '../../api/jobs'
+import JobDetail from './JobDetail.vue'
+import { statusLabel } from './jobPresentation'
+
+const props = defineProps<{ session: Session }>()
+const emit = defineEmits<{ unauthenticated: [] }>()
+const api = createJobsApi()
+
+const jobs = ref<AnalysisJob[]>([])
+const selected = ref<AnalysisJob | null>(null)
+const events = ref<JobEvent[]>([])
+const mediaId = ref('')
+const goal = ref('')
+const loading = ref(true)
+const submitting = ref(false)
+const canceling = ref(false)
+const errorMessage = ref('')
+let idempotencyKey: string | null = null
+let eventController: globalThis.AbortController | null = null
+
+watch([mediaId, goal], () => {
+  idempotencyKey = null
+})
+
+function safeMessage(error: unknown): string {
+  if (!(error instanceof ApiClientError)) return '无法连接本地服务，请确认后端已启动。'
+  if (error.code === 'MEDIA_NOT_READY') return '该媒体尚未就绪，不能提交分析。'
+  if (error.code === 'IDEMPOTENCY_KEY_REUSED') return '本次提交意图已变更，请重新提交。'
+  if (error.code === 'RESOURCE_NOT_FOUND') return '任务不存在，或当前账号无权访问。'
+  if (error.code === 'JOB_NOT_CANCELABLE') return '任务已进入不可取消状态，已从服务端重新读取。'
+  if (error.code === 'AUTHENTICATION_REQUIRED') return '会话已过期，请重新登录。'
+  return error.retryable ? '服务暂时不可用，请稍后重试。' : '请求未完成，请检查输入。'
+}
+
+function handleError(error: unknown) {
+  errorMessage.value = safeMessage(error)
+  if (error instanceof ApiClientError && error.code === 'AUTHENTICATION_REQUIRED') emit('unauthenticated')
+}
+
+function replaceJob(job: AnalysisJob) {
+  const index = jobs.value.findIndex((candidate) => candidate.jobId === job.jobId)
+  if (index >= 0) jobs.value.splice(index, 1, job)
+  else jobs.value.unshift(job)
+  selected.value = job
+}
+
+function selectLink(selfLink: string) {
+  globalThis.window.history.replaceState(null, '', `#${selfLink}`)
+}
+
+async function follow(job: AnalysisJob) {
+  eventController?.abort()
+  const controller = new globalThis.AbortController()
+  eventController = controller
+  try {
+    await api.followEvents(job.links.events, {
+      signal: controller.signal,
+      onEvent: (event) => {
+        if (selected.value?.jobId !== event.jobId) return
+        if (!events.value.some((existing) => existing.sequence === event.sequence)) {
+          events.value.push(event)
+          events.value.sort((left, right) => left.sequence - right.sequence)
+        }
+        selected.value = { ...selected.value, status: event.status, currentStage: event.stage }
+      },
+    })
+    if (controller.signal.aborted || eventController !== controller) return
+    if (selected.value?.jobId === job.jobId) replaceJob(await api.get(job.links.self))
+  } catch (error) {
+    if (!controller.signal.aborted) handleError(error)
+  }
+}
+
+async function openJob(selfLink: string) {
+  errorMessage.value = ''
+  events.value = []
+  try {
+    const existing = jobs.value.find((job) => job.links.self === selfLink)
+    const job = existing ?? await api.get(selfLink)
+    selected.value = job
+    selectLink(job.links.self)
+    void follow(job)
+  } catch (error) {
+    handleError(error)
+  }
+}
+
+async function submit() {
+  errorMessage.value = ''
+  submitting.value = true
+  idempotencyKey ??= globalThis.crypto.randomUUID()
+  try {
+    const job = await api.submit(
+      { mediaId: mediaId.value.trim() as MediaId, goal: goal.value.trim(), mode: 'STANDARD' },
+      idempotencyKey,
+      props.session.csrfToken,
+    )
+    idempotencyKey = null
+    replaceJob(job)
+    selectLink(job.links.self)
+    events.value = []
+    void follow(job)
+  } catch (error) {
+    handleError(error)
+  } finally {
+    submitting.value = false
+  }
+}
+
+async function cancel() {
+  if (!selected.value) return
+  errorMessage.value = ''
+  canceling.value = true
+  eventController?.abort()
+  try {
+    const job = await api.cancel(selected.value.links.cancellations, props.session.csrfToken)
+    replaceJob(job)
+    void follow(job)
+  } catch (error) {
+    handleError(error)
+    if (selected.value) {
+      try {
+        replaceJob(await api.get(selected.value.links.self))
+      } catch (refreshError) {
+        handleError(refreshError)
+      }
+    }
+  } finally {
+    canceling.value = false
+  }
+}
+
+onMounted(async () => {
+  try {
+    const page = await api.list()
+    jobs.value = page.data
+    const hashLink = decodeURI(globalThis.window.location.hash.slice(1))
+    if (hashLink.startsWith('/api/v1/analysis-jobs/')) {
+      await openJob(hashLink)
+    }
+  } catch (error) {
+    handleError(error)
+  } finally {
+    loading.value = false
+  }
+})
+
+onBeforeUnmount(() => eventController?.abort())
+</script>
+
+<template>
+  <main class="jobs-shell">
+    <header class="jobs-heading">
+      <div>
+        <p class="kicker">
+          M1 · DURABLE ANALYSIS
+        </p>
+        <h1>假任务工作台</h1>
+      </div>
+      <p>所有状态和时间线均来自服务端持久化事件；页面不估算进度。</p>
+    </header>
+
+    <p
+      v-if="errorMessage"
+      class="form-error workspace-error"
+      role="alert"
+    >
+      {{ errorMessage }}
+    </p>
+
+    <div class="jobs-layout">
+      <aside
+        class="jobs-rail"
+        aria-label="提交和最近任务"
+      >
+        <section
+          class="submission-panel"
+          aria-labelledby="submission-title"
+        >
+          <p class="section-index">
+            TEST MEDIA
+          </p>
+          <h2 id="submission-title">
+            提交分析
+          </h2>
+          <p>真实上传将在 T9/T10 接入；此处使用已就绪的 M1 测试媒体。</p>
+          <form
+            data-test="submit-job"
+            @submit.prevent="submit"
+          >
+            <label for="media-id"><span>测试媒体 ID</span><input
+              id="media-id"
+              v-model="mediaId"
+              required
+              pattern="[0-9a-fA-F-]{36}"
+              autocomplete="off"
+            ></label>
+            <label for="analysis-goal"><span>分析目标</span><textarea
+              id="analysis-goal"
+              v-model="goal"
+              required
+              maxlength="4000"
+              rows="4"
+            /></label>
+            <button
+              type="submit"
+              :disabled="submitting"
+            >
+              <span>{{ submitting ? '正在提交…' : '创建假任务' }}</span><span aria-hidden="true">→</span>
+            </button>
+          </form>
+        </section>
+
+        <section
+          class="recent-jobs"
+          aria-labelledby="recent-jobs-title"
+        >
+          <div class="rail-heading">
+            <h2 id="recent-jobs-title">
+              最近任务
+            </h2><span>{{ jobs.length }}</span>
+          </div>
+          <p
+            v-if="loading"
+            aria-live="polite"
+          >
+            正在读取服务端任务…
+          </p>
+          <p
+            v-else-if="jobs.length === 0"
+            data-test="jobs-empty"
+            class="empty-copy"
+          >
+            还没有分析任务。使用上方的已就绪媒体开始。
+          </p>
+          <ul
+            v-else
+            class="job-list"
+          >
+            <li
+              v-for="job in jobs"
+              :key="job.jobId"
+            >
+              <button
+                data-test="open-job"
+                :aria-current="selected?.jobId === job.jobId ? 'page' : undefined"
+                @click="openJob(job.links.self)"
+              >
+                <span>{{ job.goal }}</span><small>{{ statusLabel(job.status) }}</small>
+              </button>
+            </li>
+          </ul>
+        </section>
+      </aside>
+
+      <JobDetail
+        v-if="selected"
+        :job="selected"
+        :events="events"
+        :action-busy="canceling"
+        @cancel="cancel"
+      />
+      <section
+        v-else
+        class="job-placeholder"
+        aria-labelledby="placeholder-title"
+      >
+        <p class="section-index">
+          NO JOB SELECTED
+        </p>
+        <h2 id="placeholder-title">
+          选择一条任务查看服务端时间线
+        </h2>
+        <p>刷新页面后，任务和事件将从 MySQL 重新读取。</p>
+      </section>
+    </div>
+  </main>
+</template>

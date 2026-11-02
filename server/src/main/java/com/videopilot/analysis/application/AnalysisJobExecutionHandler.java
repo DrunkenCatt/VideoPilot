@@ -19,8 +19,8 @@ import java.util.function.Supplier;
 
 public final class AnalysisJobExecutionHandler {
 
-    private static final int MAX_CAS_ATTEMPTS = 3;
-    private static final String FINGERPRINT_VERSION = "m1-consumption-v1";
+    private static final int MAX_TRANSITION_ATTEMPTS = 12;
+    private static final String FINGERPRINT_VERSION = "m1-fake-pipeline-v1";
 
     private final JobTransitionStore store;
     private final JobTransitionService transitions;
@@ -51,23 +51,31 @@ public final class AnalysisJobExecutionHandler {
     }
 
     private Result claimExecution(AnalysisDispatchMessage message) {
-        for (int attempt = 0; attempt < MAX_CAS_ATTEMPTS; attempt++) {
+        for (int attempt = 0; attempt < MAX_TRANSITION_ATTEMPTS; attempt++) {
             AnalysisJob job = store.findById(message.jobId()).orElse(null);
             if (job == null) {
                 return Result.DEAD_LETTER;
             }
-            if (job.status() == JobStatus.CREATED) {
-                if (!transitionCreatedToQueued(job, message.requestId())) {
-                    continue;
-                }
+            boolean advanced = switch (job.status()) {
+                case CREATED -> transitionCreatedToQueued(job, message.requestId());
+                case QUEUED -> transitionToStage(
+                        job, JobStatus.CONSUMING, JobStage.CONSUMPTION, message.requestId());
+                case CONSUMING -> transitionToStage(
+                        job, JobStatus.PROBING, JobStage.PROBING, message.requestId());
+                case PROBING -> transitionToStage(
+                        job, JobStatus.CONTEXT_BUILDING, JobStage.CONTEXT_BUILDING, message.requestId());
+                case CONTEXT_BUILDING -> transitionToStage(
+                        job, JobStatus.INDEXING, JobStage.INDEXING, message.requestId());
+                case INDEXING -> transitionToReady(job, message.requestId());
+                case CANCEL_REQUESTED -> transitionToCanceled(job, message.requestId());
+                default -> false;
+            };
+            if (!advanced && isPipelineStatus(job.status())) {
                 continue;
             }
-            if (job.status() == JobStatus.QUEUED) {
-                if (!transitionQueuedToConsuming(job, message.requestId())) {
-                    continue;
-                }
+            if (!advanced) {
+                return Result.ACK;
             }
-            return Result.ACK;
         }
         return Result.RETRY;
     }
@@ -85,23 +93,53 @@ public final class AnalysisJobExecutionHandler {
                 "{\"status\":\"QUEUED\"}"));
     }
 
-    private boolean transitionQueuedToConsuming(AnalysisJob job, String requestId) {
+    private boolean transitionToStage(
+            AnalysisJob job,
+            JobStatus targetStatus,
+            JobStage stageName,
+            String requestId) {
         JobStageAttempt stage = JobStageAttempt.started(
                 job.jobId(),
-                JobStage.CONSUMPTION,
-                consumptionFingerprint(job),
+                stageName,
+                stageFingerprint(job, stageName),
                 1,
                 now.get());
         return transition(new JobTransitionCommand(
                 job.jobId(),
-                JobStatus.QUEUED,
+                job.status(),
                 job.version(),
-                JobStatus.CONSUMING,
+                targetStatus,
                 Optional.of(stage),
                 Optional.empty(),
                 JobEventType.STAGE_STARTED,
                 requestId,
-                "{\"stage\":\"CONSUMPTION\",\"status\":\"STARTED\"}"));
+                "{\"stage\":\"" + stageName.name() + "\",\"status\":\"STARTED\"}"));
+    }
+
+    private boolean transitionToReady(AnalysisJob job, String requestId) {
+        return transition(new JobTransitionCommand(
+                job.jobId(),
+                JobStatus.INDEXING,
+                job.version(),
+                JobStatus.READY,
+                Optional.empty(),
+                Optional.empty(),
+                JobEventType.JOB_READY,
+                requestId,
+                "{\"status\":\"READY\"}"));
+    }
+
+    private boolean transitionToCanceled(AnalysisJob job, String requestId) {
+        return transition(new JobTransitionCommand(
+                job.jobId(),
+                JobStatus.CANCEL_REQUESTED,
+                job.version(),
+                JobStatus.CANCELED,
+                Optional.empty(),
+                Optional.empty(),
+                JobEventType.JOB_CANCELED,
+                requestId,
+                "{\"status\":\"CANCELED\"}"));
     }
 
     private boolean transition(JobTransitionCommand command) {
@@ -113,8 +151,15 @@ public final class AnalysisJobExecutionHandler {
         }
     }
 
-    private String consumptionFingerprint(AnalysisJob job) {
-        String input = FINGERPRINT_VERSION + '|' + job.jobId() + '|' + job.mediaId();
+    private boolean isPipelineStatus(JobStatus status) {
+        return switch (status) {
+            case CREATED, QUEUED, CONSUMING, PROBING, CONTEXT_BUILDING, INDEXING, CANCEL_REQUESTED -> true;
+            default -> false;
+        };
+    }
+
+    private String stageFingerprint(AnalysisJob job, JobStage stage) {
+        String input = FINGERPRINT_VERSION + '|' + job.jobId() + '|' + job.mediaId() + '|' + stage;
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             return HexFormat.of().formatHex(digest.digest(input.getBytes(StandardCharsets.UTF_8)));

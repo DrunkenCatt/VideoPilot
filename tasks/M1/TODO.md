@@ -110,19 +110,20 @@
 
 ## T8：交付假任务工作台纵向闭环
 
-- [ ] 在已完成的 T4F/T7F 操作面上用测试媒体记录跑通“提交 -> 实时进度 -> 刷新补拉 -> 完成/取消/失败”。
-- [ ] 以桌面和手机视口检查关键布局、键盘主路径、可访问名称、Console 和 REST/SSE 网络请求。
-- [ ] 记录页面结果与 MySQL 持久化事件一致，证明前端没有本地计时或假数据状态。
+- [x] 在已完成的 T4F/T7F 操作面上用测试媒体记录跑通“提交 -> 实时进度 -> 刷新补拉 -> 完成/取消/失败”。
+- [x] 以桌面和手机视口检查关键布局、键盘主路径、可访问名称、Console 和 REST/SSE 网络请求。
+- [x] 记录页面结果与 MySQL 持久化事件一致，证明前端没有本地计时或假数据状态。
 - **验收标准**：页面不根据本地计时伪造进度；刷新后状态来自服务端；失败和取消可访问且明确；无 Console error。
 - **验证**：`client\npm.cmd run check`；真实浏览器 + RabbitMQ/MySQL 冒烟验收并记录网络/Console 证据。
 - **预计文件**：浏览器验收记录、必要的前端缺陷修复和测试。
 - **依赖/规模**：T7F / S。
+- **完成记录（2026-11-02）**：在 T4/T7 已冻结契约之上交付 Job API client 与工作台，使用服务端 links 导航、一次提交意图一个 `Idempotency-Key`、显式 `Last-Event-ID` 和 400/800/1600ms 有界重连；页面只呈现服务端 Job/事件，不用本地计时推断进度。真实浏览器连接隔离 MySQL、RabbitMQ 和新后端，跑通提交至 READY 的 7 条持久化事件、刷新全量回放、运行中取消收敛到 CANCELED，以及持久化 FAILED fixture 的安全错误展示；READY 页面和 MySQL 均为 version=6、event_sequence=7，事件顺序完全一致。桌面 1440x900、手机 375x812、键盘主路径、可访问名称/区域和 live region 通过，最终 Console error/warning 为 0。联调还修复了 Consumer 对 `CANCEL_REQUESTED` 仅 ACK 不收敛，以及 Spring Security SSE async dispatch 丢失认证两个缺陷。失败 fixture 只验收失败读取/展示契约，不宣称已实现后续真实媒体失败生产链路。完整证据见 `tasks/M1/T8_BROWSER_ACCEPTANCE.md`。
 
 ### Checkpoint B：可靠假任务
 
-- [ ] Outbox -> RabbitMQ -> Consumer -> MySQL -> SSE 全链路可运行。
-- [ ] 重复消息、断线补拉、取消和失败场景通过。
-- [ ] 后端快速/相关集成测试和前端 check 通过。
+- [x] Outbox -> RabbitMQ -> Consumer -> MySQL -> SSE 全链路可运行。
+- [x] 重复消息、断线补拉、取消和失败场景通过。
+- [x] 后端快速/相关集成测试和前端 check 通过。
 
 ## T9：实现 MediaAsset 与 MinIO upload session
 
@@ -166,23 +167,25 @@
 
 ## T4F：交付 Job 提交与查询前端验收面
 
-- [ ] 对 READY 且归属当前用户的媒体提供目标/模式提交表单，按一次提交意图生成并复用 `Idempotency-Key`。
-- [ ] 提供 owner-scoped Job 列表/详情 API client，统一处理重复提交、同 key 异请求、媒体未就绪和认证过期。
-- [ ] 成功提交后使用服务端 links 导航到 Job，不由客户端拼装或推断任务状态。
+- [x] 对 READY 且归属当前用户的媒体提供目标/模式提交表单，按一次提交意图生成并复用 `Idempotency-Key`。
+- [x] 提供 owner-scoped Job 列表/详情 API client，统一处理重复提交、同 key 异请求、媒体未就绪和认证过期。
+- [x] 成功提交后使用服务端 links 导航到 Job，不由客户端拼装或推断任务状态。
 - **验收标准**：用户能从已校验媒体提交 Job 并刷新读取；重复点击/网络重试不创建第二个逻辑任务；请求不携带 ownerId。
 - **验证**：API/组件失败测试；`client\npm.cmd run check`；浏览器核对 202、幂等 Header 和恢复请求。
 - **预计文件**：jobs API client、submit/list/detail feature 和测试。
 - **依赖/规模**：T4、T10F / S。
+- **完成记录（2026-11-02）**：为 T8 使用 M1 测试媒体 ID 提供临时提交入口，API client 覆盖创建、列表、详情和取消；提交意图生成并在网络重试期间复用幂等键，写请求携带 CSRF 且从不携带 ownerId。成功后把服务端 `links.self` 写入 URL hash 并据此恢复详情，不在客户端拼 Job URL。T9F/T10F 完成后由真实媒体选择面替换测试媒体 ID 输入，不改变本任务 API 契约。
 
 ## T7F：交付 Job 状态、SSE、取消与失败前端验收面
 
-- [ ] Job 详情显示服务端状态、阶段、持久化事件、稳定失败摘要和合法取消操作；不以本地计时生成进度。
-- [ ] SSE 断线采用有界退避并携带最后 event id，先补拉再接热流；终态关闭连接并对屏幕阅读器播报关键变化。
-- [ ] 会话过期、越权 404、可重试/不可重试失败和取消竞态均有明确页面语义。
+- [x] Job 详情显示服务端状态、阶段、持久化事件、稳定失败摘要和合法取消操作；不以本地计时生成进度。
+- [x] SSE 断线采用有界退避并携带最后 event id，先补拉再接热流；终态关闭连接并对屏幕阅读器播报关键变化。
+- [x] 会话过期、越权 404、可重试/不可重试失败和取消竞态均有明确页面语义。
 - **验收标准**：刷新/重连后事件不丢、不乱序、不重复展示；取消结果由服务端 CAS 裁决；跨用户 URL 不泄露存在性。
 - **验证**：API/组件/SSE 测试；`client\npm.cmd run check`；真实浏览器核对 EventSource/补拉、Console 和可访问树。
 - **预计文件**：job detail/timeline feature、SSE client、样式和测试。
 - **依赖/规模**：T7、T4F / M。
+- **完成记录（2026-11-02）**：详情页展示服务端状态、阶段、sequence 事件、稳定失败码/摘要和服务端允许的取消链接。fetch-based SSE client 支持显式 `Last-Event-ID`、跨连接去重、事件 id/sequence 校验、异常格式拒绝和有界退避；刷新终态页面仍从 sequence 0 回放持久化时间线。认证过期回到登录面，404 使用统一安全错误，取消结果以重读服务端快照为准，关键状态通过 `aria-live` 播报。组件/API 测试和真实浏览器场景均通过。
 
 ## T11：交付真实上传与进度页面纵向闭环
 
