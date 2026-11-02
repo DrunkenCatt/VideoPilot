@@ -13,12 +13,18 @@ export function validateUploadFile(file: Pick<File, 'size' | 'name'>): string | 
   return null
 }
 
-export async function hashFile(file: Blob, chunkBytes = HASH_CHUNK_BYTES): Promise<string> {
+export async function hashFile(
+  file: Blob,
+  chunkBytes = HASH_CHUNK_BYTES,
+  signal?: AbortSignal,
+): Promise<string> {
   const hash = new Sha256()
   for (let offset = 0; offset < file.size; offset += chunkBytes) {
+    signal?.throwIfAborted()
     const bytes = new Uint8Array(await readBlob(file.slice(offset, offset + chunkBytes)))
     hash.update(bytes)
   }
+  signal?.throwIfAborted()
   return hash.digestHex()
 }
 
@@ -34,7 +40,7 @@ function readBlob(blob: Blob): Promise<ArrayBuffer> {
 
 interface UploadOptions {
   signal?: AbortSignal
-  hash?: (file: File) => Promise<string>
+  hash?: (file: File, signal?: AbortSignal) => Promise<string>
   onHashing?: () => void
   onProgress?: (loaded: number, total: number) => void
   onRetry?: (partNumber: number, nextAttempt: number) => void
@@ -55,7 +61,10 @@ export async function uploadMediaFile(
   const validation = validateUploadFile(file)
   if (validation) throw new Error(validation)
   options.onHashing?.()
-  const sha256 = await (options.hash ?? hashFile)(file)
+  const sha256 = options.hash
+    ? await options.hash(file, options.signal)
+    : await hashFile(file, HASH_CHUNK_BYTES, options.signal)
+  options.signal?.throwIfAborted()
   const session = await api.create({
     originalFilename: file.name,
     contentLength: file.size,
@@ -65,6 +74,7 @@ export async function uploadMediaFile(
   options.onSession?.(session.uploadId)
 
   try {
+    options.signal?.throwIfAborted()
     const partCount = Math.ceil(file.size / session.partSizeBytes)
     if (partCount > session.maxParts) throw new Error('文件需要的分片数量超过服务端限制。')
     const completed: CompletedPart[] = []

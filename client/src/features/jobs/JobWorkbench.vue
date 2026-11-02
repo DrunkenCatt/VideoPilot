@@ -4,6 +4,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { AnalysisJob, JobEvent, MediaId, Session } from '../../api/contracts'
 import { ApiClientError } from '../../api/session'
 import { createJobsApi } from '../../api/jobs'
+import MediaUploadPanel from '../media/MediaUploadPanel.vue'
 import JobDetail from './JobDetail.vue'
 import { statusLabel } from './jobPresentation'
 
@@ -173,6 +174,11 @@ onBeforeUnmount(() => eventController?.abort())
       {{ errorMessage }}
     </p>
 
+    <MediaUploadPanel
+      :session="session"
+      @unauthenticated="emit('unauthenticated')"
+    />
+
     <div class="jobs-layout">
       <aside
         class="jobs-rail"
@@ -188,7 +194,7 @@ onBeforeUnmount(() => eventController?.abort())
           <h2 id="submission-title">
             提交分析
           </h2>
-          <p>真实上传将在 T9/T10 接入；此处使用已就绪的 M1 测试媒体。</p>
+          <p>T9F 上传结果仍需 T10 校验；此处暂时保留已就绪的 M1 测试媒体入口。</p>
           <form
             data-test="submit-job"
             @submit.prevent="submit"

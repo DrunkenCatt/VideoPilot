@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { MediaAsset, UploadSession } from './contracts'
 import { createMediaApi } from './media'
+import { ApiClientError } from './session'
 
 const session: UploadSession = {
   uploadId: '10000000-0000-0000-0000-000000000009' as UploadSession['uploadId'],
@@ -88,6 +89,50 @@ describe('media API', () => {
 
     await expect(promise).rejects.toMatchObject({ name: 'AbortError' })
     expect(xhr.abort).toHaveBeenCalledOnce()
+  })
+
+  it('maps JSON and malformed API failures to safe client errors', async () => {
+    const request = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(410, {
+        code: 'UPLOAD_EXPIRED', message: 'expired', retryable: false, requestId: 'request-1',
+      }))
+      .mockResolvedValueOnce(new Response('not-json', { status: 500 }))
+    const api = createMediaApi(request)
+
+    await expect(api.create({
+      originalFilename: 'lesson.mp4', contentLength: 9, sha256: 'a'.repeat(64), contentType: 'video/mp4',
+    }, 'csrf')).rejects.toMatchObject({ code: 'UPLOAD_EXPIRED', status: 410 })
+    await expect(api.abort(session.uploadId, 'csrf')).rejects.toMatchObject({ code: 'UNKNOWN', status: 500 })
+  })
+
+  it('rejects unsuccessful storage responses and missing ETags', async () => {
+    const failed = new FakeXhr()
+    const missingEtag = new FakeXhr()
+    const api = createMediaApi(fetch, vi.fn()
+      .mockReturnValueOnce(failed as unknown as XMLHttpRequest)
+      .mockReturnValueOnce(missingEtag as unknown as XMLHttpRequest))
+
+    const failedPromise = api.putPart('signed-1', new Blob(['x']), vi.fn())
+    failed.status = 503
+    failed.onload?.(new ProgressEvent('load'))
+    await expect(failedPromise).rejects.toMatchObject({ status: 503, retryable: true })
+
+    const missingPromise = api.putPart('signed-2', new Blob(['x']), vi.fn())
+    missingEtag.status = 200
+    missingEtag.onload?.(new ProgressEvent('load'))
+    await expect(missingPromise).rejects.toBeInstanceOf(ApiClientError)
+  })
+
+  it('maps a storage network error and ignores non-computable progress', async () => {
+    const progress = vi.fn()
+    const xhr = new FakeXhr()
+    const api = createMediaApi(fetch, () => xhr as unknown as XMLHttpRequest)
+    const promise = api.putPart('signed', new Blob(['x']), progress)
+    xhr.upload.onprogress?.({ lengthComputable: false, loaded: 1, total: 0 } as ProgressEvent)
+    xhr.onerror?.(new ProgressEvent('error'))
+
+    await expect(promise).rejects.toMatchObject({ status: 0, retryable: true })
+    expect(progress).not.toHaveBeenCalled()
   })
 })
 

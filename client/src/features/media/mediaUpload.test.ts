@@ -9,6 +9,12 @@ describe('media upload workflow', () => {
     await expect(hashFile(file, 2)).resolves.toBe(
       'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
     )
+    await expect(hashFile(new Blob(['a'.repeat(60)]), 60)).resolves.toBe(
+      '11ee391211c6256460b6ed375957fadd8061cafbb31daf967db875aebd5aaad4',
+    )
+    await expect(hashFile(new Blob([]))).resolves.toBe(
+      'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    )
   })
 
   it('rejects an empty or oversized file before creating a session', () => {
@@ -54,5 +60,71 @@ describe('media upload workflow', () => {
       { partNumber: 2, etag: 'etag-2' },
     ], 'csrf')
     expect(progress).toHaveBeenLastCalledWith(9, 9)
+  })
+
+  it('uses octet-stream for unknown MIME and aborts a session after a terminal part failure', async () => {
+    const file = new File(['123'], 'lesson.mkv')
+    const session: UploadSession = {
+      uploadId: '10000000-0000-0000-0000-000000000009' as UploadSession['uploadId'],
+      mediaId: '20000000-0000-0000-0000-000000000009' as UploadSession['mediaId'],
+      partSizeBytes: 5,
+      maxParts: 1,
+      expiresAt: '2026-11-03T08:00:00Z',
+      partsUrl: '/parts',
+      completionUrl: '/completion',
+    }
+    const expired = new (await import('../../api/session')).ApiClientError(410, {
+      code: 'UPLOAD_EXPIRED', retryable: false,
+    })
+    const api = {
+      create: vi.fn().mockResolvedValue(session),
+      createPart: vi.fn().mockRejectedValue(expired),
+      putPart: vi.fn(),
+      complete: vi.fn(),
+      abort: vi.fn().mockRejectedValue(new Error('already expired')),
+    }
+
+    await expect(uploadMediaFile(file, 'csrf', api, { hash: vi.fn().mockResolvedValue('b'.repeat(64)) }))
+      .rejects.toBe(expired)
+    expect(api.create.mock.calls[0]?.[0].contentType).toBe('application/octet-stream')
+    expect(api.createPart).toHaveBeenCalledOnce()
+    expect(api.abort).toHaveBeenCalledWith(session.uploadId, 'csrf')
+  })
+
+  it('rejects a server part limit before requesting targets', async () => {
+    const session = {
+      uploadId: '10000000-0000-0000-0000-000000000009',
+      mediaId: '20000000-0000-0000-0000-000000000009',
+      partSizeBytes: 2,
+      maxParts: 1,
+      expiresAt: '2026-11-03T08:00:00Z',
+      partsUrl: '/parts',
+      completionUrl: '/completion',
+    } as UploadSession
+    const api = {
+      create: vi.fn().mockResolvedValue(session),
+      createPart: vi.fn(), putPart: vi.fn(), complete: vi.fn(), abort: vi.fn(),
+    }
+
+    await expect(uploadMediaFile(
+      new File(['123'], 'lesson.mp4', { type: 'video/mp4' }),
+      'csrf', api, { hash: vi.fn().mockResolvedValue('a'.repeat(64)) },
+    )).rejects.toThrow('分片数量')
+    expect(api.createPart).not.toHaveBeenCalled()
+    expect(api.abort).toHaveBeenCalledOnce()
+  })
+
+  it('stops hashing when the user aborts before a session exists', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const api = {
+      create: vi.fn(), createPart: vi.fn(), putPart: vi.fn(), complete: vi.fn(), abort: vi.fn(),
+    }
+
+    await expect(uploadMediaFile(
+      new File(['123'], 'lesson.mp4', { type: 'video/mp4' }),
+      'csrf', api, { signal: controller.signal },
+    )).rejects.toMatchObject({ name: 'AbortError' })
+    expect(api.create).not.toHaveBeenCalled()
   })
 })
