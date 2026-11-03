@@ -215,18 +215,19 @@
 
 ## T12：加入 Redis active key 并证明可重建
 
-- [ ] active key 只作为 owner + analysisKey 的快速命中和短期状态缓存，设置明确命名、TTL 与删除时机。
-- [ ] 缓存 miss/Redis 不可用时回查 MySQL；启动或按需可从非终态 Job 重建，不因缓存丢失创建重复 Job。
-- [ ] SSE 热事件可使用 Redis 加速，但历史补拉、顺序和终态始终以 MySQL 为准。
+- [x] active key 只作为 owner + analysisKey 的快速命中和短期状态缓存，设置明确命名、TTL 与删除时机。
+- [x] 缓存 miss/Redis 不可用时回查 MySQL；启动或按需可从非终态 Job 重建，不因缓存丢失创建重复 Job。
+- [x] SSE 热事件可使用 Redis 加速，但历史补拉、顺序和终态始终以 MySQL 为准。
 - **验收标准**：清空 Redis 后重复提交仍返回同一逻辑执行；Job 查询/SSE 补拉正常；Redis 故障不改变数据库事实。
 - **验证**：Redis flush/restart 集成场景；重复提交并发测试；`server\mvnw.cmd verify -Pintegration`。
 - **预计文件**：analysis cache port、Redis Adapter、配置、集成测试。
 - **依赖/规模**：T6、T7、T10 / S。
+- **完成记录（2026-11-03）**：新增 owner + analysisKey 正向 key 与 jobId 反向 key，默认 TTL 30 分钟；创建、幂等命中和状态迁移后按需写入/刷新，READY 及其他终态删除。缓存命中仍由 owner-scoped MySQL 复核；缓存 miss、脏值、Redis 清空或不可用均回查 MySQL，非终态按需重建，数据库唯一约束继续裁决并发。SSE 历史补拉、顺序与终态未改用 Redis，继续以 MySQL 持久化事件为真源。202 项单元测试、35 项真实依赖集成测试和覆盖率门通过。
 
 ### Checkpoint C：真实上传
 
-- [ ] MinIO 上传、FFprobe、媒体元数据和 Job 提交端到端通过。
-- [ ] Redis 清空后仍能从 MySQL 恢复正确行为。
+- [x] MinIO 上传、FFprobe、媒体元数据和 Job 提交端到端通过。
+- [x] Redis 清空后仍能从 MySQL 恢复正确行为。
 - [ ] 两个用户的媒体、对象和 Job 全链路隔离。
 
 ## T13：执行 M1 可靠性与权限验收矩阵

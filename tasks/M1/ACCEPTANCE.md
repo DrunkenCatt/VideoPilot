@@ -462,3 +462,23 @@ T10Q 是后端查询薄片，没有修改 `client`；页面加载、轮询、REA
 | 响应式与浏览器诊断 | 通过 | 375 x 812 下无横向溢出，Console error/warning 为 0 |
 
 详细账号处理、资源/Job 标识、数据库事实和 fixture 边界见 `tasks/M1/T11_BROWSER_ACCEPTANCE.md`。
+
+## 22. T12 Redis active key 与缓存丢失重建证据
+
+日期：2026-11-03。
+
+- Redis key 使用 `videopilot:analysis:active:{ownerId}:{analysisKey}`，反向 key 使用 `videopilot:analysis:active-job:{jobId}`；默认 TTL 为 30 分钟。创建、幂等命中和非终态迁移刷新缓存，READY 及其他终态通过反向 key 原子删除。
+- 缓存命中只提供候选 jobId，application service 仍以 owner-scoped MySQL 查询复核归属与 analysisKey；脏值、陈旧引用和缓存 miss 均不会直接形成业务事实。
+- Redis 清空后，同一逻辑提交从 MySQL 找回既有 Job 并按需重建 active key；Redis 不可用时创建、查询和持久化事件仍工作，数据库唯一约束继续裁决并发，不会因为缓存失败创建重复逻辑 Job。
+- SSE 未引入 Redis 真源：历史补拉、`job_sequence` 顺序和终态继续完全来自 MySQL。该内部可靠性薄片不增加调试端点或前端伪状态，因此没有修改 `client` 或重复浏览器验收。
+
+| 阶段/命令 | 结果 | 证据摘要 |
+| --- | --- | --- |
+| RED：active cache application/transition 测试 | 预期失败 | Cache Port 尚不存在，测试先以编译失败固定命中复核、miss 重建、不可用降级、迁移刷新与终态删除 |
+| 变异检查：反转终态删除条件 | 预期失败 | active 状态刷新与终态删除测试各自失败；恢复条件后聚焦测试通过 |
+| `server\mvnw.cmd test` | 通过，约 44 秒 | 202 项单元、Controller、持久化与架构测试通过，JaCoCo 80% 门通过 |
+| Redis flush 聚焦集成测试 | 通过 | `AnalysisJobCreationIT` 7 项通过，覆盖清空后同一 Job 返回、active key 重建和 MySQL 事件可读 |
+| Redis 停服聚焦集成测试 | 通过 | Redis 容器停止期间故障场景 1 项通过，同一逻辑提交仅保留一个 MySQL Job，查询和事件事实不变 |
+| 宿主机 `server\mvnw.cmd verify -Pintegration` | 环境失败 | T12 用例通过；宿主机缺少 FFmpeg，且运行中的 Compose server 与 Outbox 测试争抢共享 RabbitMQ 队列，因此不作为成功证据 |
+| 首次隔离容器 `verify -Pintegration` | 配置失败 | FFmpeg 与 RabbitMQ 场景已通过；MinIO 预签名地址仍指向容器内 `localhost:9000`，3 项上传连接失败 |
+| 隔离容器 `server\mvnw.cmd verify -Pintegration` | 通过，约 3 分 39 秒 | 设置容器网络内 MinIO public endpoint、暂停竞争 Consumer 后，202 项单元测试、35 项真实 MySQL/Redis/RabbitMQ/MinIO/FFmpeg 集成测试、覆盖率与打包全部通过 |
