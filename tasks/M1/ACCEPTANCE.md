@@ -443,3 +443,22 @@ T10Q 是后端查询薄片，没有修改 `client`；页面加载、轮询、REA
 | 真实浏览器 | 通过 | 有效视频 `UPLOADED -> READY`、可信 00:03、选择并提交到 Job READY、损坏视频 FAILED、刷新恢复、服务中断/恢复、双账号隔离、375 x 812 无溢出和 Console error/warning 为 0 |
 
 详细环境、页面证据与事实边界见 `tasks/M1/T10F_BROWSER_ACCEPTANCE.md`。
+
+## 21. T11 真实上传与进度纵向闭环证据
+
+日期：2026-11-03。
+
+- Job 工作台在提交成功时保留所选媒体事实，并在从服务端 `links.self` 恢复持久化 Job 时按当前会话查询 owner-scoped 媒体详情；页面展示真实文件名、可信时长、服务端媒体状态和 ID，不接受 owner 输入。
+- 媒体关联查询使用修订号和当前 Job/mediaId 双重校验，迟到响应不会覆盖新选择。媒体详情暂时不可用时保留 Job 状态、操作和持久化时间线，并提供独立的媒体信息不可用提示。
+- 真实浏览器从无会话页面完成登录、有效视频上传、`UPLOADED -> READY`、READY 选择、分析提交、Job READY 和 7 条持久化事件展示；整页刷新后会话、媒体列表、Job、媒体事实和事件均从服务端恢复。
+- 损坏视频上传完成后由真实 FFprobe 路径收敛为 `FAILED / MEDIA_INVALID`，页面显示安全摘要且不提供分析选择。分析失败页面使用显式 MySQL 验收 fixture，只证明失败事实和 5 条持久化事件可被安全读取与展示，不宣称 M1 假处理器已具备真实故障注入能力。
+
+| 阶段/命令 | 结果 | 证据摘要 |
+| --- | --- | --- |
+| RED：Job 媒体事实测试 | 预期失败 | 持久化 Job 详情缺少 `job-media-facts`，先以失败测试固定创建后绑定和刷新恢复行为 |
+| 聚焦组件测试 | 通过 | Job 工作台与媒体资源组件 11 项测试通过，覆盖提交绑定、URL 恢复、迟到响应隔离和媒体详情失败降级 |
+| `client\npm.cmd run check` | 通过 | 类型检查、零 warning Lint、54 项 Vitest、四项覆盖率门和生产构建通过 |
+| 真实浏览器 + Compose | 通过 | MySQL、RabbitMQ、MinIO 和真实服务端链路完成有效上传/校验/提交/刷新；损坏上传与分析失败展示符合安全语义 |
+| 响应式与浏览器诊断 | 通过 | 375 x 812 下无横向溢出，Console error/warning 为 0 |
+
+详细账号处理、资源/Job 标识、数据库事实和 fixture 边界见 `tasks/M1/T11_BROWSER_ACCEPTANCE.md`。

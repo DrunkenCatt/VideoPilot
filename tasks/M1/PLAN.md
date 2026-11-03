@@ -4,7 +4,7 @@
 
 M1 要在 M0 已冻结的契约上交付第一个真实用户闭环：用户登录后上传本地教学视频，系统保存资源归属和媒体元数据，通过统一状态迁移与 Transactional Outbox 把 `AnalysisJob` 可靠投递到 RabbitMQ，Consumer 在至少一次投递下幂等推进任务，并由持久化事件向页面提供可补拉的 SSE 进度、取消和失败信息。
 
-当前 `main` 已完成 T0-T9F（T10 之前的计划薄片及对应前端验收面）：M0 退出、M1 合同、身份与资源归属、Job 状态机、Outbox/RabbitMQ/Consumer、Job 查询与可恢复 SSE、假任务浏览器闭环，以及 MinIO upload session 和真实分片上传页面均已有证据。下一步是 T10 FFprobe 可信校验、T10Q owner-scoped 媒体查询和 T10F 媒体资源/状态验收面；尚未实现的资源列表不能由当前上传成功卡片替代。
+当前 `main` 已完成 T0-T11：M0 退出、M1 合同、身份与资源归属、Job 状态机、Outbox/RabbitMQ/Consumer、Job 查询与可恢复 SSE、MinIO upload session、FFprobe 可信校验、owner-scoped 媒体查询，以及登录到真实上传、READY 选择、Job 进度和刷新恢复的浏览器纵向闭环均已有证据。下一步是 T12 Redis active key 与缓存丢失重建；Redis 仍只能作为加速层，不能改变 MySQL 真源语义。
 
 M0 已于 2026-10-29 由项目负责人确认退出。远端 CI run `40837414790` 的 backend、frontend、integration 与 Gitleaks 已通过；OWASP Dependency-Check 仍发现 CVSS 7 以上依赖漏洞，项目负责人明确接受该遗留风险并允许进入 M1。安全 Job、报告和 CVSS 7 阻断阈值保持不变，该风险不视为已修复。
 
@@ -68,10 +68,10 @@ T13 -> T14 文档、质量门与退出记录
 | T8 | 假任务浏览器纵向闭环（已完成） | T7F | S |
 | T9 | MediaAsset 与 MinIO upload session（已完成） | T2 | M |
 | T9F | 视频选择、分片上传与进度前端验收面（已完成） | T9 | M |
-| T10 | FFprobe 校验并连接真实媒体与 Job | T3、T9 | M |
-| T10Q | owner-scoped 媒体列表/详情查询合同 | T10 | S |
-| T10F | 媒体资源列表与校验状态前端验收面 | T9F、T10Q | M |
-| T11 | 真实上传与进度浏览器纵向闭环 | T8、T9F、T10F | S |
+| T10 | FFprobe 校验并连接真实媒体与 Job（已完成） | T3、T9 | M |
+| T10Q | owner-scoped 媒体列表/详情查询合同（已完成） | T10 | S |
+| T10F | 媒体资源列表与校验状态前端验收面（已完成） | T9F、T10Q | M |
+| T11 | 真实上传与进度浏览器纵向闭环（已完成） | T8、T9F、T10F | S |
 | T12 | Redis active key 与缓存丢失重建 | T6、T7、T10 | S |
 | T13 | 重投、重启、并发、越权集成验收 | T8、T11、T12 | M |
 | T14 | M1 文档、全量质量门与退出记录 | T13 | S |
