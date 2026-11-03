@@ -243,20 +243,21 @@
 
 ## T14：更新文档、运行质量门并完成 M1 退出记录
 
-- [ ] 更新 README、配置示例、API/SSE/MQ 使用说明和本地演示步骤；只记录实际已验证能力。
-- [ ] 记录每条命令的结果、耗时、环境、失败/未执行项和对应 commit，不用“命令存在”代替成功证据。
+- [x] 更新 README、配置示例、API/SSE/MQ 使用说明和本地演示步骤；只记录实际已验证能力。
+- [x] 记录每条命令的结果、耗时、环境、失败/未执行项和对应 commit，不用“命令存在”代替成功证据。
 - [ ] 复核变更行覆盖率不少于 80%、ArchUnit、秘密/依赖扫描和无 suppression/Floor 违规；由负责人确认 M1 退出。
 - **验收标准**：M1 退出门全部勾选且证据可复现；文档不宣称 M2 的 ASR/OCR/Checkpoint 恢复能力；工作树只含预期变更。
 - **验证**：`server\mvnw.cmd test`；`server\mvnw.cmd verify -Pintegration`；`client\npm.cmd run check`；`client\npm.cmd audit --audit-level=high`；`docker compose config --quiet`；`powershell -ExecutionPolicy Bypass -File .\scripts\security-check.ps1`；`git diff --check`。
 - **预计文件**：`README.md`、`.env.example`、`tasks/M1/ACCEPTANCE.md`、`tasks/M1/TODO.md`。
 - **依赖/规模**：T13 / S。
+- **当前记录（2026-11-03）**：运行手册与 Compose 配置透传已提交为 `ffb5c84`；后端 205 项、37 项真实依赖集成测试、前端 54 项、Compose 配置和运行时 readiness 均通过，npm High/Critical 为 0。完整安全入口因 NVD 连续 11 次下载失败未形成 OWASP 结论，Gitleaks 本机缺失且官方容器/ZIP 均因外部网络失败而未执行，因此安全扫描与负责人退出确认保持未勾选，详见 `tasks/M1/ACCEPTANCE.md` 第 24 节。
 
 ## M1 退出门
 
-- [ ] 重复提交只创建一个逻辑执行；同 key 不同请求被明确拒绝。
-- [ ] MQ 消息重复或乱序投递不重复推进阶段。
-- [ ] 应用重启后 Job 和事件仍能从 MySQL 找回，SSE 可补拉。
-- [ ] 其他用户不能读取、枚举、完成上传、取消或订阅不属于自己的媒体/Job。
-- [ ] MinIO 上传、媒体元数据和 FFprobe 校验形成真实闭环。
-- [ ] Redis active key 丢失后可从 MySQL 重建，不成为事实真源。
+- [x] 重复提交只创建一个逻辑执行；同 key 不同请求被明确拒绝。
+- [x] MQ 消息重复或乱序投递不重复推进阶段。
+- [x] 应用重启后 Job 和事件仍能从 MySQL 找回，SSE 可补拉。
+- [x] 其他用户不能读取、枚举、完成上传、取消或订阅不属于自己的媒体/Job。
+- [x] MinIO 上传、媒体元数据和 FFprobe 校验形成真实闭环。
+- [x] Redis active key 丢失后可从 MySQL 重建，不成为事实真源。
 - [ ] 本次实际质量门结果和未执行项已记录，项目负责人确认可进入 M2。

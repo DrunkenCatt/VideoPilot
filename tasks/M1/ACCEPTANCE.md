@@ -503,3 +503,28 @@ T10Q 是后端查询薄片，没有修改 `client`；页面加载、轮询、REA
 | `client\npm.cmd run check` | 通过 | 54 项测试、类型检查、零 warning Lint、四项覆盖率门和生产构建通过 |
 
 逐项测试映射、浏览器证据复用边界和环境说明见 `tasks/M1/T13_ACCEPTANCE_MATRIX.md`。
+
+## 24. T14 文档、质量门与退出状态
+
+日期：2026-11-03。
+
+- `README.md` 已从 M0 初始化状态更新到 M1 的真实边界；`docs/M1_RUNBOOK.md` 记录本地账号、启动、浏览器演示、API/SSE/MQ、配置与排障，并明确不宣称 M2 的 ASR/OCR、Checkpoint、检索或证据问答能力。
+- `.env.example` 增加 M1 流水线、active cache 和上传边界示例；`compose.yml` 显式透传数据库/Redis/Rabbit 超时、Consumer、媒体探测、上传与 active cache 配置，`docker compose config` 和实际重建均验证通过。
+- T13 自动化与验收矩阵提交为 `9cc8be9`；M1 本地运行手册和配置接线提交为 `ffb5c84`。
+- T14 没有新增或修改 Java/TypeScript 业务逻辑，因此没有新的可覆盖业务行；项目级 JaCoCo 门、ArchUnit 和前端四项覆盖率门均通过，未增加 suppression、跳过测试或阈值调整。
+- 本次安全入口未全部通过：OWASP 未取得 NVD 数据，Gitleaks 未能取得扫描器。M0 负责人接受的 OWASP 遗留风险保持原状，但不能把历史接受或静态 diff 复核描述为本次扫描通过。
+
+| 命令 | 环境与耗时 | 实际结果 |
+| --- | --- | --- |
+| `server\mvnw.cmd test` | Windows、JDK 21，40.886 秒 | 205 项单元/Controller/架构测试通过，JaCoCo 门通过 |
+| `server\mvnw.cmd verify -Pintegration` | 隔离 Docker 网络、真实五项依赖和 FFmpeg，约 5 分 15 秒 | 205 项单元/架构测试、37 项集成测试、JaCoCo 与打包通过 |
+| `client\npm.cmd run check` | Windows、Node.js | 54 项测试、类型检查、零 warning Lint、Statements 86.96%、Branches 80.82%、Functions 87.90%、Lines 92.44% 和构建通过 |
+| `client\npm.cmd audit --audit-level=high --registry=https://registry.npmjs.org` | Windows，约 30 秒 | 退出码 0；High/Critical 为 0，报告 16 项 moderate，不以 `--force` 破坏性升级 |
+| `docker compose config --quiet` | Windows，约 1 秒 | 通过 |
+| `docker compose up -d server` + `scripts/dev-check.ps1` | Compose，约 16 秒 | server 重建成功；readiness、MySQL、Redis、RabbitMQ、MinIO、Qdrant 全部 `UP` |
+| `scripts/security-check.ps1` | Windows，约 10 分钟后人工停止无进展下载 | Java 205 项、ArchUnit、JaCoCo 和打包先通过；OWASP 无 NVD API Key，在首批 CVE 请求连续 11 次重试后仍无数据，未形成漏洞结论；脚本因此未进入 npm/Gitleaks 阶段 |
+| 固定 CI 镜像 `zricethezav/gitleaks:v8.28.0` | Docker Hub，约 22 秒 | 镜像不存在于本机，registry 连接超时，未执行扫描 |
+| 同版本官方 Windows ZIP | GitHub，两次尝试约 3 分钟 | 下载停滞或连接重置；不完整临时文件已清理，未执行扫描 |
+| Floor diff 与 `git diff --check` | Windows，约 1 秒 | 未发现新增 suppression、测试跳过、未实现占位或空白错误；diff 格式通过。这只是补充复核，不替代 Gitleaks |
+
+因此，M1 六项功能/可靠性退出门已有可复现证据；T14 文档和非安全门已完成。依赖/秘密扫描结论以及“项目负责人确认进入 M2”仍是明确未完成项，不能由 coding agent 自动勾选。
