@@ -138,13 +138,14 @@
 
 ## T9F：交付视频选择、分片上传与进度前端验收面
 
-- [ ] 实现 Media upload session API client、文件选择和分片上传；文件名/大小/MIME 仅作提示，服务端仍负责可信校验。
-- [ ] 显示真实字节进度、分片重试/过期/中止状态；短期预签名 URL 只在请求期间使用，不持久化 MinIO 凭据。
-- [ ] 用小 fixture 和超过客户端限制的文件覆盖成功、失败与取消，页面保持键盘可操作和移动端可读。
+- [x] 实现 Media upload session API client、文件选择和分片上传；文件名/大小/MIME 仅作提示，服务端仍负责可信校验。
+- [x] 显示真实字节进度、分片重试/过期/中止状态；短期预签名 URL 只在请求期间使用，不持久化 MinIO 凭据。
+- [x] 用小 fixture 和超过客户端限制的文件覆盖成功、失败与取消，页面保持键盘可操作和移动端可读。
 - **验收标准**：登录用户能通过页面把视频上传至服务端限定的 object key；刷新或错误不会错误宣称已完成；跨用户信息不进入请求。
 - **验证**：API/组件失败测试；`client\npm.cmd run check`；真实浏览器检查 MinIO 分片网络请求和 Console。
 - **预计文件**：media API client、upload feature/component、样式和测试。
 - **依赖/规模**：T9 / M。
+- **完成记录（2026-11-03）**：新增 owner-scoped Media upload API client、4 MiB 增量 SHA-256、XHR multipart 直传与真实字节进度。每个分片失败后重新申请短期签名并最多尝试三次，活动请求支持 AbortSignal，中止/过期/失败不会进入完成态；预签名 URL 和 MinIO 凭据不进入任何浏览器存储。上传面嵌入现有工作台，完成后只展示服务端 `UPLOADED` 和媒体 ID，并明确等待 T10，不自动接入 Job。47 项前端测试与四项覆盖率门、生产构建全部通过；真实浏览器跑通小夹具和约 82 MiB multipart 上传、哈希中止、刷新、桌面/375 x 812、键盘及零 Console 错误/警告。证据见 `tasks/M1/T9F_BROWSER_ACCEPTANCE.md`。
 
 ## T10：实现 FFprobe 校验并连接真实媒体与 Job
 
