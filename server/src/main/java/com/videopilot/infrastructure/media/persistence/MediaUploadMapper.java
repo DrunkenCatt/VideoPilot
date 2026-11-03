@@ -96,6 +96,25 @@ interface MediaUploadMapper extends BaseMapper<MediaAssetRow> {
 
     @Select("""
             SELECT * FROM media_asset
+            WHERE owner_id = #{ownerId}
+              AND media_status IN ('UPLOADED', 'PROBING', 'READY', 'FAILED')
+            ORDER BY created_at DESC, media_id DESC
+            LIMIT #{pageSize} OFFSET #{offset}
+            """)
+    List<MediaAssetRow> selectOwnedAssets(
+            @Param("ownerId") String ownerId,
+            @Param("offset") long offset,
+            @Param("pageSize") int pageSize);
+
+    @Select("""
+            SELECT COUNT(*) FROM media_asset
+            WHERE owner_id = #{ownerId}
+              AND media_status IN ('UPLOADED', 'PROBING', 'READY', 'FAILED')
+            """)
+    long countOwnedAssets(@Param("ownerId") String ownerId);
+
+    @Select("""
+            SELECT * FROM media_asset
             WHERE media_status = 'UPLOADED'
                OR (media_status = 'PROBING' AND updated_at <= #{staleBefore})
             ORDER BY updated_at, media_id

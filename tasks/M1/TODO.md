@@ -160,13 +160,14 @@
 
 ## T10Q：交付 owner-scoped 媒体列表与详情查询
 
-- [ ] 实现 `GET /api/v1/media-assets?page&pageSize`，从 MySQL 分页读取当前 owner 的持久化媒体，并按 `createdAt DESC, mediaId DESC` 稳定排序。
-- [ ] 统一列表与 `GET /api/v1/media-assets/{mediaId}` 的响应投影，返回可信状态、时长和可选安全失败事实，不返回 ownerId、objectKey、临时路径或探测命令。
-- [ ] 用双用户、混合状态和分页边界测试证明资源不可枚举；跨 owner 详情继续返回不泄露存在性的 404，未完成/已中止 upload session 不进入列表。
+- [x] 实现 `GET /api/v1/media-assets?page&pageSize`，从 MySQL 分页读取当前 owner 的持久化媒体，并按 `createdAt DESC, mediaId DESC` 稳定排序。
+- [x] 统一列表与 `GET /api/v1/media-assets/{mediaId}` 的响应投影，返回可信状态、时长和可选安全失败事实，不返回 ownerId、objectKey、临时路径或探测命令。
+- [x] 用双用户、混合状态和分页边界测试证明资源不可枚举；跨 owner 详情继续返回不泄露存在性的 404，未完成/已中止 upload session 不进入列表。
 - **验收标准**：刷新页面后可从服务端找回当前用户全部已持久化媒体；列表和详情事实一致；排序稳定且无跨用户泄露。
 - **验证**：application/controller 测试；MySQL owner 隔离与分页集成测试；`server\mvnw.cmd test`。
 - **预计文件**：media query application service/port、persistence Adapter、媒体响应合同及测试。
 - **依赖/规模**：T10 / S。
+- **完成记录（2026-11-03）**：新增独立的 owner-scoped media query Port/Application，列表和详情共用 `MediaAssetView` 投影。MySQL 查询排除 `UPLOAD_PENDING`，按 `created_at DESC, media_id DESC` 稳定分页；Controller 只从认证 principal 获取 owner，分页在 HTTP 与应用层双重限制为 1..100。响应保留可信状态、时长和安全失败事实，不公开 owner/object key/临时路径/命令。192 项后端测试和真实 MySQL 双用户、同时间戳排序、分页、未完成上传排除及跨 owner 404 集成场景通过。
 
 ## T10F：交付媒体资源列表与校验状态前端验收面
 

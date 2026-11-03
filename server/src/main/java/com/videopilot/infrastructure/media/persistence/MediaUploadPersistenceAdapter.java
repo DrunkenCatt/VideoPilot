@@ -8,13 +8,14 @@ import com.videopilot.media.domain.UploadSession;
 import com.videopilot.media.domain.UploadStatus;
 import com.videopilot.media.port.MediaUploadStore;
 import com.videopilot.media.port.MediaProbeStore;
+import com.videopilot.media.port.MediaAssetQueryStore;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.transaction.annotation.Transactional;
 
-public class MediaUploadPersistenceAdapter implements MediaUploadStore, MediaProbeStore {
+public class MediaUploadPersistenceAdapter implements MediaUploadStore, MediaProbeStore, MediaAssetQueryStore {
 
     private final MediaUploadMapper mapper;
 
@@ -70,6 +71,22 @@ public class MediaUploadPersistenceAdapter implements MediaUploadStore, MediaPro
     public Optional<MediaAsset> findAsset(OwnerId ownerId, UUID mediaId) {
         return Optional.ofNullable(mapper.selectOwnedAsset(
                 ownerId.value().toString(), mediaId.toString())).map(this::toDomain);
+    }
+
+    @Override
+    public AssetPage findPage(OwnerId ownerId, int page, int pageSize) {
+        String owner = ownerId.value().toString();
+        long offset = (long) (page - 1) * pageSize;
+        List<MediaAsset> assets = mapper.selectOwnedAssets(owner, offset, pageSize)
+                .stream()
+                .map(this::toDomain)
+                .toList();
+        return new AssetPage(assets, mapper.countOwnedAssets(owner));
+    }
+
+    @Override
+    public Optional<MediaAsset> findById(OwnerId ownerId, UUID mediaId) {
+        return findAsset(ownerId, mediaId);
     }
 
     @Override

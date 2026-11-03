@@ -2,6 +2,7 @@ package com.videopilot.infrastructure.media.persistence;
 
 import com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration;
 import com.videopilot.media.application.MediaUploadApplicationService;
+import com.videopilot.media.application.MediaAssetQueryApplicationService;
 import com.videopilot.media.application.MediaProbeApplicationService;
 import com.videopilot.media.port.MediaObjectStore;
 import com.videopilot.infrastructure.media.storage.DisabledMediaObjectStore;
@@ -62,6 +63,12 @@ public class MediaUploadAutoConfiguration {
                 properties.getMaxParts(),
                 properties.getSessionTtl(),
                 properties.getPartUrlTtl());
+    }
+
+    @Bean
+    MediaAssetQueryApplicationService mediaAssetQueryApplicationService(
+            MediaUploadPersistenceAdapter store) {
+        return new MediaAssetQueryApplicationService(store);
     }
 
     @Bean

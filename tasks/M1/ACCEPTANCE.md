@@ -408,3 +408,21 @@ T9 没有修改 `client`，因此未运行前端 `check` 或浏览器联调；�
 | Docker 内聚焦 `verify -Pintegration` | 通过，约 125 秒 | 全新 `videopilot_t10_final` schema 从 V1 迁移到 V8；4 项 application 测试及 2 项真实 MySQL/MinIO/FFprobe 集成测试通过 |
 
 T10 没有修改 `client`，因此未运行前端 `check` 或浏览器联调；媒体列表、状态轮询与 READY 选择分别由紧随其后的 T10Q、T10F 提供。
+
+## 19. T10Q owner-scoped 媒体查询证据
+
+日期：2026-11-03。
+
+- `GET /api/v1/media-assets?page&pageSize` 只使用认证 principal 的 owner，不接受 owner 查询参数；分页参数在 Controller 和 application service 两层限制，非法值稳定返回 `400 INVALID_REQUEST`。
+- 查询 Port 的列表和详情都返回同一 `MediaAsset` 领域事实，并由 application service 统一投影为 `MediaAssetView`。HTTP 响应包含可信状态、时长和受控失败事实，不包含 ownerId、objectKey、临时文件或 FFprobe 命令。
+- MySQL 列表只包含已完成 upload 的媒体状态，排除 `UPLOAD_PENDING`，并按 `created_at DESC, media_id DESC` 排序；相同创建时间仍有确定顺序，翻页不会因为并列时间产生漂移。
+- 详情 SQL 同时约束 ownerId/mediaId；不存在和跨 owner 统一映射到 `404 RESOURCE_NOT_FOUND`，列表 count 与 data 使用相同 owner 和状态边界。
+
+| 阶段/命令 | 结果 | 证据摘要 |
+| --- | --- | --- |
+| RED：application/controller 测试 | 预期失败 | query Port、分页结果、application service 和列表 Controller 尚不存在，测试以 19 项编译错误固定 owner、分页与统一投影边界 |
+| 聚焦 application/controller/persistence | 通过 | 16 项测试覆盖分页派生、非法边界、详情隐藏、HTTP 元数据与 Mapper offset/count 调用 |
+| `server\mvnw.cmd clean test` | 通过，约 58.4 秒 | 192 项单元、Controller、持久化与架构测试，JaCoCo 80% 门通过 |
+| Docker 内 `clean verify -Pintegration -Dit.test=MediaAssetQueryIT` | 通过，约 252 秒 | 192 项后端回归及 2 项真实 MySQL 集成测试；覆盖双用户、混合状态、同时间戳稳定排序、分页、未完成上传排除和跨 owner 详情隐藏 |
+
+T10Q 是后端查询薄片，没有修改 `client`；页面加载、轮询、READY 选择和真实浏览器验收由 T10F 完成。

@@ -16,6 +16,8 @@ import com.videopilot.identity.domain.AuthenticatedSession;
 import com.videopilot.identity.domain.OwnerId;
 import com.videopilot.infrastructure.security.IdentitySecurityConfiguration;
 import com.videopilot.media.application.MediaAssetView;
+import com.videopilot.media.application.MediaAssetPage;
+import com.videopilot.media.application.MediaAssetQueryApplicationService;
 import com.videopilot.media.application.MediaUploadApplicationService;
 import com.videopilot.media.application.UploadPartView;
 import com.videopilot.media.application.UploadSessionView;
@@ -51,6 +53,9 @@ class MediaUploadControllerTest {
 
     @MockitoBean
     private MediaUploadApplicationService uploads;
+
+    @MockitoBean
+    private MediaAssetQueryApplicationService mediaAssets;
 
     @MockitoBean
     private SessionApplicationService sessions;
@@ -100,7 +105,7 @@ class MediaUploadControllerTest {
     @Test
     void completesAndReadsTheSameMediaContract() throws Exception {
         when(uploads.complete(any(), eq(UPLOAD_ID), any())).thenReturn(asset());
-        when(uploads.get(any(), eq(MEDIA_ID))).thenReturn(asset());
+        when(mediaAssets.get(any(), eq(MEDIA_ID))).thenReturn(asset());
 
         mockMvc.perform(post("/api/v1/media-uploads/{uploadId}/completion", UPLOAD_ID)
                         .cookie(cookie())
@@ -113,6 +118,29 @@ class MediaUploadControllerTest {
         mockMvc.perform(get("/api/v1/media-assets/{mediaId}", MEDIA_ID).cookie(cookie()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sha256").value("a".repeat(64)));
+    }
+
+    @Test
+    void listsPersistedMediaWithStablePaginationMetadata() throws Exception {
+        when(mediaAssets.list(any(), eq(2), eq(10)))
+                .thenReturn(new MediaAssetPage(java.util.List.of(asset()), 2, 10, 11, 2));
+
+        mockMvc.perform(get("/api/v1/media-assets?page=2&pageSize=10").cookie(cookie()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].mediaId").value(MEDIA_ID.toString()))
+                .andExpect(jsonPath("$.data[0].status").value("UPLOADED"))
+                .andExpect(jsonPath("$.pagination.page").value(2))
+                .andExpect(jsonPath("$.pagination.totalItems").value(11));
+        verify(mediaAssets).list(
+                eq(new com.videopilot.identity.application.OwnerContext(SESSION.ownerId())),
+                eq(2), eq(10));
+    }
+
+    @Test
+    void rejectsInvalidMediaPaginationAtTheHttpBoundary() throws Exception {
+        mockMvc.perform(get("/api/v1/media-assets?page=0&pageSize=101").cookie(cookie()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
     }
 
     @Test

@@ -151,6 +151,21 @@ class MediaUploadPersistenceAdapterTest {
                 MEDIA_ID.toString(), 5L, failure.code(), failure.retryable(), failure.summary(), NOW);
     }
 
+    @Test
+    void pagesOnlyThroughTheOwnerScopedQueryMethods() {
+        when(mapper.selectOwnedAssets(OWNER.value().toString(), 20, 20))
+                .thenReturn(List.of(assetRow(MEDIA_ID, MediaStatus.READY)));
+        when(mapper.countOwnedAssets(OWNER.value().toString())).thenReturn(21L);
+
+        var page = adapter.findPage(OWNER, 2, 20);
+
+        assertThat(page.totalItems()).isEqualTo(21);
+        assertThat(page.assets()).singleElement()
+                .extracting(MediaAsset::mediaId).isEqualTo(MEDIA_ID);
+        verify(mapper).selectOwnedAssets(OWNER.value().toString(), 20, 20);
+        verify(mapper).countOwnedAssets(OWNER.value().toString());
+    }
+
     private MediaAsset probingToDomain(MediaAssetRow row) {
         return new MediaAsset(
                 UUID.fromString(row.getMediaId()), OWNER, SHA256, row.getObjectKey(), row.getOriginalFilename(),
