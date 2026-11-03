@@ -1,6 +1,7 @@
 package com.videopilot.media.application;
 
 import com.videopilot.media.domain.MediaStatus;
+import com.videopilot.media.domain.MediaFailure;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -12,6 +13,20 @@ public record MediaAssetView(
         String sha256,
         MediaStatus status,
         Optional<Long> durationMs,
+        Optional<MediaFailure> failure,
         Instant createdAt,
         Instant updatedAt) {
+
+    public MediaAssetView(
+            UUID mediaId,
+            String originalFilename,
+            long contentLength,
+            String sha256,
+            MediaStatus status,
+            Optional<Long> durationMs,
+            Instant createdAt,
+            Instant updatedAt) {
+        this(mediaId, originalFilename, contentLength, sha256, status,
+                durationMs, Optional.empty(), createdAt, updatedAt);
+    }
 }

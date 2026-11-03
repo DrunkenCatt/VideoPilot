@@ -18,6 +18,9 @@ final class MediaAssetRow {
     private String declaredContentType;
     private String mediaStatus;
     private Long durationMs;
+    private String probeErrorCode;
+    private Boolean probeErrorRetryable;
+    private String probeErrorSummary;
     private long version;
     private Instant createdAt;
     private Instant updatedAt;
@@ -31,6 +34,9 @@ final class MediaAssetRow {
     public String getDeclaredContentType() { return declaredContentType; }
     public String getMediaStatus() { return mediaStatus; }
     public Long getDurationMs() { return durationMs; }
+    public String getProbeErrorCode() { return probeErrorCode; }
+    public Boolean getProbeErrorRetryable() { return probeErrorRetryable; }
+    public String getProbeErrorSummary() { return probeErrorSummary; }
     public long getVersion() { return version; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }

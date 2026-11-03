@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import com.videopilot.identity.domain.OwnerId;
 import com.videopilot.media.domain.MediaAsset;
+import com.videopilot.media.domain.MediaFailure;
 import com.videopilot.media.domain.MediaStatus;
 import com.videopilot.media.domain.UploadSession;
 import com.videopilot.media.domain.UploadStatus;
@@ -126,6 +127,36 @@ class MediaUploadPersistenceAdapterTest {
         adapter.markTerminal(OWNER, UPLOAD_ID, UploadStatus.EXPIRED, NOW);
         verify(mapper).markTerminal(
                 OWNER.value().toString(), UPLOAD_ID.toString(), UploadStatus.EXPIRED.name(), NOW);
+    }
+
+    @Test
+    void claimsProbeCandidatesByVersionAndPersistsOnlyTerminalProbeFacts() {
+        MediaAssetRow uploaded = assetRow(MEDIA_ID, MediaStatus.UPLOADED);
+        MediaAssetRow probing = assetRow(MEDIA_ID, MediaStatus.PROBING);
+        set(probing, "version", 5L);
+        when(mapper.selectProbeCandidates(NOW.minusSeconds(300), 10)).thenReturn(List.of(uploaded));
+        when(mapper.claimProbe(MEDIA_ID.toString(), 4L, NOW)).thenReturn(1);
+        when(mapper.selectAssetById(MEDIA_ID.toString())).thenReturn(probing);
+        when(mapper.completeProbe(MEDIA_ID.toString(), 5L, 12_345L, NOW)).thenReturn(1);
+
+        assertThat(adapter.findCandidates(NOW.minusSeconds(300), 10)).singleElement()
+                .extracting(MediaAsset::status).isEqualTo(MediaStatus.UPLOADED);
+        assertThat(adapter.claim(MEDIA_ID, 4, NOW)).contains(probingToDomain(probing));
+        assertThat(adapter.markReady(MEDIA_ID, 5, 12_345, NOW)).isTrue();
+
+        MediaFailure failure = new MediaFailure("MEDIA_INVALID", false, "Invalid video.");
+        assertThat(adapter.markFailed(MEDIA_ID, 5, failure, NOW)).isFalse();
+        verify(mapper).completeProbe(MEDIA_ID.toString(), 5L, 12_345L, NOW);
+        verify(mapper).failProbe(
+                MEDIA_ID.toString(), 5L, failure.code(), failure.retryable(), failure.summary(), NOW);
+    }
+
+    private MediaAsset probingToDomain(MediaAssetRow row) {
+        return new MediaAsset(
+                UUID.fromString(row.getMediaId()), OWNER, SHA256, row.getObjectKey(), row.getOriginalFilename(),
+                row.getContentLength(), row.getDeclaredContentType(), MediaStatus.PROBING,
+                Optional.ofNullable(row.getDurationMs()), Optional.empty(), row.getVersion(),
+                row.getCreatedAt(), row.getUpdatedAt());
     }
 
     private MediaAssetRow assetRow(UUID mediaId, MediaStatus status) {

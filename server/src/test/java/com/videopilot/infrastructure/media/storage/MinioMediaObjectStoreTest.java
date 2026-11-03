@@ -14,6 +14,7 @@ import com.videopilot.media.port.MediaStorageException;
 import io.minio.AbortMultipartUploadResponse;
 import io.minio.CreateMultipartUploadResponse;
 import io.minio.Http;
+import io.minio.GetObjectResponse;
 import io.minio.ListPartsResponse;
 import io.minio.MinioAsyncClient;
 import io.minio.ObjectWriteResponse;
@@ -22,11 +23,15 @@ import io.minio.messages.InitiateMultipartUploadResult;
 import io.minio.messages.ListPartsResult;
 import io.minio.messages.Part;
 import java.time.Instant;
+import java.io.ByteArrayInputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class MinioMediaObjectStoreTest {
 
@@ -35,6 +40,9 @@ class MinioMediaObjectStoreTest {
     private final MinioAsyncClient signer = mock(MinioAsyncClient.class);
     private final MinioMediaObjectStore store = new MinioMediaObjectStore(
             client, signer, "media", () -> NOW);
+
+    @TempDir
+    Path temporaryDirectory;
 
     @BeforeEach
     void bucketExists() {
@@ -141,6 +149,24 @@ class MinioMediaObjectStoreTest {
     }
 
     @Test
+    void streamsAnOwnedObjectToTheWorkerControlledTarget() throws Exception {
+        byte[] content = "trusted-media".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        GetObjectResponse response = new GetObjectResponse(
+                new okhttp3.Headers.Builder().build(),
+                "media",
+                "us-east-1",
+                "owner/media/source",
+                new ByteArrayInputStream(content));
+        when(client.getObject(any())).thenReturn(CompletableFuture.completedFuture(response));
+        Path target = temporaryDirectory.resolve("probe.media");
+
+        store.copyTo(mediaAsset("owner/media/source", content.length), target);
+
+        assertThat(Files.readAllBytes(target)).isEqualTo(content);
+        verify(client).getObject(any());
+    }
+
+    @Test
     void abortsAndClosesBothClients() throws Exception {
         when(client.abortMultipartUpload(any())).thenReturn(
                 CompletableFuture.completedFuture(mock(AbortMultipartUploadResponse.class)));
@@ -159,5 +185,21 @@ class MinioMediaObjectStoreTest {
         when(part.etag()).thenReturn(etag);
         when(part.partSize()).thenReturn(size);
         return part;
+    }
+
+    private com.videopilot.media.domain.MediaAsset mediaAsset(String objectKey, long length) {
+        return new com.videopilot.media.domain.MediaAsset(
+                java.util.UUID.randomUUID(),
+                new com.videopilot.identity.domain.OwnerId(java.util.UUID.randomUUID()),
+                "a".repeat(64),
+                objectKey,
+                "lesson.mp4",
+                length,
+                "video/mp4",
+                com.videopilot.media.domain.MediaStatus.PROBING,
+                java.util.Optional.empty(),
+                1,
+                NOW,
+                NOW);
     }
 }

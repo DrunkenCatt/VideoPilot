@@ -6,6 +6,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 import com.videopilot.media.application.MediaUploadApplicationService;
+import com.videopilot.media.application.MediaProbeApplicationService;
+import com.videopilot.infrastructure.media.probe.MediaProbeProperties;
+import com.videopilot.infrastructure.media.probe.MediaProbeWorker;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 import org.springframework.util.unit.DataSize;
@@ -54,5 +57,33 @@ class MediaStorageConfigurationTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new MediaUploadExpiryWorker(uploads, 1_001))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void exposesBoundedProbeSettingsAndWorkerBatchSize() {
+        MediaProbeProperties properties = new MediaProbeProperties();
+        properties.setEnabled(true);
+        properties.setExecutable("/usr/bin/ffprobe");
+        properties.setTimeout(Duration.ofSeconds(15));
+        properties.setMaxOutputBytes(32_768);
+        properties.setMaxConcurrency(2);
+        properties.setBatchSize(8);
+        properties.setStaleAfter(Duration.ofMinutes(3));
+        properties.setTemporaryDirectory("build/probe-temp");
+        MediaProbeApplicationService service = mock(MediaProbeApplicationService.class);
+        MediaProbeWorker worker = new MediaProbeWorker(service, properties.getBatchSize());
+
+        worker.probeUploadedMedia();
+
+        assertThat(properties.isEnabled()).isTrue();
+        assertThat(properties.getExecutable()).isEqualTo("/usr/bin/ffprobe");
+        assertThat(properties.getTimeout()).isEqualTo(Duration.ofSeconds(15));
+        assertThat(properties.getMaxOutputBytes()).isEqualTo(32_768);
+        assertThat(properties.getMaxConcurrency()).isEqualTo(2);
+        assertThat(properties.getStaleAfter()).isEqualTo(Duration.ofMinutes(3));
+        assertThat(properties.getTemporaryDirectory()).isEqualTo("build/probe-temp");
+        verify(service).processBatch(8);
+        assertThatThrownBy(() -> new MediaProbeWorker(service, 0)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new MediaProbeWorker(service, 101)).isInstanceOf(IllegalArgumentException.class);
     }
 }

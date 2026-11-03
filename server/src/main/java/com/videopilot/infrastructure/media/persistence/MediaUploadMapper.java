@@ -94,6 +94,61 @@ interface MediaUploadMapper extends BaseMapper<MediaAssetRow> {
             @Param("ownerId") String ownerId,
             @Param("mediaId") String mediaId);
 
+    @Select("""
+            SELECT * FROM media_asset
+            WHERE media_status = 'UPLOADED'
+               OR (media_status = 'PROBING' AND updated_at <= #{staleBefore})
+            ORDER BY updated_at, media_id
+            LIMIT #{limit}
+            """)
+    List<MediaAssetRow> selectProbeCandidates(
+            @Param("staleBefore") Instant staleBefore,
+            @Param("limit") int limit);
+
+    @Select("SELECT * FROM media_asset WHERE media_id = #{mediaId}")
+    MediaAssetRow selectAssetById(@Param("mediaId") String mediaId);
+
+    @Update("""
+            UPDATE media_asset
+            SET media_status = 'PROBING', duration_ms = NULL,
+                probe_error_code = NULL, probe_error_retryable = NULL, probe_error_summary = NULL,
+                version = version + 1, updated_at = #{now}
+            WHERE media_id = #{mediaId} AND version = #{expectedVersion}
+              AND media_status IN ('UPLOADED', 'PROBING')
+            """)
+    int claimProbe(
+            @Param("mediaId") String mediaId,
+            @Param("expectedVersion") long expectedVersion,
+            @Param("now") Instant now);
+
+    @Update("""
+            UPDATE media_asset
+            SET media_status = 'READY', duration_ms = #{durationMs},
+                probe_error_code = NULL, probe_error_retryable = NULL, probe_error_summary = NULL,
+                version = version + 1, updated_at = #{now}
+            WHERE media_id = #{mediaId} AND version = #{expectedVersion} AND media_status = 'PROBING'
+            """)
+    int completeProbe(
+            @Param("mediaId") String mediaId,
+            @Param("expectedVersion") long expectedVersion,
+            @Param("durationMs") long durationMs,
+            @Param("now") Instant now);
+
+    @Update("""
+            UPDATE media_asset
+            SET media_status = 'FAILED', duration_ms = NULL,
+                probe_error_code = #{code}, probe_error_retryable = #{retryable},
+                probe_error_summary = #{summary}, version = version + 1, updated_at = #{now}
+            WHERE media_id = #{mediaId} AND version = #{expectedVersion} AND media_status = 'PROBING'
+            """)
+    int failProbe(
+            @Param("mediaId") String mediaId,
+            @Param("expectedVersion") long expectedVersion,
+            @Param("code") String code,
+            @Param("retryable") boolean retryable,
+            @Param("summary") String summary,
+            @Param("now") Instant now);
+
     @Update("""
             UPDATE media_upload_session
             SET upload_status = 'COMPLETED', version = version + 1, updated_at = #{now}

@@ -50,6 +50,8 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
+      - name: Install FFmpeg probe runtime
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Generate isolated CI credentials
         shell: bash
         run: |

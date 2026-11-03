@@ -254,7 +254,7 @@ public final class MediaUploadApplicationService {
     private MediaAssetView toView(MediaAsset asset) {
         return new MediaAssetView(
                 asset.mediaId(), asset.originalFilename(), asset.contentLength(), asset.fingerprint(),
-                asset.status(), asset.durationMs(), asset.createdAt(), asset.updatedAt());
+                asset.status(), asset.durationMs(), asset.failure(), asset.createdAt(), asset.updatedAt());
     }
 
     private <T> T callStorage(Supplier<T> operation) {

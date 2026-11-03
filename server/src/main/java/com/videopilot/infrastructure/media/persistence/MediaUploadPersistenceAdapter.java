@@ -2,17 +2,19 @@ package com.videopilot.infrastructure.media.persistence;
 
 import com.videopilot.identity.domain.OwnerId;
 import com.videopilot.media.domain.MediaAsset;
+import com.videopilot.media.domain.MediaFailure;
 import com.videopilot.media.domain.MediaStatus;
 import com.videopilot.media.domain.UploadSession;
 import com.videopilot.media.domain.UploadStatus;
 import com.videopilot.media.port.MediaUploadStore;
+import com.videopilot.media.port.MediaProbeStore;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.transaction.annotation.Transactional;
 
-public class MediaUploadPersistenceAdapter implements MediaUploadStore {
+public class MediaUploadPersistenceAdapter implements MediaUploadStore, MediaProbeStore {
 
     private final MediaUploadMapper mapper;
 
@@ -105,6 +107,38 @@ public class MediaUploadPersistenceAdapter implements MediaUploadStore {
                 ownerId.value().toString(), uploadId.toString(), status.name(), updatedAt);
     }
 
+    @Override
+    public List<MediaAsset> findCandidates(Instant staleBefore, int limit) {
+        return mapper.selectProbeCandidates(staleBefore, limit).stream().map(this::toDomain).toList();
+    }
+
+    @Override
+    @Transactional
+    public Optional<MediaAsset> claim(UUID mediaId, long expectedVersion, Instant claimedAt) {
+        if (mapper.claimProbe(mediaId.toString(), expectedVersion, claimedAt) != 1) {
+            return Optional.empty();
+        }
+        MediaAssetRow claimed = mapper.selectAssetById(mediaId.toString());
+        if (claimed == null) throw new IllegalStateException("claimed media is missing");
+        return Optional.of(toDomain(claimed));
+    }
+
+    @Override
+    public boolean markReady(UUID mediaId, long expectedVersion, long durationMs, Instant completedAt) {
+        return mapper.completeProbe(mediaId.toString(), expectedVersion, durationMs, completedAt) == 1;
+    }
+
+    @Override
+    public boolean markFailed(
+            UUID mediaId,
+            long expectedVersion,
+            MediaFailure failure,
+            Instant completedAt) {
+        return mapper.failProbe(
+                mediaId.toString(), expectedVersion, failure.code(), failure.retryable(),
+                failure.summary(), completedAt) == 1;
+    }
+
     private MediaAsset toDomain(MediaAssetRow row) {
         return new MediaAsset(
                 UUID.fromString(row.getMediaId()),
@@ -116,9 +150,18 @@ public class MediaUploadPersistenceAdapter implements MediaUploadStore {
                 row.getDeclaredContentType(),
                 MediaStatus.valueOf(row.getMediaStatus()),
                 Optional.ofNullable(row.getDurationMs()),
+                failure(row),
                 row.getVersion(),
                 row.getCreatedAt(),
                 row.getUpdatedAt());
+    }
+
+    private Optional<MediaFailure> failure(MediaAssetRow row) {
+        if (row.getProbeErrorCode() == null) return Optional.empty();
+        return Optional.of(new MediaFailure(
+                row.getProbeErrorCode(),
+                Boolean.TRUE.equals(row.getProbeErrorRetryable()),
+                row.getProbeErrorSummary()));
     }
 
     private UploadSession toDomain(MediaUploadSessionRow row) {

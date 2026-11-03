@@ -15,6 +15,7 @@ import com.videopilot.infrastructure.web.contract.M1ApiContracts.JobFailure;
 import com.videopilot.infrastructure.web.contract.M1ApiContracts.JobLinks;
 import com.videopilot.infrastructure.web.contract.M1ApiContracts.LoginRequest;
 import com.videopilot.infrastructure.web.contract.M1ApiContracts.MediaAssetResponse;
+import com.videopilot.infrastructure.web.contract.M1ApiContracts.MediaFailure;
 import com.videopilot.infrastructure.web.contract.M1ApiContracts.PageMetadata;
 import com.videopilot.infrastructure.web.contract.M1ApiContracts.PageResponse;
 import com.videopilot.infrastructure.web.contract.M1ApiContracts.SessionResponse;
@@ -114,6 +115,8 @@ class M1ContractTest {
         CompletedPart completedPart = new CompletedPart(1, "etag-1");
         JobLinks links = new JobLinks("/job", "/events", "/cancellations");
         JobFailure failure = new JobFailure("MEDIA_INVALID", false, "Media validation failed.");
+        MediaFailure mediaFailure = new MediaFailure(
+                "MEDIA_NO_VIDEO_STREAM", false, "The uploaded file does not contain a video stream.");
         AnalysisJobResponse job = new AnalysisJobResponse(
                 jobId,
                 mediaId,
@@ -144,8 +147,10 @@ class M1ContractTest {
                                 "a".repeat(64),
                                 M1ApiContracts.MediaStatus.READY,
                                 60_000L,
+                                mediaFailure,
                                 now,
                                 now),
+                        mediaFailure,
                         failure,
                         links,
                         job,

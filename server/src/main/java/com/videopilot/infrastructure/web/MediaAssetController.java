@@ -36,6 +36,8 @@ public class MediaAssetController {
                 media.sha256(),
                 M1ApiContracts.MediaStatus.valueOf(media.status().name()),
                 media.durationMs().orElse(null),
+                media.failure().map(failure -> new M1ApiContracts.MediaFailure(
+                        failure.code(), failure.retryable(), failure.summary())).orElse(null),
                 media.createdAt(),
                 media.updatedAt());
     }

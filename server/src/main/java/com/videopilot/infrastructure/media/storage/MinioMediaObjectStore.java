@@ -1,13 +1,17 @@
 package com.videopilot.infrastructure.media.storage;
 
 import com.videopilot.media.application.CompletedUploadPart;
+import com.videopilot.media.domain.MediaAsset;
 import com.videopilot.media.port.MediaObjectStore;
+import com.videopilot.media.port.MediaProbeSource;
 import com.videopilot.media.port.MediaStorageException;
 import io.minio.AbortMultipartUploadArgs;
 import io.minio.BucketExistsArgs;
 import io.minio.CompleteMultipartUploadArgs;
 import io.minio.CreateMultipartUploadArgs;
 import io.minio.GetPresignedObjectUrlArgs;
+import io.minio.GetObjectArgs;
+import io.minio.GetObjectResponse;
 import io.minio.Http;
 import io.minio.ListPartsArgs;
 import io.minio.MakeBucketArgs;
@@ -17,6 +21,10 @@ import io.minio.StatObjectResponse;
 import io.minio.errors.ErrorResponseException;
 import io.minio.messages.Part;
 import java.net.URI;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -25,7 +33,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
-public final class MinioMediaObjectStore implements MediaObjectStore, AutoCloseable {
+public final class MinioMediaObjectStore implements MediaObjectStore, MediaProbeSource, AutoCloseable {
 
     private static final String CLIENT_SHA256 = "videopilot-client-sha256";
     private final MinioAsyncClient client;
@@ -144,6 +152,20 @@ public final class MinioMediaObjectStore implements MediaObjectStore, AutoClosea
                     .join();
         } catch (RuntimeException exception) {
             if (!isNoSuchUpload(exception)) throw dependency(exception);
+        }
+    }
+
+    @Override
+    public void copyTo(MediaAsset asset, Path target) throws IOException {
+        try (GetObjectResponse response = client.getObject(GetObjectArgs.builder()
+                .bucket(bucket)
+                .object(asset.objectKey())
+                .build()).join()) {
+            Files.copy(response, target, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw dependency(exception);
         }
     }
 

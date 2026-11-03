@@ -388,3 +388,23 @@ T7 未修改 `client`，因此未运行前端 `check` 或浏览器联调；Job �
 | OWASP Dependency-Check | 未形成结论 | 无 NVD API Key 的全量更新持续无进度，按 M0 已接受的遗留风险终止；未把无结论扫描描述为通过 |
 
 T9 没有修改 `client`，因此未运行前端 `check` 或浏览器联调；文件选择、分片进度、重试和中止的用户验收面由紧随其后的 T9F 实现。
+
+## 18. T10 可信媒体探测与 READY 门证据
+
+日期：2026-11-03。
+
+- 上传完成仍只产生 `UPLOADED`；有界调度器从 MySQL 扫描待处理或陈旧 `PROBING` 资源，并用 version CAS 抢占，进程重启后可继续同一媒体探测，不依赖内存队列。
+- MinIO 源对象复制到每次任务独占的受控临时文件；应用层计算服务端 SHA-256 后调用供应商无关 `MediaProbe` Port。成功、稳定失败、超时和异常路径均清理临时文件，FFprobe 超时会销毁子进程。
+- FFprobe Adapter 使用固定参数数组，不经过 shell；并发、超时和输出字节数均受配置限制。只有存在视频流且时长、尺寸有效的结果进入 `READY`，损坏、无视频流、超时和缺少二进制得到稳定、安全的 `FAILED` 事实。
+- V8 只做前进迁移，增加可信 SHA、容器、视频编码、尺寸、探测时间和受控失败列。Job 创建仍在 owner-scoped application 边界按 MySQL 真源校验 `READY`，不会信任客户端 MIME、文件名或摘要。
+- 生产镜像和 CI 显式安装 FFmpeg；应用默认关闭 worker，Compose 运行环境显式开启，避免未配置二进制时悄然改变开发测试行为。
+
+| 阶段/命令 | 结果 | 证据摘要 |
+| --- | --- | --- |
+| RED：媒体探测 application 测试 | 预期失败 | `MediaProbeApplicationService`、探测 Port 和失败事实尚不存在，4 项行为测试先以编译失败固定 CAS、可信摘要、失败收敛与清理 |
+| RED：FFprobe Adapter 测试 | 预期失败 | Adapter 与受控进程配置尚不存在；随后用测试进程覆盖有效视频、无视频流、输出超限和超时销毁 |
+| RED：持久化与装配测试 | 预期失败 | 探测候选扫描、version CAS、终态写入和 MinIO 受控复制接口尚不存在 |
+| `server\mvnw.cmd test` | 通过，约 52.5 秒 | 186 项单元、Controller、持久化与架构测试，JaCoCo 80% 门通过 |
+| Docker 内聚焦 `verify -Pintegration` | 通过，约 125 秒 | 全新 `videopilot_t10_final` schema 从 V1 迁移到 V8；4 项 application 测试及 2 项真实 MySQL/MinIO/FFprobe 集成测试通过 |
+
+T10 没有修改 `client`，因此未运行前端 `check` 或浏览器联调；媒体列表、状态轮询与 READY 选择分别由紧随其后的 T10Q、T10F 提供。

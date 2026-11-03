@@ -149,13 +149,14 @@
 
 ## T10：实现 FFprobe 校验并连接真实媒体与 Job
 
-- [ ] 用受控进程 Adapter 执行 FFprobe，限制超时、输出大小和并发，校验容器/视频流/时长并解析为供应商无关结果。
-- [ ] 对象读取到受控临时位置或安全流接口，所有成功/失败/取消路径都清理资源并销毁子进程。
-- [ ] 上传完成后把可信媒体元数据或稳定失败事实写入 MySQL；只有校验通过且归属匹配的 MediaAsset 可创建 Job，损坏/非视频文件得到稳定不可重试错误。
+- [x] 用受控进程 Adapter 执行 FFprobe，限制超时、输出大小和并发，校验容器/视频流/时长并解析为供应商无关结果。
+- [x] 对象读取到受控临时位置或安全流接口，所有成功/失败/取消路径都清理资源并销毁子进程。
+- [x] 上传完成后把可信媒体元数据或稳定失败事实写入 MySQL；只有校验通过且归属匹配的 MediaAsset 可创建 Job，损坏/非视频文件得到稳定不可重试错误。
 - **验收标准**：有效 fixture 得到 duration 等元数据；损坏文件、无视频流、超时、缺少 FFprobe 均可诊断；失败事实可在刷新后安全读取，且不遗留可分析媒体或临时文件。
 - **验证**：FFprobe Adapter 单测 + 真实小视频集成测试；进程超时/清理测试；`server\mvnw.cmd test`。
 - **预计文件**：media probe port/application service、FFprobe Adapter、配置、测试 fixture/测试。
 - **依赖/规模**：T3、T9 / M。
+- **完成记录（2026-11-03）**：新增 MySQL 驱动的有界媒体探测 worker，以 version CAS 抢占 `UPLOADED` 或陈旧 `PROBING` 资源；MinIO 对象复制到受控临时文件后先计算服务端 SHA-256，再由限时、限输出、限并发的 FFprobe Adapter 提取可信容器、视频编码、尺寸和时长。成功事实进入 `READY`，稳定失败事实进入 `FAILED`，所有路径清理临时文件并终止子进程；Job 入口继续只接受归属匹配的 `READY`。Docker/Compose 与 CI 安装 FFmpeg，默认本地配置保持显式关闭探测 worker。186 项后端测试及全新 V1-V8 schema 上的真实 MySQL/MinIO/FFprobe 集成测试通过。
 
 ## T10Q：交付 owner-scoped 媒体列表与详情查询
 

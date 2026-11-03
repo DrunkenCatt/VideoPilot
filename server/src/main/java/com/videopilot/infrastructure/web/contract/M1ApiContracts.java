@@ -141,8 +141,28 @@ public final class M1ApiContracts {
             String sha256,
             MediaStatus status,
             Long durationMs,
+            MediaFailure failure,
             Instant createdAt,
             Instant updatedAt) {
+
+        public MediaAssetResponse(
+                UUID mediaId,
+                String originalFilename,
+                long contentLength,
+                String sha256,
+                MediaStatus status,
+                Long durationMs,
+                Instant createdAt,
+                Instant updatedAt) {
+            this(mediaId, originalFilename, contentLength, sha256, status,
+                    durationMs, null, createdAt, updatedAt);
+        }
+    }
+
+    public record MediaFailure(
+            String code,
+            boolean retryable,
+            String summary) {
     }
 
     public record CreateAnalysisJobRequest(
