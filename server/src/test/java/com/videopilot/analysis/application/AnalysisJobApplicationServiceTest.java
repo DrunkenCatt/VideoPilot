@@ -4,13 +4,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 import com.videopilot.analysis.domain.AnalysisMode;
+import com.videopilot.analysis.domain.JobStatus;
+import com.videopilot.analysis.port.ActiveAnalysisJobCacheUnavailableException;
 import com.videopilot.analysis.port.AnalysisJobStore;
+import com.videopilot.analysis.port.ActiveAnalysisJobCache;
+import com.videopilot.analysis.port.ActiveAnalysisJobCache.ActiveJob;
 import com.videopilot.analysis.port.AnalysisJobStore.JobCreation;
 import com.videopilot.analysis.port.AnalysisJobStore.MediaForAnalysis;
 import com.videopilot.identity.application.OwnerContext;
@@ -30,12 +35,14 @@ class AnalysisJobApplicationServiceTest {
     private static final Instant NOW = Instant.parse("2026-10-30T08:00:00Z");
 
     private final AnalysisJobStore store = mock(AnalysisJobStore.class);
+    private final ActiveAnalysisJobCache activeJobs = mock(ActiveAnalysisJobCache.class);
     private final OwnerContext owner = new OwnerContext(new OwnerId(OWNER_ID));
     private AnalysisJobApplicationService service;
 
     @BeforeEach
     void setUp() {
-        service = new AnalysisJobApplicationService(store, () -> NOW, () -> JOB_ID, "m1-fake-v1");
+        service = new AnalysisJobApplicationService(
+                store, activeJobs, () -> NOW, () -> JOB_ID, "m1-fake-v1");
         when(store.findMedia(owner.ownerId(), MEDIA_ID))
                 .thenReturn(Optional.of(new MediaForAnalysis(MEDIA_ID, "a".repeat(64), true)));
     }
@@ -123,6 +130,66 @@ class AnalysisJobApplicationServiceTest {
                 .thenReturn(Optional.of(new MediaForAnalysis(MEDIA_ID, "a".repeat(64), false)));
 
         AnalysisJobView retry = service.submit(owner, command("Explain", "intent-1"));
+
+        assertThat(retry.jobId()).isEqualTo(JOB_ID);
+        verify(activeJobs, times(2)).remember(
+                owner.ownerId(), first.get().analysisKey(),
+                new ActiveJob(JOB_ID, JobStatus.CREATED, 0));
+    }
+
+    @Test
+    void cacheHitIsVerifiedAgainstMysqlBeforeReturningTheJob() {
+        AtomicReference<JobCreation> first = new AtomicReference<>();
+        doAnswer(invocation -> {
+            first.set(invocation.getArgument(0));
+            return null;
+        }).when(store).create(any());
+        service.submit(owner, command("Explain", "intent-1"));
+        when(activeJobs.find(owner.ownerId(), first.get().analysisKey()))
+                .thenReturn(Optional.of(new ActiveJob(JOB_ID, JobStatus.CREATED, 0)));
+        when(store.findById(owner.ownerId(), JOB_ID)).thenReturn(Optional.of(first.get().storedJob()));
+
+        AnalysisJobView retry = service.submit(owner, command("Explain", "intent-2"));
+
+        assertThat(retry.jobId()).isEqualTo(JOB_ID);
+        verify(store).findById(owner.ownerId(), JOB_ID);
+    }
+
+    @Test
+    void cacheMissRebuildsTheActiveEntryFromMysql() {
+        AtomicReference<JobCreation> first = new AtomicReference<>();
+        doAnswer(invocation -> {
+            first.set(invocation.getArgument(0));
+            return null;
+        }).when(store).create(any());
+        service.submit(owner, command("Explain", "intent-1"));
+        clearInvocations(activeJobs);
+        when(store.findByAnalysisKey(owner.ownerId(), first.get().analysisKey()))
+                .thenReturn(Optional.of(first.get().storedJob()));
+
+        AnalysisJobView retry = service.submit(owner, command("Explain", "intent-2"));
+
+        assertThat(retry.jobId()).isEqualTo(JOB_ID);
+        verify(activeJobs).remember(
+                owner.ownerId(), first.get().analysisKey(),
+                new ActiveJob(JOB_ID, JobStatus.CREATED, 0));
+    }
+
+    @Test
+    void redisFailureCannotPreventMysqlFromReturningTheLogicalJob() {
+        AtomicReference<JobCreation> first = new AtomicReference<>();
+        doAnswer(invocation -> {
+            first.set(invocation.getArgument(0));
+            return null;
+        }).when(store).create(any());
+        service.submit(owner, command("Explain", "intent-1"));
+        when(activeJobs.find(owner.ownerId(), first.get().analysisKey()))
+                .thenThrow(new ActiveAnalysisJobCacheUnavailableException(
+                        new IllegalStateException("redis unavailable")));
+        when(store.findByAnalysisKey(owner.ownerId(), first.get().analysisKey()))
+                .thenReturn(Optional.of(first.get().storedJob()));
+
+        AnalysisJobView retry = service.submit(owner, command("Explain", "intent-2"));
 
         assertThat(retry.jobId()).isEqualTo(JOB_ID);
     }

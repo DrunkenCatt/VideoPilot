@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.videopilot.analysis.application.AnalysisJobApplicationService;
+import com.videopilot.analysis.application.AnalysisJobEventApplicationService;
 import com.videopilot.analysis.application.AnalysisJobException;
 import com.videopilot.analysis.application.AnalysisJobView;
 import com.videopilot.analysis.application.SubmitAnalysisJobCommand;
@@ -36,6 +37,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.test.context.ActiveProfiles;
 
 @SpringBootTest
@@ -50,10 +53,16 @@ class AnalysisJobCreationIT {
     private AnalysisJobApplicationService service;
 
     @Autowired
+    private AnalysisJobEventApplicationService events;
+
+    @Autowired
     private AnalysisJobStore store;
 
     @Autowired
     private JdbcClient jdbcClient;
+
+    @Autowired
+    private StringRedisTemplate redis;
 
     @BeforeEach
     void seedReadyMedia() {
@@ -136,6 +145,38 @@ class AnalysisJobCreationIT {
     }
 
     @Test
+    void clearingRedisRebuildsTheActiveKeyFromMysqlWithoutCreatingAnotherJob() {
+        AnalysisJobView first = service.submit(owner, command("Explain chapter one", "intent-before-flush"));
+        String analysisKey = analysisKey(first.jobId());
+        String redisKey = "videopilot:analysis:active:" + ownerId.value() + ':' + analysisKey;
+        assertThat(redis.opsForValue().get(redisKey)).contains(first.jobId().toString());
+
+        try (RedisConnection connection = redis.getConnectionFactory().getConnection()) {
+            connection.serverCommands().flushDb();
+        }
+
+        AnalysisJobView retry = service.submit(owner, command("Explain chapter one", "intent-after-flush"));
+
+        assertThat(retry.jobId()).isEqualTo(first.jobId());
+        assertThat(count("analysis_job")).isEqualTo(1);
+        assertThat(redis.opsForValue().get(redisKey)).contains(first.jobId().toString());
+        assertThat(service.get(owner, first.jobId()).jobId()).isEqualTo(first.jobId());
+        assertThat(events.readAfter(owner, first.jobId(), 0, 20).events()).hasSize(1);
+    }
+
+    @Test
+    void redisUnavailableDoesNotChangeMysqlSubmissionQueryOrEventFacts() {
+        AnalysisJobView first = service.submit(owner, command("Redis outage", "outage-intent-one"));
+
+        AnalysisJobView retry = service.submit(owner, command("Redis outage", "outage-intent-two"));
+
+        assertThat(retry.jobId()).isEqualTo(first.jobId());
+        assertThat(count("analysis_job")).isEqualTo(1);
+        assertThat(service.get(owner, first.jobId()).jobId()).isEqualTo(first.jobId());
+        assertThat(events.readAfter(owner, first.jobId(), 0, 20).events()).hasSize(1);
+    }
+
+    @Test
     void queriesNeverRevealAnotherOwnersJob() {
         AnalysisJobView created = service.submit(owner, command("Private analysis", "private-intent"));
         OwnerContext otherOwner = new OwnerContext(new OwnerId(UUID.randomUUID()));
@@ -207,6 +248,13 @@ class AnalysisJobCreationIT {
             default -> throw new IllegalArgumentException("Unsupported table: " + table);
         };
         return jdbcClient.sql(sql).param("ownerId", ownerId.value().toString()).query(Integer.class).single();
+    }
+
+    private String analysisKey(UUID jobId) {
+        return jdbcClient.sql("SELECT analysis_key FROM analysis_job WHERE job_id = :jobId")
+                .param("jobId", jobId.toString())
+                .query(String.class)
+                .single();
     }
 
     private UUID resultOf(Future<UUID> future) {

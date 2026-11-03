@@ -103,7 +103,11 @@ class AnalysisJobExecutionHandlerTest {
     private AnalysisJobExecutionHandler handler(
             FakeStore store,
             JobExecutionLock.AcquireResult lockResult) {
-        JobTransitionService transitions = new JobTransitionService(store, new JobStateMachine(), () -> NOW);
+        JobTransitionService transitions = new JobTransitionService(
+                store,
+                org.mockito.Mockito.mock(com.videopilot.analysis.port.ActiveAnalysisJobCache.class),
+                new JobStateMachine(),
+                () -> NOW);
         return new AnalysisJobExecutionHandler(store, transitions, jobId -> switch (lockResult) {
             case ACQUIRED -> JobExecutionLock.LockAttempt.acquired(() -> { });
             case BUSY -> JobExecutionLock.LockAttempt.busy();

@@ -13,6 +13,8 @@ import com.videopilot.analysis.domain.JobStageStatus;
 import com.videopilot.analysis.domain.JobStateMachine;
 import com.videopilot.analysis.domain.JobStatus;
 import com.videopilot.analysis.port.JobTransitionStore;
+import com.videopilot.analysis.port.ActiveAnalysisJobCache;
+import com.videopilot.analysis.port.ActiveAnalysisJobCacheUnavailableException;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -27,12 +29,14 @@ class JobTransitionServiceTest {
     private static final String FINGERPRINT = "a".repeat(64);
 
     private FakeStore store;
+    private ActiveAnalysisJobCache activeJobs;
     private JobTransitionService service;
 
     @BeforeEach
     void setUp() {
         store = new FakeStore(job(JobStatus.CREATED, 3, 7));
-        service = new JobTransitionService(store, new JobStateMachine(), () -> NOW);
+        activeJobs = org.mockito.Mockito.mock(ActiveAnalysisJobCache.class);
+        service = new JobTransitionService(store, activeJobs, new JobStateMachine(), () -> NOW);
     }
 
     @Test
@@ -62,6 +66,29 @@ class JobTransitionServiceTest {
         assertThat(store.commit.event().sequence()).isEqualTo(8);
         assertThat(store.commit.event().eventType()).isEqualTo(JobEventType.JOB_QUEUED);
         assertThat(store.commit.event().occurredAt()).isEqualTo(NOW);
+        org.mockito.Mockito.verify(activeJobs).refresh(JOB_ID, JobStatus.QUEUED, 4);
+    }
+
+    @Test
+    void removesTheActiveEntryAfterATerminalTransition() {
+        store = new FakeStore(job(JobStatus.INDEXING, 3, 7));
+        service = new JobTransitionService(store, activeJobs, new JobStateMachine(), () -> NOW);
+
+        service.transition(command(JobStatus.INDEXING, 3, JobStatus.READY));
+
+        org.mockito.Mockito.verify(activeJobs).evict(JOB_ID);
+    }
+
+    @Test
+    void cacheFailureCannotRollBackACommittedDatabaseTransition() {
+        org.mockito.Mockito.doThrow(new ActiveAnalysisJobCacheUnavailableException(
+                        new IllegalStateException("redis unavailable")))
+                .when(activeJobs).refresh(JOB_ID, JobStatus.QUEUED, 4);
+
+        AnalysisJob result = service.transition(command(JobStatus.CREATED, 3, JobStatus.QUEUED));
+
+        assertThat(result.status()).isEqualTo(JobStatus.QUEUED);
+        assertThat(store.commit).isNotNull();
     }
 
     @Test

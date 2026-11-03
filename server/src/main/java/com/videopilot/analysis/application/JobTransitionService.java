@@ -5,23 +5,31 @@ import com.videopilot.analysis.domain.JobEvent;
 import com.videopilot.analysis.domain.JobStage;
 import com.videopilot.analysis.domain.JobStateMachine;
 import com.videopilot.analysis.port.JobTransitionStore;
+import com.videopilot.analysis.port.ActiveAnalysisJobCache;
+import com.videopilot.analysis.port.ActiveAnalysisJobCacheUnavailableException;
 import com.videopilot.analysis.port.JobTransitionStore.TransitionCommit;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class JobTransitionService {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(JobTransitionService.class);
     private final JobTransitionStore store;
+    private final ActiveAnalysisJobCache activeJobs;
     private final JobStateMachine stateMachine;
     private final Supplier<Instant> now;
 
     public JobTransitionService(
             JobTransitionStore store,
+            ActiveAnalysisJobCache activeJobs,
             JobStateMachine stateMachine,
             Supplier<Instant> now) {
         this.store = store;
+        this.activeJobs = activeJobs;
         this.stateMachine = stateMachine;
         this.now = now;
     }
@@ -53,7 +61,20 @@ public final class JobTransitionService {
         if (!store.apply(commit)) {
             throw JobTransitionConflictException.concurrentTransition();
         }
+        updateActiveCache(next);
         return next;
+    }
+
+    private void updateActiveCache(AnalysisJob job) {
+        try {
+            if (!ActiveAnalysisJobCache.isActive(job.status())) {
+                activeJobs.evict(job.jobId());
+            } else {
+                activeJobs.refresh(job.jobId(), job.status(), job.version());
+            }
+        } catch (ActiveAnalysisJobCacheUnavailableException exception) {
+            LOGGER.warn("Active job cache update unavailable; committed MySQL transition remains authoritative");
+        }
     }
 
     private void requireExpectedSnapshot(JobTransitionCommand command, AnalysisJob current) {

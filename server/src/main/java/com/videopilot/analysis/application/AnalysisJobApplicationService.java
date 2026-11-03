@@ -13,6 +13,9 @@ import com.videopilot.analysis.port.AnalysisJobStore;
 import com.videopilot.analysis.port.AnalysisJobStore.CreationRaceException;
 import com.videopilot.analysis.port.AnalysisJobStore.JobCreation;
 import com.videopilot.analysis.port.AnalysisJobStore.MediaForAnalysis;
+import com.videopilot.analysis.port.ActiveAnalysisJobCache;
+import com.videopilot.analysis.port.ActiveAnalysisJobCache.ActiveJob;
+import com.videopilot.analysis.port.ActiveAnalysisJobCacheUnavailableException;
 import com.videopilot.identity.application.OwnerContext;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -24,23 +27,29 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class AnalysisJobApplicationService {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(AnalysisJobApplicationService.class);
     private static final Pattern IDEMPOTENCY_KEY = Pattern.compile("[A-Za-z0-9._:-]{1,128}");
     private static final Pattern WHITESPACE = Pattern.compile("\\s+");
 
     private final AnalysisJobStore store;
+    private final ActiveAnalysisJobCache activeJobs;
     private final Supplier<Instant> now;
     private final Supplier<UUID> nextUuid;
     private final String pipelineVersion;
 
     public AnalysisJobApplicationService(
             AnalysisJobStore store,
+            ActiveAnalysisJobCache activeJobs,
             Supplier<Instant> now,
             Supplier<UUID> nextUuid,
             String pipelineVersion) {
         this.store = store;
+        this.activeJobs = activeJobs;
         this.now = now;
         this.nextUuid = nextUuid;
         this.pipelineVersion = requireText(pipelineVersion, 64);
@@ -53,7 +62,9 @@ public final class AnalysisJobApplicationService {
         Optional<StoredAnalysisJob> idempotent =
                 store.findByIdempotencyKey(owner.ownerId(), command.idempotencyKey());
         if (idempotent.isPresent()) {
-            return requireSameIdempotentRequest(idempotent.get(), requestFingerprint);
+            AnalysisJobView result = requireSameIdempotentRequest(idempotent.get(), requestFingerprint);
+            rememberIfActive(owner, idempotent.get());
+            return result;
         }
         MediaForAnalysis media = store.findMedia(owner.ownerId(), command.mediaId())
                 .orElseThrow(() -> new AnalysisJobException(AnalysisJobException.Reason.RESOURCE_NOT_FOUND));
@@ -63,12 +74,62 @@ public final class AnalysisJobApplicationService {
 
         String analysisKey = digest(media.fingerprint() + "\n" + goal + "\n"
                 + command.mode() + "\n" + pipelineVersion);
+        Optional<StoredAnalysisJob> existing = findLogicalJob(owner, analysisKey);
+        if (existing.isPresent()) {
+            rememberIfActive(owner, existing.get());
+            return toView(existing.get());
+        }
         JobCreation creation = creation(owner, command, goal, requestFingerprint, analysisKey);
         try {
             store.create(creation);
+            rememberIfActive(owner, creation.storedJob());
             return toView(creation.storedJob());
         } catch (CreationRaceException race) {
             return recoverDatabaseWinner(owner, command.idempotencyKey(), requestFingerprint, analysisKey, race);
+        }
+    }
+
+    private Optional<StoredAnalysisJob> findLogicalJob(OwnerContext owner, String analysisKey) {
+        Optional<ActiveJob> cached = findCached(owner, analysisKey);
+        if (cached.isPresent()) {
+            Optional<StoredAnalysisJob> stored = store.findById(owner.ownerId(), cached.get().jobId());
+            if (stored.isPresent() && stored.get().analysisKey().equals(analysisKey)) {
+                return stored;
+            }
+            evict(cached.get().jobId());
+        }
+        return store.findByAnalysisKey(owner.ownerId(), analysisKey);
+    }
+
+    private Optional<ActiveJob> findCached(OwnerContext owner, String analysisKey) {
+        try {
+            return activeJobs.find(owner.ownerId(), analysisKey);
+        } catch (ActiveAnalysisJobCacheUnavailableException exception) {
+            LOGGER.warn("Active job cache lookup unavailable; MySQL remains authoritative");
+            return Optional.empty();
+        }
+    }
+
+    private void rememberIfActive(OwnerContext owner, StoredAnalysisJob stored) {
+        if (!ActiveAnalysisJobCache.isActive(stored.job().status())) {
+            evict(stored.job().jobId());
+            return;
+        }
+        try {
+            activeJobs.remember(
+                    owner.ownerId(),
+                    stored.analysisKey(),
+                    new ActiveJob(stored.job().jobId(), stored.job().status(), stored.job().version()));
+        } catch (ActiveAnalysisJobCacheUnavailableException exception) {
+            LOGGER.warn("Active job cache population unavailable; MySQL remains authoritative");
+        }
+    }
+
+    private void evict(UUID jobId) {
+        try {
+            activeJobs.evict(jobId);
+        } catch (ActiveAnalysisJobCacheUnavailableException exception) {
+            LOGGER.warn("Active job cache eviction unavailable; MySQL remains authoritative");
         }
     }
 
@@ -163,11 +224,14 @@ public final class AnalysisJobApplicationService {
             CreationRaceException race) {
         Optional<StoredAnalysisJob> byIdempotency = store.findByIdempotencyKey(owner.ownerId(), idempotencyKey);
         if (byIdempotency.isPresent()) {
-            return requireSameIdempotentRequest(byIdempotency.get(), requestFingerprint);
+            AnalysisJobView result = requireSameIdempotentRequest(byIdempotency.get(), requestFingerprint);
+            rememberIfActive(owner, byIdempotency.get());
+            return result;
         }
-        return store.findByAnalysisKey(owner.ownerId(), analysisKey)
-                .map(this::toView)
+        StoredAnalysisJob winner = store.findByAnalysisKey(owner.ownerId(), analysisKey)
                 .orElseThrow(() -> race);
+        rememberIfActive(owner, winner);
+        return toView(winner);
     }
 
     private AnalysisJobView requireSameIdempotentRequest(
