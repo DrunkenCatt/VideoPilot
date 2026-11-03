@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import type { AnalysisJob, JobEvent } from '../../api/contracts'
+import type { AnalysisJob, JobEvent, MediaAsset } from '../../api/contracts'
+import { mediaDurationLabel, mediaStatusLabel } from '../media/mediaPresentation'
 import { canCancel, stageLabel, statusLabel } from './jobPresentation'
 
 defineProps<{
   job: AnalysisJob
+  media: MediaAsset | null
+  mediaUnavailable: boolean
   events: JobEvent[]
   actionBusy: boolean
 }>()
@@ -43,10 +46,35 @@ defineEmits<{ cancel: [] }>()
 
     <dl class="job-facts">
       <div><dt>阶段</dt><dd>{{ stageLabel(job.currentStage) }}</dd></div>
-      <div><dt>媒体 ID</dt><dd>{{ job.mediaId }}</dd></div>
       <div><dt>执行尝试</dt><dd>{{ job.attempt + 1 }}</dd></div>
       <div><dt>持久化版本</dt><dd>v{{ job.version }}</dd></div>
     </dl>
+
+    <dl
+      v-if="media"
+      class="job-facts job-media-facts"
+      data-test="job-media-facts"
+    >
+      <div><dt>媒体文件</dt><dd>{{ media.originalFilename }}</dd></div>
+      <div><dt>可信时长</dt><dd>{{ mediaDurationLabel(media.durationMs) }}</dd></div>
+      <div><dt>媒体状态</dt><dd>{{ mediaStatusLabel(media.status) }}</dd></div>
+      <div><dt>媒体 ID</dt><dd>{{ media.mediaId }}</dd></div>
+    </dl>
+    <p
+      v-else-if="mediaUnavailable"
+      class="media-failure"
+      data-test="job-media-unavailable"
+      role="status"
+    >
+      任务已恢复，但媒体详情暂时无法读取。
+    </p>
+    <p
+      v-else
+      class="empty-copy"
+      aria-live="polite"
+    >
+      正在读取任务关联的媒体事实…
+    </p>
 
     <div
       v-if="job.failure"

@@ -4,19 +4,26 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { AnalysisJob, JobEvent, MediaAsset, Session } from '../../api/contracts'
 import { ApiClientError } from '../../api/session'
 import { createJobsApi } from '../../api/jobs'
+import { createMediaApi, type MediaApi } from '../../api/media'
 import MediaUploadPanel from '../media/MediaUploadPanel.vue'
 import MediaLibrary from '../media/MediaLibrary.vue'
 import JobDetail from './JobDetail.vue'
 import { statusLabel } from './jobPresentation'
 
-const props = defineProps<{ session: Session }>()
+const props = defineProps<{
+  session: Session
+  mediaApi?: Pick<MediaApi, 'get'>
+}>()
 const emit = defineEmits<{ unauthenticated: [] }>()
 const api = createJobsApi()
+const mediaApi = props.mediaApi ?? createMediaApi()
 
 const jobs = ref<AnalysisJob[]>([])
 const selected = ref<AnalysisJob | null>(null)
 const events = ref<JobEvent[]>([])
 const selectedMedia = ref<MediaAsset | null>(null)
+const jobMedia = ref<MediaAsset | null>(null)
+const jobMediaUnavailable = ref(false)
 const uploadedMedia = ref<MediaAsset | null>(null)
 const goal = ref('')
 const loading = ref(true)
@@ -25,6 +32,7 @@ const canceling = ref(false)
 const errorMessage = ref('')
 let idempotencyKey: string | null = null
 let eventController: globalThis.AbortController | null = null
+let mediaRevision = 0
 
 watch([() => selectedMedia.value?.mediaId, goal], () => {
   idempotencyKey = null
@@ -87,25 +95,46 @@ async function openJob(selfLink: string) {
     const job = existing ?? await api.get(selfLink)
     selected.value = job
     selectLink(job.links.self)
+    void loadJobMedia(job)
     void follow(job)
   } catch (error) {
     handleError(error)
   }
 }
 
+async function loadJobMedia(job: AnalysisJob) {
+  const revision = ++mediaRevision
+  jobMedia.value = null
+  jobMediaUnavailable.value = false
+  try {
+    const media = await mediaApi.get(job.mediaId)
+    if (revision === mediaRevision && selected.value?.jobId === job.jobId) jobMedia.value = media
+  } catch (error) {
+    if (revision !== mediaRevision || selected.value?.jobId !== job.jobId) return
+    jobMediaUnavailable.value = true
+    if (error instanceof ApiClientError && error.code === 'AUTHENTICATION_REQUIRED') {
+      handleError(error)
+    }
+  }
+}
+
 async function submit() {
   if (!selectedMedia.value) return
+  const media = selectedMedia.value
   errorMessage.value = ''
   submitting.value = true
   idempotencyKey ??= globalThis.crypto.randomUUID()
   try {
     const job = await api.submit(
-      { mediaId: selectedMedia.value.mediaId, goal: goal.value.trim(), mode: 'STANDARD' },
+      { mediaId: media.mediaId, goal: goal.value.trim(), mode: 'STANDARD' },
       idempotencyKey,
       props.session.csrfToken,
     )
     idempotencyKey = null
     replaceJob(job)
+    jobMedia.value = media
+    jobMediaUnavailable.value = false
+    mediaRevision += 1
     selectLink(job.links.self)
     events.value = []
     void follow(job)
@@ -293,6 +322,8 @@ onBeforeUnmount(() => eventController?.abort())
       <JobDetail
         v-if="selected"
         :job="selected"
+        :media="jobMedia"
+        :media-unavailable="jobMediaUnavailable"
         :events="events"
         :action-busy="canceling"
         @cancel="cancel"

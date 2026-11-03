@@ -4,6 +4,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { MediaAsset, MediaId, Session } from '../../api/contracts'
 import { createMediaApi, type MediaApi } from '../../api/media'
 import { ApiClientError } from '../../api/session'
+import { mediaDurationLabel, mediaStatusLabel } from './mediaPresentation'
 
 const props = withDefaults(defineProps<{
   session: Session
@@ -29,27 +30,8 @@ let pollTimer: ReturnType<typeof globalThis.setTimeout> | null = null
 let disposed = false
 let viewRevision = 0
 
-const statusCopy = {
-  UPLOAD_PENDING: '上传中',
-  UPLOADED: '等待校验',
-  PROBING: '正在校验',
-  READY: '可分析',
-  FAILED: '校验失败',
-} as const
-
 function isPending(asset: MediaAsset) {
   return asset.status === 'UPLOADED' || asset.status === 'PROBING'
-}
-
-function duration(value: number | null) {
-  if (value === null) return '—'
-  const totalSeconds = Math.floor(value / 1_000)
-  const hours = Math.floor(totalSeconds / 3_600)
-  const minutes = Math.floor((totalSeconds % 3_600) / 60)
-  const seconds = totalSeconds % 60
-  return hours > 0
-    ? `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
-    : `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
 function bytes(value: number) {
@@ -193,12 +175,12 @@ onBeforeUnmount(() => {
         :data-status="asset.status"
       >
         <div class="media-card__topline">
-          <span class="media-status">{{ statusCopy[asset.status] }}</span>
+          <span class="media-status">{{ mediaStatusLabel(asset.status) }}</span>
           <span>{{ bytes(asset.contentLength) }}</span>
         </div>
         <h3>{{ asset.originalFilename }}</h3>
         <dl>
-          <div><dt>可信时长</dt><dd>{{ duration(asset.durationMs) }}</dd></div>
+          <div><dt>可信时长</dt><dd>{{ mediaDurationLabel(asset.durationMs) }}</dd></div>
           <div><dt>媒体 ID</dt><dd>{{ asset.mediaId }}</dd></div>
         </dl>
         <p

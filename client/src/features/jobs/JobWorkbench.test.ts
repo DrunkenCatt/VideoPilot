@@ -62,9 +62,9 @@ function terminalStream(event: JobEvent): Response {
   })
 }
 
-function mountWorkbench() {
+function mountWorkbench(mediaGet = vi.fn().mockResolvedValue(readyMedia)) {
   return mount(JobWorkbench, {
-    props: { session },
+    props: { session, mediaApi: { get: mediaGet } },
     global: {
       stubs: {
         MediaUploadPanel: { template: '<div data-test="upload-stub" />' },
@@ -124,6 +124,7 @@ describe('JobWorkbench', () => {
     expect(window.location.hash).toBe(`#${job.links.self}`)
     expect(wrapper.get('[data-test="job-status"]').text()).toContain('已就绪')
     expect(wrapper.get('[data-test="job-events"]').text()).toContain('Analysis job ready.')
+    expect(wrapper.get('[data-test="job-media-facts"]').text()).toContain('lecture.mp4')
     const submitHeaders = fetchMock.mock.calls[1]?.[1]?.headers as Record<string, string>
     expect(submitHeaders['Idempotency-Key']).toBeTruthy()
     expect(submitHeaders['X-CSRF-Token']).toBe(session.csrfToken)
@@ -223,5 +224,69 @@ describe('JobWorkbench', () => {
     expect(wrapper.get('[data-test="job-status"]').text()).toContain('已就绪')
     expect(wrapper.get('[data-test="job-events"]').text()).toContain('Analysis job ready.')
     expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('restores the persisted media facts when an existing job is opened', async () => {
+    const ready = { ...job, status: 'READY' as const, version: 6 }
+    const page = { ...emptyPage, data: [ready], pagination: { ...emptyPage.pagination, totalItems: 1, totalPages: 1 } }
+    const readyEvent: JobEvent = {
+      jobId: job.jobId,
+      sequence: 6,
+      eventType: 'JOB_READY',
+      status: 'READY',
+      stage: 'INDEXING',
+      message: 'Analysis job ready.',
+      occurredAt: '2026-11-02T08:00:06Z',
+      terminal: true,
+    }
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/v1/analysis-jobs?page=1&pageSize=20') return jsonResponse(200, page)
+      if (url === job.links.events) return terminalStream(readyEvent)
+      if (url === job.links.self) return jsonResponse(200, ready)
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const mediaGet = vi.fn().mockResolvedValue(readyMedia)
+    const wrapper = mountWorkbench(mediaGet)
+    await flushPromises()
+
+    await wrapper.get('[data-test="open-job"]').trigger('click')
+    await flushPromises()
+
+    const mediaFacts = wrapper.get('[data-test="job-media-facts"]').text()
+    expect(mediaFacts).toContain('lecture.mp4')
+    expect(mediaFacts).toContain('02:05')
+    expect(mediaFacts).toContain('可分析')
+    expect(mediaGet).toHaveBeenCalledWith(job.mediaId)
+  })
+
+  it('keeps the persisted job usable when its media detail cannot be loaded', async () => {
+    const ready = { ...job, status: 'READY' as const, version: 6 }
+    const page = { ...emptyPage, data: [ready], pagination: { ...emptyPage.pagination, totalItems: 1, totalPages: 1 } }
+    const readyEvent: JobEvent = {
+      jobId: job.jobId,
+      sequence: 6,
+      eventType: 'JOB_READY',
+      status: 'READY',
+      stage: 'INDEXING',
+      message: 'Analysis job ready.',
+      occurredAt: '2026-11-02T08:00:06Z',
+      terminal: true,
+    }
+    vi.stubGlobal('fetch', vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(200, page))
+      .mockResolvedValueOnce(terminalStream(readyEvent))
+      .mockResolvedValueOnce(jsonResponse(200, ready)))
+    const wrapper = mountWorkbench(vi.fn().mockRejectedValue(new TypeError('connection failed')))
+    await flushPromises()
+
+    await wrapper.get('[data-test="open-job"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="job-status"]').text()).toContain('已就绪')
+    expect(wrapper.get('[data-test="job-events"]').text()).toContain('Analysis job ready.')
+    expect(wrapper.get('[data-test="job-media-unavailable"]').text()).toContain('媒体详情暂时无法读取')
   })
 })
