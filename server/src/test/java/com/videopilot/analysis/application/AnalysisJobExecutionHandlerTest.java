@@ -60,6 +60,17 @@ class AnalysisJobExecutionHandlerTest {
     }
 
     @Test
+    void acknowledgesAnOutOfOrderOldDeliveryWithoutReopeningAReadyJob() {
+        FakeStore store = new FakeStore(job(JobStatus.READY, 6, 6));
+        AnalysisJobExecutionHandler handler = handler(store, JobExecutionLock.AcquireResult.ACQUIRED);
+
+        assertThat(handler.handle(message())).isEqualTo(AnalysisJobExecutionHandler.Result.ACK);
+
+        assertThat(store.job.status()).isEqualTo(JobStatus.READY);
+        assertThat(store.commits).isEmpty();
+    }
+
+    @Test
     void asksForDelayedRetryWhenAnotherConsumerHoldsTheLock() {
         FakeStore store = new FakeStore(job(JobStatus.CREATED, 0, 0));
         AnalysisJobExecutionHandler handler = handler(store, JobExecutionLock.AcquireResult.BUSY);

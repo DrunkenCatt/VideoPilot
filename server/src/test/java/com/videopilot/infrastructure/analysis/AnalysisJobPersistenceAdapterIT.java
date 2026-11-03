@@ -154,6 +154,21 @@ class AnalysisJobPersistenceAdapterIT {
     }
 
     @Test
+    void foreignCancellationIsHiddenAndCannotChangeTheJob() {
+        insertCreatedJob();
+        service.transition(transition(Optional.empty()));
+        OwnerContext foreign = new OwnerContext(new OwnerId(UUID.randomUUID()));
+
+        assertThatThrownBy(() -> jobEvents.cancel(foreign, jobId, "request-foreign-cancel"))
+                .isInstanceOf(AnalysisJobException.class)
+                .extracting(exception -> ((AnalysisJobException) exception).reason())
+                .isEqualTo(AnalysisJobException.Reason.RESOURCE_NOT_FOUND);
+
+        assertThat(serviceSnapshot().status()).isEqualTo(JobStatus.QUEUED);
+        assertThat(count("job_event_outbox")).isEqualTo(1);
+    }
+
+    @Test
     void cancellationAndConsumerRaceEndsOnALegalCasBranch() throws Exception {
         insertCreatedJob();
         service.transition(transition(Optional.empty()));

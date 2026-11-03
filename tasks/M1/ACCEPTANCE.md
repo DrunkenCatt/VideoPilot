@@ -482,3 +482,24 @@ T10Q 是后端查询薄片，没有修改 `client`；页面加载、轮询、REA
 | 宿主机 `server\mvnw.cmd verify -Pintegration` | 环境失败 | T12 用例通过；宿主机缺少 FFmpeg，且运行中的 Compose server 与 Outbox 测试争抢共享 RabbitMQ 队列，因此不作为成功证据 |
 | 首次隔离容器 `verify -Pintegration` | 配置失败 | FFmpeg 与 RabbitMQ 场景已通过；MinIO 预签名地址仍指向容器内 `localhost:9000`，3 项上传连接失败 |
 | 隔离容器 `server\mvnw.cmd verify -Pintegration` | 通过，约 3 分 39 秒 | 设置容器网络内 MinIO public endpoint、暂停竞争 Consumer 后，202 项单元测试、35 项真实 MySQL/Redis/RabbitMQ/MinIO/FFmpeg 集成测试、覆盖率与打包全部通过 |
+
+## 23. T13 M1 可靠性与权限验收矩阵
+
+日期：2026-11-03。
+
+- 既有集成测试已经覆盖六路并发相同意图、同 key 异请求、MQ 并发重复/串行重投、Redisson 锁竞争、SSE 游标补拉、取消 CAS 竞态和双用户查询隔离；T13 将这些证据汇总到同一风险矩阵，不重复实现第二套测试框架。
+- 新增 Consumer 提交前业务异常与数据库提交后 ACK 失败测试：前者不 ACK 并进入有限重试，后者把 I/O 失败传播给容器且不错误 reject；配合终态重投 no-op 证明至少一次投递的两个退出窗口。
+- 新增 READY 终态接收乱序旧消息、跨 owner 上传完成和 Job 取消测试，确保旧消息不重新推进、越权写操作统一隐藏资源存在性且不能改变持久化事实。
+- 新增真实应用重启测试：第一次启动写入媒体、Job 和事件后清空 Redis 并关闭完整 Spring 上下文，第二次启动从 MySQL 找回同一 Job 与 sequence 1 事件。
+- MQ 合同测试继续限制消息体只包含标识、事件类型、Schema 版本和追踪字段；生产日志静态复核未发现视频、凭据、完整目标文本、object key 或消息正文。
+
+| 阶段/命令 | 结果 | 证据摘要 |
+| --- | --- | --- |
+| Consumer/Handler 聚焦单测 | 通过 | 16 项通过，覆盖提交前异常、ACK 失败和终态乱序旧消息 |
+| 上传/取消权限聚焦集成测试 | 通过 | 8 项真实 MySQL/MinIO 集成测试通过 |
+| 应用重启聚焦集成测试 | 通过 | 两次真实 Spring/Undertow 启停、Redis flush、MySQL Job/事件恢复通过；首次受宿主 `SERVER_PORT=8080` 影响失败，改为命令行随机端口后通过 |
+| Consumer 异常分支变异检查 | 预期失败 | 临时把提交前异常结果改为 ACK 后新测试失败；恢复生产条件后通过 |
+| 隔离容器 `server\mvnw.cmd verify -Pintegration` | 通过，约 5 分 15 秒 | 205 项单元/Controller/架构测试、37 项真实依赖集成测试、JaCoCo 与打包通过 |
+| `client\npm.cmd run check` | 通过 | 54 项测试、类型检查、零 warning Lint、四项覆盖率门和生产构建通过 |
+
+逐项测试映射、浏览器证据复用边界和环境说明见 `tasks/M1/T13_ACCEPTANCE_MATRIX.md`。

@@ -121,6 +121,11 @@ class MediaUploadIT {
                 new CompletedUploadPart(1, firstEtag),
                 new CompletedUploadPart(2, secondEtag));
 
+        assertThatThrownBy(() -> uploads.complete(OTHER_OWNER, session.uploadId(), completedParts))
+                .isInstanceOf(MediaUploadException.class)
+                .extracting(exception -> ((MediaUploadException) exception).reason())
+                .isEqualTo(MediaUploadException.Reason.RESOURCE_NOT_FOUND);
+
         MediaAssetView completed = uploads.complete(OWNER, session.uploadId(), completedParts);
         MediaAssetView repeated = uploads.complete(OWNER, session.uploadId(), completedParts);
 

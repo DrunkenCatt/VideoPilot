@@ -3,6 +3,7 @@ package com.videopilot.infrastructure.messaging;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -14,6 +15,7 @@ import com.videopilot.analysis.application.AnalysisJobExecutionHandler;
 import com.videopilot.analysis.application.AnalysisJobExecutionHandler.Result;
 import com.videopilot.analysis.port.AnalysisMessageFailureRecorder;
 import com.videopilot.analysis.port.AnalysisMessageFailureRecorder.MessageFailure;
+import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -49,6 +51,29 @@ class RabbitAnalysisMessageConsumerTest {
         verify(channel).basicAck(DELIVERY_TAG, false);
         verify(channel, never()).basicReject(DELIVERY_TAG, false);
         assertThat(failures.last).isNull();
+    }
+
+    @Test
+    void rejectsForBrokerRetryWhenBusinessFailsBeforeCommit() throws Exception {
+        when(handler.handle(any())).thenThrow(new IllegalStateException("process stopped before commit"));
+
+        consumer.consume(validMessage(0), channel);
+
+        verify(channel).basicReject(DELIVERY_TAG, false);
+        verify(channel, never()).basicAck(DELIVERY_TAG, false);
+    }
+
+    @Test
+    void leavesCommittedDeliveryUnacknowledgedWhenAckFails() throws Exception {
+        when(handler.handle(any())).thenReturn(Result.ACK);
+        doThrow(new IOException("connection closed before ack"))
+                .when(channel).basicAck(DELIVERY_TAG, false);
+
+        assertThatThrownBy(() -> consumer.consume(validMessage(0), channel))
+                .isInstanceOf(IOException.class);
+
+        verify(handler).handle(any());
+        verify(channel, never()).basicReject(DELIVERY_TAG, false);
     }
 
     @Test
