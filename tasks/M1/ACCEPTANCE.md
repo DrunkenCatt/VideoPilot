@@ -88,6 +88,7 @@ M1 交付登录与资源归属、MinIO multipart 上传、FFprobe 校验、可�
 | `POST` | `/api/v1/media-uploads/{uploadId}/parts` | `partNumber`（1..10000） | `201` + 该分片短期预签名 URL |
 | `POST` | `/api/v1/media-uploads/{uploadId}/completion` | 有序 `partNumber/etag` 列表 | `202` + `MediaAssetResponse` |
 | `DELETE` | `/api/v1/media-uploads/{uploadId}` | 无 | `204`，重复中止仍成功 |
+| `GET` | `/api/v1/media-assets` | `page/pageSize` | `200` + owner-scoped `PageResponse<MediaAssetResponse>` |
 | `GET` | `/api/v1/media-assets/{mediaId}` | 无 | `200` + `MediaAssetResponse` |
 
 约束：
@@ -96,6 +97,10 @@ M1 交付登录与资源归属、MinIO multipart 上传、FFprobe 校验、可�
 - multipart 完成请求必须覆盖已上传分片，分片号唯一且升序；重复完成同一 upload session 返回同一媒体事实，不重复创建对象或媒体。
 - 预签名 URL 只能写当前用户 session 对应 object key 的指定 part，过期时间不超过 upload session。
 - `sha256` 为 64 位十六进制；对象完成后必须与受信校验结果一致。失败对象不能创建分析 Job。
+- 媒体列表只返回当前登录用户已经完成 upload session 并持久化的 `MediaAsset`，按 `createdAt DESC, mediaId DESC` 稳定排序；未完成/已中止的 upload session 不混入资源列表，客户端不能通过 owner 参数切换范围。
+- `MediaAssetResponse` 在 T10 以可选 `failure` 字段做加法扩展；结构为 `code/retryable/summary`。校验失败事实与可信元数据必须写入 MySQL，使列表、详情和刷新恢复得到同一结果，且不得暴露对象 key、临时路径或 FFprobe 命令。
+
+> 2026-11-03 补充说明：集合查询和可选 `failure` 是 T1 合同的向后兼容增补，用于关闭“上传后刷新无法找回资源”的验收缺口；既有路径、字段和错误语义均不改变。实现任务为 T10Q，前端消费任务为 T10F。
 
 ### 3.3 AnalysisJob
 
@@ -175,6 +180,8 @@ M1 只定义一个业务消息：`EXECUTE_JOB`，schema version 为 1。JSON env
 | M1-A10 | 用户 A 拥有 media/job，用户 B 已登录 | B 查询、取消、完成上传或订阅 A 的资源 | 全部返回不泄露存在性的 404；A 的状态不变 |
 | M1-A11 | 未登录或 CSRF Token 无效 | 调用受保护/状态变更 API | 分别返回 401 或 403 统一错误结构 |
 | M1-A12 | 消息含未知 schemaVersion 或缺少定位字段 | Consumer 收到消息 | 不推进 Job、不无限重试，进入受控 DLQ/失败记录 |
+| M1-A13 | 用户已有多个处于 UPLOADED/PROBING/READY/FAILED 的媒体 | 登录后打开媒体区或刷新页面 | 只按稳定顺序返回当前用户的持久化资源；READY 可提交，FAILED 显示安全失败摘要，其余状态不可提交 |
+| M1-A14 | 用户 A 与用户 B 均有媒体 | A 翻页查询列表并尝试读取 B 的 mediaId | 列表绝不混入 B 的资源，详情返回不泄露存在性的 404，响应不暴露 ownerId/objectKey |
 
 ## 8. T1 合同证据
 

@@ -4,7 +4,7 @@
 
 M1 要在 M0 已冻结的契约上交付第一个真实用户闭环：用户登录后上传本地教学视频，系统保存资源归属和媒体元数据，通过统一状态迁移与 Transactional Outbox 把 `AnalysisJob` 可靠投递到 RabbitMQ，Consumer 在至少一次投递下幂等推进任务，并由持久化事件向页面提供可补拉的 SSE 进度、取消和失败信息。
 
-当前 `main` 已完成 T0-T6：M0 退出、M1 合同、本地身份/资源归属、Job 领域状态机、MySQL 原子迁移、幂等 Job 提交、事务 Outbox、RabbitMQ 可靠发布，以及手动 ACK 幂等 Consumer 均已有测试证据；登录与会话恢复页面作为 T2F 首个前端验收面交付。MinIO 业务 Adapter、FFprobe、SSE 和后续 M1 操作面仍待实现。
+当前 `main` 已完成 T0-T9F（T10 之前的计划薄片及对应前端验收面）：M0 退出、M1 合同、身份与资源归属、Job 状态机、Outbox/RabbitMQ/Consumer、Job 查询与可恢复 SSE、假任务浏览器闭环，以及 MinIO upload session 和真实分片上传页面均已有证据。下一步是 T10 FFprobe 可信校验、T10Q owner-scoped 媒体查询和 T10F 媒体资源/状态验收面；尚未实现的资源列表不能由当前上传成功卡片替代。
 
 M0 已于 2026-10-29 由项目负责人确认退出。远端 CI run `40837414790` 的 backend、frontend、integration 与 Gitleaks 已通过；OWASP Dependency-Check 仍发现 CVSS 7 以上依赖漏洞，项目负责人明确接受该遗留风险并允许进入 M1。安全 Job、报告和 CVSS 7 阻断阈值保持不变，该风险不视为已修复。
 
@@ -30,6 +30,7 @@ T0 M0 退出门
       -> T2 身份登录与资源归属 -> T2F 登录/会话前端验收面
       -> T3 Job 领域模型、状态机与 V2 迁移
           -> T4 幂等提交与事务 Outbox
+              -> T4F Job 提交/查询前端验收面
               -> T5 RabbitMQ 拓扑与 Outbox Relay
                   -> T6 Consumer、Redisson 锁与 CAS 幂等
                       -> T7 Job 查询、SSE 补拉、取消和失败语义
@@ -37,8 +38,10 @@ T0 M0 退出门
                               -> T8 假任务浏览器纵向闭环
       -> T9 MediaAsset 与 MinIO 上传闭环
           -> T9F 上传前端验收面
-          -> T10 FFprobe 校验与 Job 接入 -> T10F 媒体校验前端验收面
-T4 + T10F -> T4F Job 提交/查询前端验收面 -> T7F
+          -> T10 FFprobe 校验与 Job 接入
+              -> T10Q owner-scoped 媒体列表/详情查询
+                  -> T10F 媒体资源与校验状态前端验收面
+T4F + T10Q -> T10F 的 READY 媒体选择与真实提交接线
 T8 + T9F + T10F -> T11 真实上传/进度浏览器纵向闭环
 T6 + T7 + T10 -> T12 Redis active key 可重建加速
 T8 + T11 + T12 -> T13 M1 可靠性与权限验收
@@ -57,16 +60,17 @@ T13 -> T14 文档、质量门与退出记录
 | T2F | 登录、会话恢复与退出前端验收面（已完成） | T2 | S |
 | T3 | Job 领域模型、统一状态机与前进迁移（已完成） | T1 | M |
 | T4 | 幂等创建 Job 与事务 Outbox（已完成） | T2、T3 | M |
-| T4F | Job 提交/查询前端验收面 | T4、T10F | S |
+| T4F | Job 提交/查询前端验收面（已完成临时媒体入口） | T4 | S |
 | T5 | RabbitMQ 拓扑与可靠 Outbox Relay（已完成） | T4 | M |
 | T6 | 幂等 Consumer、Redisson 锁与阶段 CAS（已完成） | T5 | M |
-| T7 | Job 查询、持久化 SSE、取消与失败 | T6 | M |
-| T7F | Job 状态、SSE、取消和失败前端验收面 | T7、T4F | M |
-| T8 | 假任务浏览器纵向闭环 | T7F | S |
-| T9 | MediaAsset 与 MinIO upload session | T2 | M |
-| T9F | 视频选择、分片上传与进度前端验收面 | T9 | M |
+| T7 | Job 查询、持久化 SSE、取消与失败（已完成） | T6 | M |
+| T7F | Job 状态、SSE、取消和失败前端验收面（已完成） | T7、T4F | M |
+| T8 | 假任务浏览器纵向闭环（已完成） | T7F | S |
+| T9 | MediaAsset 与 MinIO upload session（已完成） | T2 | M |
+| T9F | 视频选择、分片上传与进度前端验收面（已完成） | T9 | M |
 | T10 | FFprobe 校验并连接真实媒体与 Job | T3、T9 | M |
-| T10F | 媒体校验状态前端验收面 | T9F、T10 | S |
+| T10Q | owner-scoped 媒体列表/详情查询合同 | T10 | S |
+| T10F | 媒体资源列表与校验状态前端验收面 | T9F、T10Q | M |
 | T11 | 真实上传与进度浏览器纵向闭环 | T8、T9F、T10F | S |
 | T12 | Redis active key 与缓存丢失重建 | T6、T7、T10 | S |
 | T13 | 重投、重启、并发、越权集成验收 | T8、T11、T12 | M |
@@ -92,6 +96,7 @@ T13 -> T14 文档、质量门与退出记录
 
 - 登录用户可上传视频到 MinIO，完成后得到可信媒体元数据和 FFprobe 校验结果。
 - 对象 key 由服务端生成，用户不能借上传/读取接口访问其他用户对象。
+- 用户刷新后可从 MySQL 恢复自己的媒体列表与校验结果，并从列表选择 READY 媒体提交分析；未完成的 upload session 不伪装为媒体资源。
 - Redis 清空后，active 状态和 SSE 补拉仍可由 MySQL 重建。
 - 用户能在同一浏览器工作台完成选择文件、分片上传、媒体校验、提交 Job 和刷新恢复，且不会看到或持有 MinIO 长期密钥。
 
