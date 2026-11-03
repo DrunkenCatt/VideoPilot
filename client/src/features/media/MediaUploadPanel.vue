@@ -12,7 +12,7 @@ const props = defineProps<{
   session: Session
   uploader?: typeof uploadMediaFile
 }>()
-const emit = defineEmits<{ unauthenticated: [] }>()
+const emit = defineEmits<{ unauthenticated: []; uploaded: [media: MediaAsset] }>()
 const api = createMediaApi()
 const file = ref<globalThis.File | null>(null)
 const state = ref<UploadState>('idle')
@@ -91,9 +91,10 @@ async function start() {
       },
     })
     uploaded.value = result
+    emit('uploaded', result)
     state.value = 'completed'
     loadedBytes.value = totalBytes.value
-    detail.value = '对象上传完成，等待 T10 内容校验；当前媒体尚不能提交分析。'
+    detail.value = '对象上传完成，服务端正在校验内容；校验通过后即可提交分析。'
   } catch (error) {
     if (controller.signal.aborted || (error instanceof globalThis.DOMException && error.name === 'AbortError')) {
       state.value = 'aborted'

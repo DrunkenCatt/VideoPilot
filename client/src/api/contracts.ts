@@ -125,8 +125,15 @@ export interface MediaAsset {
   sha256: string
   status: MediaStatus
   durationMs: number | null
+  failure: MediaFailure | null
   createdAt: string
   updatedAt: string
+}
+
+export interface MediaFailure {
+  code: string
+  retryable: boolean
+  summary: string
 }
 
 export interface CreateAnalysisJobRequest {

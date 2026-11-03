@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { AnalysisJob, JobEvent, PageResponse, Session } from '../../api/contracts'
+import type { AnalysisJob, JobEvent, MediaAsset, PageResponse, Session } from '../../api/contracts'
 import JobWorkbench from './JobWorkbench.vue'
 
 const session: Session = {
@@ -31,6 +31,18 @@ const job: AnalysisJob = {
   },
 }
 
+const readyMedia: MediaAsset = {
+  mediaId: job.mediaId,
+  originalFilename: 'lecture.mp4',
+  contentLength: 2_048,
+  sha256: 'a'.repeat(64),
+  status: 'READY',
+  durationMs: 125_000,
+  failure: null,
+  createdAt: '2026-11-02T07:00:00Z',
+  updatedAt: '2026-11-02T07:01:00Z',
+}
+
 const emptyPage: PageResponse<AnalysisJob> = {
   data: [],
   pagination: { page: 1, pageSize: 20, totalItems: 0, totalPages: 0 },
@@ -50,6 +62,22 @@ function terminalStream(event: JobEvent): Response {
   })
 }
 
+function mountWorkbench() {
+  return mount(JobWorkbench, {
+    props: { session },
+    global: {
+      stubs: {
+        MediaUploadPanel: { template: '<div data-test="upload-stub" />' },
+        MediaLibrary: {
+          emits: ['select'],
+          setup: () => ({ readyMedia }),
+          template: '<button data-test="choose-ready" @click="$emit(\'select\', readyMedia)">选择媒体</button>',
+        },
+      },
+    },
+  })
+}
+
 describe('JobWorkbench', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
@@ -59,12 +87,12 @@ describe('JobWorkbench', () => {
   it('shows a meaningful empty state backed by the server list', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, emptyPage)))
 
-    const wrapper = mount(JobWorkbench, { props: { session } })
+    const wrapper = mountWorkbench()
     await flushPromises()
 
     expect(wrapper.get('h1').text()).toContain('假任务工作台')
     expect(wrapper.get('[data-test="jobs-empty"]').text()).toContain('还没有分析任务')
-    expect(wrapper.get('label[for="media-id"]').text()).toContain('测试媒体 ID')
+    expect(wrapper.get('[data-test="selected-media"]').text()).toContain('请先在媒体资源中选择')
   })
 
   it('submits one intent and navigates with the self link returned by the server', async () => {
@@ -85,10 +113,10 @@ describe('JobWorkbench', () => {
       .mockResolvedValueOnce(terminalStream(readyEvent))
       .mockResolvedValueOnce(jsonResponse(200, { ...job, status: 'READY', currentStage: 'INDEXING', version: 6 }))
     vi.stubGlobal('fetch', fetchMock)
-    const wrapper = mount(JobWorkbench, { props: { session } })
+    const wrapper = mountWorkbench()
     await flushPromises()
 
-    await wrapper.get('#media-id').setValue(job.mediaId)
+    await wrapper.get('[data-test="choose-ready"]').trigger('click')
     await wrapper.get('#analysis-goal').setValue(job.goal)
     await wrapper.get('[data-test="submit-job"]').trigger('submit')
     await flushPromises()
@@ -122,7 +150,7 @@ describe('JobWorkbench', () => {
       .mockResolvedValueOnce(terminalStream(canceledEvent))
       .mockResolvedValueOnce(jsonResponse(200, canceled))
     vi.stubGlobal('fetch', fetchMock)
-    const wrapper = mount(JobWorkbench, { props: { session } })
+    const wrapper = mountWorkbench()
     await flushPromises()
 
     await wrapper.get('[data-test="open-job"]').trigger('click')
@@ -158,7 +186,7 @@ describe('JobWorkbench', () => {
       .mockResolvedValueOnce(terminalStream(failedEvent))
       .mockResolvedValueOnce(jsonResponse(200, failed)))
 
-    const wrapper = mount(JobWorkbench, { props: { session } })
+    const wrapper = mountWorkbench()
     await flushPromises()
     await wrapper.get('[data-test="open-job"]').trigger('click')
     await flushPromises()
@@ -189,7 +217,7 @@ describe('JobWorkbench', () => {
       .mockResolvedValueOnce(jsonResponse(200, ready))
     vi.stubGlobal('fetch', fetchMock)
 
-    const wrapper = mount(JobWorkbench, { props: { session } })
+    const wrapper = mountWorkbench()
     await flushPromises()
 
     expect(wrapper.get('[data-test="job-status"]').text()).toContain('已就绪')

@@ -11,15 +11,24 @@ const activeSession: Session = {
   expiresAt: '2026-10-30T08:00:00Z',
 }
 
-const emptyJobPage = {
-  data: [],
-  pagination: { page: 1, pageSize: 20, totalItems: 0, totalPages: 0 },
-}
-
 function jsonResponse(status: number, body?: unknown): Response {
   return new Response(body === undefined ? null : JSON.stringify(body), {
     status,
     headers: { 'Content-Type': 'application/json' },
+  })
+}
+
+function mountApp() {
+  return mount(App, {
+    global: {
+      stubs: {
+        JobWorkbench: {
+          props: ['session'],
+          emits: ['unauthenticated'],
+          template: '<main><h1>假任务工作台</h1></main>',
+        },
+      },
+    },
   })
 }
 
@@ -31,7 +40,7 @@ describe('App session flow', () => {
   it('shows the login surface when there is no active session', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(401)))
 
-    const wrapper = mount(App)
+    const wrapper = mountApp()
     await flushPromises()
 
     expect(wrapper.get('h1').text()).toBe('回到视频，也回到证据。')
@@ -45,10 +54,9 @@ describe('App session flow', () => {
       .fn()
       .mockResolvedValueOnce(jsonResponse(401))
       .mockResolvedValueOnce(jsonResponse(201, activeSession))
-      .mockResolvedValueOnce(jsonResponse(200, emptyJobPage))
     vi.stubGlobal('fetch', fetchMock)
 
-    const wrapper = mount(App)
+    const wrapper = mountApp()
     await flushPromises()
     await wrapper.get('#username').setValue('teacher')
     await wrapper.get('#password').setValue('a local password')
@@ -83,7 +91,7 @@ describe('App session flow', () => {
       )
     vi.stubGlobal('fetch', fetchMock)
 
-    const wrapper = mount(App)
+    const wrapper = mountApp()
     await flushPromises()
     await wrapper.get('#username').setValue('teacher')
     await wrapper.get('#password').setValue('wrong password')
@@ -113,7 +121,7 @@ describe('App session flow', () => {
       )
     vi.stubGlobal('fetch', fetchMock)
 
-    const wrapper = mount(App)
+    const wrapper = mountApp()
     await flushPromises()
     await wrapper.get('#username').setValue('teacher')
     await wrapper.get('#password').setValue('password')
@@ -126,7 +134,7 @@ describe('App session flow', () => {
   it('shows a connection message when session restoration cannot reach the server', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('connection failed')))
 
-    const wrapper = mount(App)
+    const wrapper = mountApp()
     await flushPromises()
 
     expect(wrapper.get('[role="alert"]').text()).toContain('无法连接本地服务')
@@ -136,11 +144,10 @@ describe('App session flow', () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(200, activeSession))
-      .mockResolvedValueOnce(jsonResponse(200, emptyJobPage))
       .mockResolvedValueOnce(jsonResponse(204))
     vi.stubGlobal('fetch', fetchMock)
 
-    const wrapper = mount(App)
+    const wrapper = mountApp()
     await flushPromises()
     expect(wrapper.get('.session-actions').text()).toContain('teacher')
 
@@ -162,7 +169,6 @@ describe('App session flow', () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(200, activeSession))
-      .mockResolvedValueOnce(jsonResponse(200, emptyJobPage))
       .mockResolvedValueOnce(
         jsonResponse(503, {
           code: 'DEPENDENCY_UNAVAILABLE',
@@ -173,7 +179,7 @@ describe('App session flow', () => {
       )
     vi.stubGlobal('fetch', fetchMock)
 
-    const wrapper = mount(App)
+    const wrapper = mountApp()
     await flushPromises()
     await wrapper.get('[data-test="logout"]').trigger('click')
     await flushPromises()

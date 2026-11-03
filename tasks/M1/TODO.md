@@ -171,13 +171,14 @@
 
 ## T10F：交付媒体资源列表与校验状态前端验收面
 
-- [ ] 登录或刷新后读取 owner-scoped 分页媒体列表；上传完成的资源立即进入列表，并展示 `UPLOADED/PROBING/READY/FAILED`、可信时长和安全错误摘要，不在客户端推断 READY。
-- [ ] 只对当前可见的 `UPLOADED/PROBING` 资源做有界轮询并在终态停止；提供加载、空列表、分页、局部刷新和服务不可用状态，刷新页面能从服务端恢复。
-- [ ] READY 资源接入已完成的 T4F 提交表单；FAILED 和非终态资源禁用分析操作。用有效视频、损坏文件、跨用户不可见和服务不可用覆盖页面状态及恢复行为。
+- [x] 登录或刷新后读取 owner-scoped 分页媒体列表；上传完成的资源立即进入列表，并展示 `UPLOADED/PROBING/READY/FAILED`、可信时长和安全错误摘要，不在客户端推断 READY。
+- [x] 只对当前可见的 `UPLOADED/PROBING` 资源做有界轮询并在终态停止；提供加载、空列表、分页、局部刷新和服务不可用状态，刷新页面能从服务端恢复。
+- [x] READY 资源接入已完成的 T4F 提交表单；FAILED 和非终态资源禁用分析操作。用有效视频、损坏文件、跨用户不可见和服务不可用覆盖页面状态及恢复行为。
 - **验收标准**：用户能看到此前上传的资源并选择 READY 媒体提交 Job；页面与 MediaAsset 真源一致，READY 前不能提交，错误可理解且不泄露 FFprobe 命令/路径。
 - **验证**：组件/API 测试；`client\npm.cmd run check`；真实浏览器核对媒体请求和状态转换。
 - **预计文件**：media list/detail API、资源列表与状态组件、T4F 媒体选择接线、样式和测试。
 - **依赖/规模**：T9F、T10Q / M。
+- **完成记录（2026-11-03）**：新增 owner-scoped media list/detail client 和媒体资源面，上传完成后立即合并 `UPLOADED`，只对当前页非终态资源做 2 秒有限频率详情轮询并在 `READY/FAILED` 停止。页面提供加载、空态、分页、刷新、服务不可用保留旧数据和安全失败摘要；仅 READY 显示选择操作并接入 T4F，移除手填测试 mediaId。52 项前端测试、四项覆盖率门和生产构建通过；真实浏览器跑通有效视频 `UPLOADED -> READY -> Job READY`、损坏视频 FAILED、刷新恢复、服务中断恢复、双账号隔离、375 x 812 和零 Console error/warning。证据见 `tasks/M1/T10F_BROWSER_ACCEPTANCE.md`。
 
 ## T4F：交付 Job 提交与查询前端验收面
 

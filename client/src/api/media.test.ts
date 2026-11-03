@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import type { MediaAsset, UploadSession } from './contracts'
+import type { MediaAsset, PageResponse, UploadSession } from './contracts'
 import { createMediaApi } from './media'
 import { ApiClientError } from './session'
 
@@ -21,6 +21,7 @@ const media: MediaAsset = {
   sha256: 'a'.repeat(64),
   status: 'UPLOADED',
   durationMs: null,
+  failure: null,
   createdAt: '2026-11-02T08:00:00Z',
   updatedAt: '2026-11-02T08:01:00Z',
 }
@@ -60,6 +61,24 @@ describe('media API', () => {
       expect(JSON.stringify(call)).not.toContain('ownerId')
       if (call[1]?.method !== 'GET') expect(call[1]?.headers['X-CSRF-Token']).toBe('csrf-media')
     }
+  })
+
+  it('reads owner-scoped media pages and details without sending owner identity', async () => {
+    const page: PageResponse<MediaAsset> = {
+      data: [media],
+      pagination: { page: 2, pageSize: 10, totalItems: 11, totalPages: 2 },
+    }
+    const request = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(200, page))
+      .mockResolvedValueOnce(jsonResponse(200, media))
+    const api = createMediaApi(request)
+
+    await expect(api.list(2, 10)).resolves.toEqual(page)
+    await expect(api.get(media.mediaId)).resolves.toEqual(media)
+
+    expect(request.mock.calls[0]?.[0]).toBe('/api/v1/media-assets?page=2&pageSize=10')
+    expect(request.mock.calls[1]?.[0]).toBe(`/api/v1/media-assets/${media.mediaId}`)
+    expect(JSON.stringify(request.mock.calls)).not.toContain('ownerId')
   })
 
   it('uploads a part without credentials and reports real loaded bytes', async () => {

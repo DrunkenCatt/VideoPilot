@@ -2,6 +2,8 @@ import {
   API,
   type CompletedPart,
   type MediaAsset,
+  type MediaId,
+  type PageResponse,
   type UploadId,
   type UploadPartTarget,
   type UploadSession,
@@ -33,6 +35,25 @@ export function createMediaApi(
   xhrFactory: XhrFactory = () => new XMLHttpRequest(),
 ) {
   return {
+    async list(page = 1, pageSize = 20): Promise<PageResponse<MediaAsset>> {
+      const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
+      const response = await request(`${API.mediaAssets}?${query}`, {
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json' },
+      })
+      if (!response.ok) throw await errorFrom(response)
+      return (await response.json()) as PageResponse<MediaAsset>
+    },
+
+    async get(mediaId: MediaId): Promise<MediaAsset> {
+      const response = await request(`${API.mediaAssets}/${encodeURIComponent(mediaId)}`, {
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json' },
+      })
+      if (!response.ok) throw await errorFrom(response)
+      return (await response.json()) as MediaAsset
+    },
+
     async create(input: UploadSessionRequest, csrfToken: string): Promise<UploadSession> {
       const response = await request(API.mediaUploads, {
         method: 'POST',

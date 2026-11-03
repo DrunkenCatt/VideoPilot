@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-import type { AnalysisJob, JobEvent, MediaId, Session } from '../../api/contracts'
+import type { AnalysisJob, JobEvent, MediaAsset, Session } from '../../api/contracts'
 import { ApiClientError } from '../../api/session'
 import { createJobsApi } from '../../api/jobs'
 import MediaUploadPanel from '../media/MediaUploadPanel.vue'
+import MediaLibrary from '../media/MediaLibrary.vue'
 import JobDetail from './JobDetail.vue'
 import { statusLabel } from './jobPresentation'
 
@@ -15,7 +16,8 @@ const api = createJobsApi()
 const jobs = ref<AnalysisJob[]>([])
 const selected = ref<AnalysisJob | null>(null)
 const events = ref<JobEvent[]>([])
-const mediaId = ref('')
+const selectedMedia = ref<MediaAsset | null>(null)
+const uploadedMedia = ref<MediaAsset | null>(null)
 const goal = ref('')
 const loading = ref(true)
 const submitting = ref(false)
@@ -24,7 +26,7 @@ const errorMessage = ref('')
 let idempotencyKey: string | null = null
 let eventController: globalThis.AbortController | null = null
 
-watch([mediaId, goal], () => {
+watch([() => selectedMedia.value?.mediaId, goal], () => {
   idempotencyKey = null
 })
 
@@ -92,12 +94,13 @@ async function openJob(selfLink: string) {
 }
 
 async function submit() {
+  if (!selectedMedia.value) return
   errorMessage.value = ''
   submitting.value = true
   idempotencyKey ??= globalThis.crypto.randomUUID()
   try {
     const job = await api.submit(
-      { mediaId: mediaId.value.trim() as MediaId, goal: goal.value.trim(), mode: 'STANDARD' },
+      { mediaId: selectedMedia.value.mediaId, goal: goal.value.trim(), mode: 'STANDARD' },
       idempotencyKey,
       props.session.csrfToken,
     )
@@ -111,6 +114,14 @@ async function submit() {
   } finally {
     submitting.value = false
   }
+}
+
+function selectMedia(media: MediaAsset) {
+  selectedMedia.value = media
+}
+
+function uploaded(media: MediaAsset) {
+  uploadedMedia.value = media
 }
 
 async function cancel() {
@@ -176,6 +187,15 @@ onBeforeUnmount(() => eventController?.abort())
 
     <MediaUploadPanel
       :session="session"
+      @uploaded="uploaded"
+      @unauthenticated="emit('unauthenticated')"
+    />
+
+    <MediaLibrary
+      :session="session"
+      :uploaded="uploadedMedia"
+      :selected-id="selectedMedia?.mediaId"
+      @select="selectMedia"
       @unauthenticated="emit('unauthenticated')"
     />
 
@@ -189,23 +209,29 @@ onBeforeUnmount(() => eventController?.abort())
           aria-labelledby="submission-title"
         >
           <p class="section-index">
-            TEST MEDIA
+            READY MEDIA
           </p>
           <h2 id="submission-title">
             提交分析
           </h2>
-          <p>T9F 上传结果仍需 T10 校验；此处暂时保留已就绪的 M1 测试媒体入口。</p>
+          <p>从媒体资源中选择一条已通过服务端校验的资源，再填写分析目标。</p>
           <form
             data-test="submit-job"
             @submit.prevent="submit"
           >
-            <label for="media-id"><span>测试媒体 ID</span><input
-              id="media-id"
-              v-model="mediaId"
-              required
-              pattern="[0-9a-fA-F-]{36}"
-              autocomplete="off"
-            ></label>
+            <div
+              class="selected-media"
+              data-test="selected-media"
+            >
+              <span>已选媒体</span>
+              <template v-if="selectedMedia">
+                <strong>{{ selectedMedia.originalFilename }}</strong>
+                <small>{{ selectedMedia.mediaId }}</small>
+              </template>
+              <p v-else>
+                请先在媒体资源中选择一条“可分析”资源。
+              </p>
+            </div>
             <label for="analysis-goal"><span>分析目标</span><textarea
               id="analysis-goal"
               v-model="goal"
@@ -215,9 +241,9 @@ onBeforeUnmount(() => eventController?.abort())
             /></label>
             <button
               type="submit"
-              :disabled="submitting"
+              :disabled="submitting || !selectedMedia"
             >
-              <span>{{ submitting ? '正在提交…' : '创建假任务' }}</span><span aria-hidden="true">→</span>
+              <span>{{ submitting ? '正在提交…' : '创建分析任务' }}</span><span aria-hidden="true">→</span>
             </button>
           </form>
         </section>

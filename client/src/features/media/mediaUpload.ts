@@ -5,6 +5,7 @@ import { Sha256 } from './sha256'
 
 const HASH_CHUNK_BYTES = 4 * 1024 ** 2
 const MAX_PART_ATTEMPTS = 3
+type MediaUploadApi = Pick<MediaApi, 'create' | 'createPart' | 'putPart' | 'complete' | 'abort'>
 
 export function validateUploadFile(file: Pick<File, 'size' | 'name'>): string | null {
   if (file.size <= 0) return '视频文件不能为空。'
@@ -55,7 +56,7 @@ function shouldRetry(error: unknown, signal?: AbortSignal) {
 export async function uploadMediaFile(
   file: File,
   csrfToken: string,
-  api: MediaApi,
+  api: MediaUploadApi,
   options: UploadOptions = {},
 ): Promise<MediaAsset> {
   const validation = validateUploadFile(file)

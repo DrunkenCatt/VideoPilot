@@ -426,3 +426,20 @@ T10 没有修改 `client`，因此未运行前端 `check` 或浏览器联调；�
 | Docker 内 `clean verify -Pintegration -Dit.test=MediaAssetQueryIT` | 通过，约 252 秒 | 192 项后端回归及 2 项真实 MySQL 集成测试；覆盖双用户、混合状态、同时间戳稳定排序、分页、未完成上传排除和跨 owner 详情隐藏 |
 
 T10Q 是后端查询薄片，没有修改 `client`；页面加载、轮询、READY 选择和真实浏览器验收由 T10F 完成。
+
+## 20. T10F 媒体资源与 READY 选择前端证据
+
+日期：2026-11-03。
+
+- Media API client 只调用 owner-scoped list/detail 路径，不发送 ownerId；媒体响应补齐安全失败事实类型。资源面以服务端状态为真源，不依据扩展名、MIME 或上传成功自行推断 READY。
+- 上传面通过组件事件把完成响应立即合并到第一页；资源面只轮询当前可见的 `UPLOADED/PROBING`，每轮最多当前页 8 项、单定时器 2 秒间隔，终态后停止并在卸载时清理。
+- READY 是唯一显示“选择用于分析”操作的状态；T4F 表单不再接受手填测试 mediaId。选择 READY 后提交按钮才可用，提交仍沿用既有幂等键、CSRF 和服务端 links。
+- 加载、空列表、分页、局部刷新和服务不可用均有明确状态；刷新从 MySQL 恢复媒体和 Job。请求失败时保留最近可信列表，不把网络失败误写成媒体失败。
+
+| 阶段/命令 | 结果 | 证据摘要 |
+| --- | --- | --- |
+| RED：Media API/资源组件/上传接线 | 预期失败 | `list/get`、`MediaLibrary` 和 `uploaded` 事件尚不存在；测试分别以方法缺失、模块解析失败和事件缺失锁定合同 |
+| `client\npm.cmd run check` | 通过 | 类型检查、零 warning Lint、52 项 Vitest；Statements 86.98%、Branches 80.91%、Functions 87.70%、Lines 92.53%；生产构建通过 |
+| 真实浏览器 | 通过 | 有效视频 `UPLOADED -> READY`、可信 00:03、选择并提交到 Job READY、损坏视频 FAILED、刷新恢复、服务中断/恢复、双账号隔离、375 x 812 无溢出和 Console error/warning 为 0 |
+
+详细环境、页面证据与事实边界见 `tasks/M1/T10F_BROWSER_ACCEPTANCE.md`。

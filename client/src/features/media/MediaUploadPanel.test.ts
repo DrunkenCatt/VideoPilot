@@ -21,6 +21,7 @@ const uploaded: MediaAsset = {
   sha256: 'a'.repeat(64),
   status: 'UPLOADED',
   durationMs: null,
+  failure: null,
   createdAt: '2026-11-02T08:00:00Z',
   updatedAt: '2026-11-02T08:01:00Z',
 }
@@ -51,8 +52,9 @@ describe('MediaUploadPanel', () => {
 
     expect(wrapper.get('[data-test="upload-status"]').text()).toContain('上传完成')
     expect(wrapper.get('[data-test="upload-progress"]').attributes('value')).toBe('9')
-    expect(wrapper.text()).toContain('等待 T10 内容校验')
+    expect(wrapper.text()).toContain('服务端正在校验内容')
     expect(wrapper.text()).toContain(uploaded.mediaId)
+    expect(wrapper.emitted('uploaded')?.[0]).toEqual([uploaded])
   })
 
   it('rejects a file over the client limit before upload', async () => {

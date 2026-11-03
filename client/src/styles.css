@@ -315,6 +315,58 @@ button:disabled { cursor: wait; opacity: 0.65; }
 .upload-result dt { color: var(--muted); font-size: 0.72rem; }
 .upload-result dd { margin: 0; overflow-wrap: anywhere; font-family: 'IBM Plex Mono', 'Cascadia Mono', monospace; font-size: 0.72rem; }
 
+.media-library {
+  margin-top: 2.5rem;
+  padding: clamp(1.5rem, 3vw, 2.25rem);
+  border-top: 1px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+  background: rgb(251 249 242 / 44%);
+}
+
+.media-library__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 2rem;
+  margin-bottom: 1.5rem;
+}
+
+.media-library__heading h2 { margin: 0; font-size: clamp(1.6rem, 2.5vw, 2.35rem); }
+.media-library__heading p:last-child { margin: 0.6rem 0 0; color: var(--muted); font-size: 0.82rem; }
+.media-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin: 0; padding: 0; list-style: none; }
+.media-grid li { position: relative; min-width: 0; padding: 1.15rem; border: 1px solid var(--line); background: #fffdf7; }
+.media-grid li::before { position: absolute; inset: -1px auto auto -1px; width: 2.5rem; height: 3px; background: var(--signal); content: ''; }
+.media-grid li[data-status='FAILED']::before { background: var(--danger); }
+.media-grid li[data-status='UPLOADED']::before, .media-grid li[data-status='PROBING']::before { background: #ad7b29; }
+.media-card__topline { display: flex; justify-content: space-between; gap: 1rem; color: var(--muted); font-family: 'IBM Plex Mono', 'Cascadia Mono', monospace; font-size: 0.68rem; }
+.media-status { color: var(--accent-dark); font-weight: 700; letter-spacing: 0.08em; }
+.media-grid li[data-status='FAILED'] .media-status { color: var(--danger); }
+.media-grid h3 { margin: 1rem 0; overflow-wrap: anywhere; font-family: 'Noto Serif SC', 'Songti SC', serif; font-size: 1.05rem; }
+.media-grid dl { margin: 0; }
+.media-grid dl div { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr); gap: 0.6rem; padding: 0.45rem 0; border-top: 1px solid var(--line); }
+.media-grid dt { color: var(--muted); font-size: 0.68rem; }
+.media-grid dd { margin: 0; overflow-wrap: anywhere; font-family: 'IBM Plex Mono', 'Cascadia Mono', monospace; font-size: 0.68rem; }
+.media-failure, .media-pending { min-height: 2.8rem; margin: 0.8rem 0 0; font-size: 0.75rem; line-height: 1.55; }
+.media-failure { color: #702a23; }
+.media-pending { color: var(--muted); }
+.media-grid > li > button, .media-pagination button {
+  min-height: 2.6rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--accent-dark);
+  color: var(--accent-dark);
+  background: transparent;
+  cursor: pointer;
+}
+.media-grid > li > button { width: 100%; margin-top: 0.9rem; }
+.media-grid > li > button:hover, .media-grid > li > button[aria-pressed='true'] { color: #fff; background: var(--accent); }
+.media-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 1rem; margin-top: 1.25rem; color: var(--muted); font-size: 0.75rem; }
+
+.selected-media { display: grid; gap: 0.4rem; padding: 0.8rem; border: 1px solid var(--line); background: #fffdf7; }
+.selected-media > span { color: var(--muted); font-size: 0.72rem; font-weight: 700; }
+.selected-media strong { overflow-wrap: anywhere; font-family: 'Noto Serif SC', 'Songti SC', serif; }
+.selected-media small { overflow-wrap: anywhere; color: var(--muted); font-family: 'IBM Plex Mono', 'Cascadia Mono', monospace; font-size: 0.66rem; }
+.selected-media p { margin: 0; color: var(--muted); font-size: 0.78rem; line-height: 1.5; }
+
 .jobs-layout {
   display: grid;
   grid-template-columns: minmax(18rem, 0.72fr) minmax(0, 1.55fr);
@@ -458,6 +510,14 @@ footer { min-height: 4.5rem; border-top: 1px solid var(--line); }
   .timeline-heading { align-items: flex-start; }
   .upload-panel { grid-template-columns: 1fr; box-shadow: 0.35rem 0.35rem 0 var(--paper-deep); }
   .upload-readout { padding: 1.25rem 0 0; border-top: 1px solid var(--line); border-left: 0; }
+  .media-library { padding: 1.25rem 0; }
+  .media-library__heading { padding: 0 1rem; }
+  .media-grid { grid-template-columns: 1fr; }
+  .media-pagination { justify-content: space-between; }
+}
+
+@media (min-width: 761px) and (max-width: 1040px) {
+  .media-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (prefers-reduced-motion: reduce) {
