@@ -20,6 +20,11 @@ public final class DisabledMediaObjectStore implements MediaObjectStore {
     }
 
     @Override
+    public URI signGet(String objectKey, Instant expiresAt) {
+        throw unavailable();
+    }
+
+    @Override
     public StoredObject complete(
             String objectKey,
             String providerUploadId,

@@ -104,6 +104,24 @@ public final class MinioMediaObjectStore implements MediaObjectStore, MediaProbe
     }
 
     @Override
+    public URI signGet(String objectKey, Instant expiresAt) {
+        long seconds = Duration.between(now.get(), expiresAt).toSeconds();
+        if (seconds < 1 || seconds > TimeUnit.DAYS.toSeconds(7)) {
+            throw new MediaStorageException(MediaStorageException.Reason.DEPENDENCY_UNAVAILABLE);
+        }
+        try {
+            return URI.create(signer.getPresignedObjectUrl(GetPresignedObjectUrlArgs.builder()
+                    .method(Http.Method.GET)
+                    .bucket(bucket)
+                    .object(objectKey)
+                    .expiry(Math.toIntExact(seconds))
+                    .build()));
+        } catch (Exception exception) {
+            throw dependency(exception);
+        }
+    }
+
+    @Override
     public StoredObject complete(
             String objectKey,
             String providerUploadId,

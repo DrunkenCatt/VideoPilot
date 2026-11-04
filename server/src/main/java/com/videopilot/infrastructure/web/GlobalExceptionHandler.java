@@ -1,6 +1,7 @@
 package com.videopilot.infrastructure.web;
 
 import com.videopilot.analysis.application.AnalysisJobException;
+import com.videopilot.context.application.VideoContextQueryException;
 import com.videopilot.identity.application.IdentityException;
 import com.videopilot.infrastructure.error.ErrorCode;
 import com.videopilot.infrastructure.error.VideoPilotException;
@@ -57,6 +58,18 @@ public final class GlobalExceptionHandler {
             case CONFLICT -> ErrorCode.CONFLICT;
         };
         LOGGER.warn("Analysis job request failed code={}", errorCode);
+        return response(errorCode, statusFor(errorCode));
+    }
+
+    @ExceptionHandler(VideoContextQueryException.class)
+    ResponseEntity<ApiErrorResponse> handleVideoContextFailure(VideoContextQueryException exception) {
+        ErrorCode errorCode = switch (exception.reason()) {
+            case INVALID_REQUEST -> ErrorCode.INVALID_REQUEST;
+            case NOT_FOUND -> ErrorCode.RESOURCE_NOT_FOUND;
+            case NOT_READY -> ErrorCode.CONFLICT;
+            case DEPENDENCY_UNAVAILABLE -> ErrorCode.DEPENDENCY_UNAVAILABLE;
+        };
+        LOGGER.warn("Video context request failed code={}", errorCode);
         return response(errorCode, statusFor(errorCode));
     }
 

@@ -31,6 +31,7 @@ class VideoContextAlignerTest {
         assertThat(result.getFirst().asrText()).contains("opening");
         assertThat(result.get(1).asrText()).contains("opening");
         assertThat(result.getLast().asrText()).contains("ending");
+        assertThat(result.getFirst().ocrObservations()).doesNotContain("board");
         assertThat(result.get(1).ocrObservations()).contains("board", "ocr/1.json");
         assertThat(result.getLast().ocrObservations()).contains("outside", "ocr/out.json");
         assertThat(result.getFirst().keyframes()).contains("frames/first.jpg");

@@ -11,6 +11,8 @@ public interface MediaObjectStore {
 
     URI signPart(String objectKey, String providerUploadId, int partNumber, Instant expiresAt);
 
+    URI signGet(String objectKey, Instant expiresAt);
+
     StoredObject complete(
             String objectKey,
             String providerUploadId,

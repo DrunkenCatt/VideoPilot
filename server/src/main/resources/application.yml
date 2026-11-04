@@ -123,7 +123,7 @@ videopilot:
       fixed-delay: ${OUTBOX_RELAY_FIXED_DELAY:2s}
       initial-delay: ${OUTBOX_RELAY_INITIAL_DELAY:2s}
   analysis:
-    pipeline-version: ${ANALYSIS_PIPELINE_VERSION:m1-fake-v1}
+    pipeline-version: ${ANALYSIS_PIPELINE_VERSION:m2-context-v1}
     active-cache:
       ttl: ${ANALYSIS_ACTIVE_CACHE_TTL:30m}
   storage:

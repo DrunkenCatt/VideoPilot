@@ -2,6 +2,7 @@ package com.videopilot.infrastructure.messaging;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.videopilot.analysis.application.AnalysisJobExecutionHandler;
+import com.videopilot.analysis.application.AnalysisJobPipeline;
 import com.videopilot.analysis.application.JobTransitionService;
 import com.videopilot.analysis.port.AnalysisMessageFailureRecorder;
 import com.videopilot.analysis.port.JobExecutionLock;
@@ -66,8 +67,9 @@ class AnalysisConsumerConfiguration {
     AnalysisJobExecutionHandler analysisJobExecutionHandler(
             JobTransitionStore store,
             JobTransitionService transitions,
-            JobExecutionLock lock) {
-        return new AnalysisJobExecutionHandler(store, transitions, lock, Clock.systemUTC()::instant);
+            JobExecutionLock lock,
+            AnalysisJobPipeline pipeline) {
+        return new AnalysisJobExecutionHandler(store, transitions, lock, pipeline, Clock.systemUTC()::instant);
     }
 
     @Bean

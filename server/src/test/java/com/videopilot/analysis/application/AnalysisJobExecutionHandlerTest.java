@@ -25,7 +25,7 @@ class AnalysisJobExecutionHandlerTest {
     private static final Instant NOW = Instant.parse("2026-10-31T08:00:00Z");
 
     @Test
-    void advancesTheM1FakePipelineToReadyThroughPersistedStages() {
+    void runsTheM2PipelineAndMovesDirectlyFromContextBuildingToReady() {
         FakeStore store = new FakeStore(job(JobStatus.CREATED, 0, 0));
         AnalysisJobExecutionHandler handler = handler(store, JobExecutionLock.AcquireResult.ACQUIRED);
 
@@ -33,7 +33,7 @@ class AnalysisJobExecutionHandlerTest {
 
         assertThat(result).isEqualTo(AnalysisJobExecutionHandler.Result.ACK);
         assertThat(store.job.status()).isEqualTo(JobStatus.READY);
-        assertThat(store.commits).hasSize(6);
+        assertThat(store.commits).hasSize(5);
         assertThat(store.commits.get(1).stageAttempt()).get().satisfies(stage -> {
             assertThat(stage.stage()).isEqualTo(JobStage.CONSUMPTION);
             assertThat(stage.inputFingerprint()).hasSize(64);
@@ -44,8 +44,9 @@ class AnalysisJobExecutionHandlerTest {
                 .containsExactly(
                         JobStage.CONSUMPTION,
                         JobStage.PROBING,
-                        JobStage.CONTEXT_BUILDING,
-                        JobStage.INDEXING);
+                        JobStage.CONTEXT_BUILDING);
+        assertThat(store.commits.getLast().expectedStatus()).isEqualTo(JobStatus.CONTEXT_BUILDING);
+        assertThat(store.commits.getLast().event().eventType()).isEqualTo(JobEventType.JOB_READY);
     }
 
     @Test
@@ -56,7 +57,7 @@ class AnalysisJobExecutionHandlerTest {
         assertThat(handler.handle(message())).isEqualTo(AnalysisJobExecutionHandler.Result.ACK);
         assertThat(handler.handle(message())).isEqualTo(AnalysisJobExecutionHandler.Result.ACK);
 
-        assertThat(store.commits).hasSize(6);
+        assertThat(store.commits).hasSize(5);
     }
 
     @Test
@@ -87,7 +88,7 @@ class AnalysisJobExecutionHandlerTest {
         assertThat(handler.handle(message())).isEqualTo(AnalysisJobExecutionHandler.Result.ACK);
 
         assertThat(store.job.status()).isEqualTo(JobStatus.READY);
-        assertThat(store.commits).hasSize(6);
+        assertThat(store.commits).hasSize(5);
     }
 
     @Test
@@ -96,6 +97,22 @@ class AnalysisJobExecutionHandlerTest {
         AnalysisJobExecutionHandler handler = handler(store, JobExecutionLock.AcquireResult.ACQUIRED);
 
         assertThat(handler.handle(message())).isEqualTo(AnalysisJobExecutionHandler.Result.DEAD_LETTER);
+        assertThat(store.commits).isEmpty();
+    }
+
+    @Test
+    void retriesWithoutAdvancingWhenContextWorkIsStillPending() {
+        FakeStore store = new FakeStore(job(JobStatus.CONTEXT_BUILDING, 4, 4));
+        JobTransitionService transitions = new JobTransitionService(
+                store,
+                org.mockito.Mockito.mock(com.videopilot.analysis.port.ActiveAnalysisJobCache.class),
+                new JobStateMachine(),
+                () -> NOW);
+        AnalysisJobExecutionHandler handler = new AnalysisJobExecutionHandler(
+                store, transitions, jobId -> JobExecutionLock.LockAttempt.unavailable(),
+                (job, requestId) -> AnalysisJobPipeline.Outcome.retry(), () -> NOW);
+
+        assertThat(handler.handle(message())).isEqualTo(AnalysisJobExecutionHandler.Result.RETRY);
         assertThat(store.commits).isEmpty();
     }
 
@@ -119,11 +136,18 @@ class AnalysisJobExecutionHandlerTest {
                 org.mockito.Mockito.mock(com.videopilot.analysis.port.ActiveAnalysisJobCache.class),
                 new JobStateMachine(),
                 () -> NOW);
+        AnalysisJobPipeline pipeline = (job, requestId) -> {
+            transitions.transition(new JobTransitionCommand(
+                    job.jobId(), JobStatus.CONTEXT_BUILDING, job.version(), JobStatus.READY,
+                    Optional.empty(), Optional.empty(), JobEventType.JOB_READY, requestId,
+                    "{\"status\":\"READY\"}"));
+            return AnalysisJobPipeline.Outcome.completed();
+        };
         return new AnalysisJobExecutionHandler(store, transitions, jobId -> switch (lockResult) {
             case ACQUIRED -> JobExecutionLock.LockAttempt.acquired(() -> { });
             case BUSY -> JobExecutionLock.LockAttempt.busy();
             case UNAVAILABLE -> JobExecutionLock.LockAttempt.unavailable();
-        }, () -> NOW);
+        }, pipeline, () -> NOW);
     }
 
     private AnalysisDispatchMessage message() {

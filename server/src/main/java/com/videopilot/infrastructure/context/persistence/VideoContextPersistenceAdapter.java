@@ -1,5 +1,7 @@
 package com.videopilot.infrastructure.context.persistence;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.videopilot.context.domain.ContextChannelState;
 import com.videopilot.context.domain.ContextWorkItem;
 import com.videopilot.context.domain.ContextWorkItemKind;
@@ -18,9 +20,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class VideoContextPersistenceAdapter implements VideoContextStore {
 
     private final VideoContextMapper mapper;
+    private final ObjectMapper json;
 
-    VideoContextPersistenceAdapter(VideoContextMapper mapper) {
+    VideoContextPersistenceAdapter(VideoContextMapper mapper, ObjectMapper json) {
         this.mapper = mapper;
+        this.json = json;
     }
 
     @Override
@@ -54,6 +58,46 @@ public class VideoContextPersistenceAdapter implements VideoContextStore {
     }
 
     @Override
+    public Optional<VideoContext> findContextByJob(OwnerId ownerId, UUID jobId) {
+        return Optional.ofNullable(mapper.selectOwnedContextByJob(
+                        ownerId.value().toString(), jobId.toString()))
+                .map(this::toDomain);
+    }
+
+    @Override
+    public List<com.videopilot.context.domain.VideoSegment> findSegments(
+            OwnerId ownerId, UUID contextId, long cursor, long fromMs, long toMs, int limit) {
+        return mapper.selectOwnedSegments(ownerId.value().toString(), contextId.toString(),
+                        cursor, fromMs, toMs, limit).stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
+    public Optional<KeyframeArtifact> findKeyframe(OwnerId ownerId, UUID jobId, UUID keyframeId) {
+        VideoSegmentRow row = mapper.selectOwnedKeyframeSegment(
+                ownerId.value().toString(), jobId.toString(), keyframeId.toString());
+        if (row == null) return Optional.empty();
+        try {
+            for (JsonNode value : json.readTree(row.getKeyframes())) {
+                if (keyframeId.toString().equals(value.path("keyframeId").asText())) {
+                    return Optional.of(new KeyframeArtifact(
+                            keyframeId, value.path("timestampMs").asLong(), value.path("sourceRef").asText()));
+                }
+            }
+            return Optional.empty();
+        } catch (java.io.IOException exception) {
+            throw new IllegalStateException("stored keyframe metadata is invalid", exception);
+        }
+    }
+
+    @Override
+    public Optional<String> findStartedContextStageFingerprint(OwnerId ownerId, UUID jobId) {
+        return Optional.ofNullable(mapper.selectStartedContextStageFingerprint(
+                ownerId.value().toString(), jobId.toString()));
+    }
+
+    @Override
     public Optional<ContextWorkItem> findWorkItem(OwnerId ownerId, UUID workItemId) {
         return Optional.ofNullable(mapper.selectOwnedWorkItem(ownerId.value().toString(), workItemId.toString()))
                 .map(this::toDomain);
@@ -81,7 +125,7 @@ public class VideoContextPersistenceAdapter implements VideoContextStore {
     public List<CompletedWorkArtifact> findCompletedArtifacts(OwnerId ownerId, UUID mediaId, String kind) {
         return mapper.selectCompletedArtifacts(ownerId.value().toString(), mediaId.toString(), kind).stream()
                 .map(row -> new CompletedWorkArtifact(
-                        toDomain(row), row.getArtifactRef(), row.getArtifactDigest()))
+                        toDomain(row), row.getArtifactRef(), row.getArtifactDigest(), row.getCheckpointPayload()))
                 .toList();
     }
 
@@ -203,5 +247,12 @@ public class VideoContextPersistenceAdapter implements VideoContextStore {
                 ContextWorkItemStatus.valueOf(row.getStatus()), row.getAttempt(),
                 Optional.ofNullable(row.getClaimId()).map(UUID::fromString),
                 Boolean.TRUE.equals(row.getRetryable()), row.getVersion(), row.getUpdatedAt());
+    }
+
+    private com.videopilot.context.domain.VideoSegment toDomain(VideoSegmentRow row) {
+        return new com.videopilot.context.domain.VideoSegment(
+                UUID.fromString(row.getSegmentId()), row.getOrdinal(), row.getStartMs(), row.getEndMs(),
+                Optional.ofNullable(row.getAsrText()), row.getOcrObservations(), row.getKeyframes(),
+                row.getContentDigest());
     }
 }

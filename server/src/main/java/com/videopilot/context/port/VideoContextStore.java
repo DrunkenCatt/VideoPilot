@@ -16,6 +16,15 @@ public interface VideoContextStore {
 
     Optional<VideoContext> findContext(OwnerId ownerId, UUID contextId);
 
+    Optional<VideoContext> findContextByJob(OwnerId ownerId, UUID jobId);
+
+    List<VideoSegment> findSegments(
+            OwnerId ownerId, UUID contextId, long cursor, long fromMs, long toMs, int limit);
+
+    Optional<KeyframeArtifact> findKeyframe(OwnerId ownerId, UUID jobId, UUID keyframeId);
+
+    Optional<String> findStartedContextStageFingerprint(OwnerId ownerId, UUID jobId);
+
     Optional<ContextWorkItem> findWorkItem(OwnerId ownerId, UUID workItemId);
 
     boolean claim(OwnerId ownerId, UUID workItemId, long expectedVersion, UUID claimId,
@@ -148,7 +157,14 @@ public interface VideoContextStore {
             Instant failedAt) {
     }
 
-    record CompletedWorkArtifact(ContextWorkItem workItem, String artifactRef, String artifactDigest) {
+    record CompletedWorkArtifact(
+            ContextWorkItem workItem,
+            String artifactRef,
+            String artifactDigest,
+            String checkpointPayload) {
+    }
+
+    record KeyframeArtifact(UUID keyframeId, long timestampMs, String sourceRef) {
     }
 
     record ModelCallStart(

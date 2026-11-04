@@ -71,6 +71,67 @@ interface VideoContextMapper {
     VideoContextRow selectOwnedContext(@Param("ownerId") String ownerId, @Param("contextId") String contextId);
 
     @Select("""
+            SELECT context.*
+            FROM video_context context
+            INNER JOIN analysis_job job ON job.job_id = context.source_job_id
+            WHERE job.owner_id = #{ownerId} AND context.source_job_id = #{jobId}
+            """)
+    VideoContextRow selectOwnedContextByJob(
+            @Param("ownerId") String ownerId,
+            @Param("jobId") String jobId);
+
+    @Select("""
+            SELECT segment.*
+            FROM video_segment segment
+            INNER JOIN video_context context ON context.context_id = segment.context_id
+            INNER JOIN analysis_job job ON job.job_id = context.source_job_id
+            WHERE job.owner_id = #{ownerId}
+              AND context.context_id = #{contextId}
+              AND context.status = 'READY'
+              AND segment.ordinal > #{cursor}
+              AND segment.end_ms > #{fromMs}
+              AND segment.start_ms < #{toMs}
+            ORDER BY segment.ordinal
+            LIMIT #{limit}
+            """)
+    List<VideoSegmentRow> selectOwnedSegments(
+            @Param("ownerId") String ownerId,
+            @Param("contextId") String contextId,
+            @Param("cursor") long cursor,
+            @Param("fromMs") long fromMs,
+            @Param("toMs") long toMs,
+            @Param("limit") int limit);
+
+    @Select("""
+            SELECT segment.*
+            FROM video_segment segment
+            INNER JOIN video_context context ON context.context_id = segment.context_id
+            INNER JOIN analysis_job job ON job.job_id = context.source_job_id
+            WHERE job.owner_id = #{ownerId}
+              AND context.source_job_id = #{jobId}
+              AND context.status = 'READY'
+              AND JSON_SEARCH(segment.keyframes, 'one', #{keyframeId}, NULL, '$[*].keyframeId') IS NOT NULL
+            LIMIT 1
+            """)
+    VideoSegmentRow selectOwnedKeyframeSegment(
+            @Param("ownerId") String ownerId,
+            @Param("jobId") String jobId,
+            @Param("keyframeId") String keyframeId);
+
+    @Select("""
+            SELECT stage.input_fingerprint
+            FROM job_stage_attempt stage
+            INNER JOIN analysis_job job ON job.job_id = stage.job_id
+            WHERE job.owner_id = #{ownerId}
+              AND stage.job_id = #{jobId}
+              AND stage.stage = 'CONTEXT_BUILDING'
+              AND stage.status = 'STARTED'
+            """)
+    String selectStartedContextStageFingerprint(
+            @Param("ownerId") String ownerId,
+            @Param("jobId") String jobId);
+
+    @Select("""
             SELECT item.*
             FROM context_work_item item
             INNER JOIN analysis_job job ON job.job_id = item.created_by_job_id

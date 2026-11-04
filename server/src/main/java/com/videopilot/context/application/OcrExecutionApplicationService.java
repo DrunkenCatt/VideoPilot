@@ -74,8 +74,8 @@ public final class OcrExecutionApplicationService {
     }
 
     public OcrOutcome recognize(OwnerContext owner, UUID jobId, UUID mediaId) {
-        List<VideoContextStore.CompletedWorkArtifact> frames = store.findCompletedArtifacts(
-                owner.ownerId(), mediaId, ContextWorkItemKind.KEYFRAME.name());
+        List<FrameSource> frames = expandFrames(store.findCompletedArtifacts(
+                owner.ownerId(), mediaId, ContextWorkItemKind.KEYFRAME.name()));
         if (frames.isEmpty()) return OcrOutcome.NOT_READY;
         boolean executed = false;
         boolean failed = false;
@@ -116,21 +116,20 @@ public final class OcrExecutionApplicationService {
     }
 
     private ContextWorkItem ensureOcrItem(
-            OwnerContext owner, UUID jobId, VideoContextStore.CompletedWorkArtifact source) {
-        ContextWorkItem frame = source.workItem();
+            OwnerContext owner, UUID jobId, FrameSource source) {
         OcrPort.EngineIdentity identity = ocr.identity();
         String modelVersion = identity.binaryVersion() + "+" + identity.languagePackDigest();
         String fingerprint = ContextInputFingerprint.sha256(new ContextWorkSpec(
                 source.artifactDigest(), "ocr-v1", language, modelVersion,
-                ContextWorkItemKind.OCR_FRAME, frame.startMs(), frame.endMs(),
-                Map.of("sourceFingerprint", frame.inputFingerprint())));
+                ContextWorkItemKind.OCR_FRAME, source.timestampMs(), source.timestampMs() + 1,
+                Map.of("sourceFingerprint", source.sourceFingerprint())));
         return store.createOrReuseWorkItem(owner.ownerId(), new VideoContextStore.WorkItemPlan(
-                ids.get(), frame.mediaId(), jobId, ContextWorkItemKind.OCR_FRAME.name(), frame.ordinal(),
-                frame.startMs(), frame.endMs(), fingerprint, clock.instant()));
+                ids.get(), source.mediaId(), jobId, ContextWorkItemKind.OCR_FRAME.name(), source.ordinal(),
+                source.timestampMs(), source.timestampMs() + 1, fingerprint, clock.instant()));
     }
 
     private FrameOutcome executeOne(
-            OwnerContext owner, VideoContextStore.CompletedWorkArtifact source, ContextWorkItem item) {
+            OwnerContext owner, FrameSource source, ContextWorkItem item) {
         Instant startedAt = clock.instant();
         UUID claimId = ids.get();
         if (!store.claim(owner.ownerId(), item.workItemId(), item.version(), claimId,
@@ -178,6 +177,33 @@ public final class OcrExecutionApplicationService {
         } finally {
             if (workspace != null) deleteWorkspace(workspace);
         }
+    }
+
+    private List<FrameSource> expandFrames(List<VideoContextStore.CompletedWorkArtifact> artifacts) {
+        List<FrameSource> frames = new java.util.ArrayList<>();
+        for (var artifact : artifacts) {
+            try {
+                var checkpoint = json.readTree(artifact.checkpointPayload());
+                if (checkpoint.has("frames")) {
+                    int ordinal = 0;
+                    for (var frame : checkpoint.path("frames")) {
+                        String digest = frame.path("sha256").asText();
+                        String objectKey = frame.path("objectKey").asText();
+                        if (!digest.matches("[0-9a-f]{64}") || objectKey.isBlank()) continue;
+                        frames.add(new FrameSource(
+                                artifact.workItem().mediaId(), ordinal++, frame.path("timestampMs").asLong(),
+                                artifact.workItem().inputFingerprint() + ':' + digest, objectKey, digest));
+                    }
+                    continue;
+                }
+            } catch (IOException exception) {
+                LOGGER.warn("Keyframe checkpoint could not be expanded; using its direct artifact");
+            }
+            frames.add(new FrameSource(
+                    artifact.workItem().mediaId(), artifact.workItem().ordinal(), artifact.workItem().startMs(),
+                    artifact.workItem().inputFingerprint(), artifact.artifactRef(), artifact.artifactDigest()));
+        }
+        return List.copyOf(frames);
     }
 
     private FrameOutcome recordFailure(
@@ -289,5 +315,14 @@ public final class OcrExecutionApplicationService {
         RETRY_PENDING,
         DEGRADED,
         CANCELED
+    }
+
+    private record FrameSource(
+            UUID mediaId,
+            int ordinal,
+            long timestampMs,
+            String sourceFingerprint,
+            String artifactRef,
+            String artifactDigest) {
     }
 }

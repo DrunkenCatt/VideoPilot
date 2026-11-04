@@ -3,6 +3,8 @@ package com.videopilot.infrastructure.context.persistence;
 import com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration;
 import com.videopilot.context.application.VideoContextApplicationService;
 import com.videopilot.context.application.ContextDerivationApplicationService;
+import com.videopilot.context.application.VideoContextQueryApplicationService;
+import com.videopilot.media.port.MediaObjectStore;
 import com.videopilot.infrastructure.context.derivation.ContextDerivationProperties;
 import com.videopilot.infrastructure.context.derivation.FfmpegMediaDeriver;
 import com.videopilot.infrastructure.media.persistence.MediaUploadAutoConfiguration;
@@ -28,8 +30,8 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 public class VideoContextAutoConfiguration {
 
     @Bean
-    VideoContextPersistenceAdapter videoContextPersistenceAdapter(VideoContextMapper mapper) {
-        return new VideoContextPersistenceAdapter(mapper);
+    VideoContextPersistenceAdapter videoContextPersistenceAdapter(VideoContextMapper mapper, ObjectMapper json) {
+        return new VideoContextPersistenceAdapter(mapper, json);
     }
 
     @Bean
@@ -37,6 +39,16 @@ public class VideoContextAutoConfiguration {
             VideoContextPersistenceAdapter store,
             @Value("${videopilot.context.work-item-stale-after:5m}") Duration staleAfter) {
         return new VideoContextApplicationService(store, staleAfter, Clock.systemUTC(), UUID::randomUUID);
+    }
+
+    @Bean
+    VideoContextQueryApplicationService videoContextQueryApplicationService(
+            VideoContextPersistenceAdapter contexts,
+            MediaUploadPersistenceAdapter media,
+            MediaObjectStore objects,
+            @Value("${videopilot.context.access-url-ttl:5m}") Duration accessTtl) {
+        return new VideoContextQueryApplicationService(
+                contexts, media, objects, Clock.systemUTC(), accessTtl);
     }
 
     @Bean

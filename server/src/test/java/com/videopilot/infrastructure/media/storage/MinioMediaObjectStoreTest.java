@@ -69,6 +69,18 @@ class MinioMediaObjectStoreTest {
     }
 
     @Test
+    void presignsShortLivedGetAccessWithoutReadingTheObject() throws Exception {
+        when(signer.getPresignedObjectUrl(any()))
+                .thenReturn("http://localhost:9000/media/object?signature=get");
+
+        assertThat(store.signGet("owner/media/source", NOW.plusSeconds(300)).toString())
+                .contains("signature=get");
+
+        verify(signer).getPresignedObjectUrl(any());
+        verify(client, never()).getObject(any());
+    }
+
+    @Test
     void completesOnlyTheExactServerListedPartsAndReadsStoredMetadata() {
         ListPartsResponse listed = mock(ListPartsResponse.class);
         ListPartsResult result = mock(ListPartsResult.class);

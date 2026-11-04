@@ -20,21 +20,24 @@ import java.util.function.Supplier;
 public final class AnalysisJobExecutionHandler {
 
     private static final int MAX_TRANSITION_ATTEMPTS = 12;
-    private static final String FINGERPRINT_VERSION = "m1-fake-pipeline-v1";
+    private static final String FINGERPRINT_VERSION = "m2-context-pipeline-v1";
 
     private final JobTransitionStore store;
     private final JobTransitionService transitions;
     private final JobExecutionLock lock;
+    private final AnalysisJobPipeline pipeline;
     private final Supplier<Instant> now;
 
     public AnalysisJobExecutionHandler(
             JobTransitionStore store,
             JobTransitionService transitions,
             JobExecutionLock lock,
+            AnalysisJobPipeline pipeline,
             Supplier<Instant> now) {
         this.store = store;
         this.transitions = transitions;
         this.lock = lock;
+        this.pipeline = pipeline;
         this.now = now;
     }
 
@@ -56,6 +59,9 @@ public final class AnalysisJobExecutionHandler {
             if (job == null) {
                 return Result.DEAD_LETTER;
             }
+            if (job.status() == JobStatus.CONTEXT_BUILDING) {
+                return executeContextPipeline(job, message.requestId());
+            }
             boolean advanced = switch (job.status()) {
                 case CREATED -> transitionCreatedToQueued(job, message.requestId());
                 case QUEUED -> transitionToStage(
@@ -64,13 +70,12 @@ public final class AnalysisJobExecutionHandler {
                         job, JobStatus.PROBING, JobStage.PROBING, message.requestId());
                 case PROBING -> transitionToStage(
                         job, JobStatus.CONTEXT_BUILDING, JobStage.CONTEXT_BUILDING, message.requestId());
-                case CONTEXT_BUILDING -> transitionToStage(
-                        job, JobStatus.INDEXING, JobStage.INDEXING, message.requestId());
-                case INDEXING -> transitionToReady(job, message.requestId());
+                case CONTEXT_BUILDING -> false;
+                case INDEXING -> false;
                 case CANCEL_REQUESTED -> transitionToCanceled(job, message.requestId());
                 default -> false;
             };
-            if (!advanced && isPipelineStatus(job.status())) {
+            if (!advanced && isTransitioningStatus(job.status())) {
                 continue;
             }
             if (!advanced) {
@@ -116,17 +121,16 @@ public final class AnalysisJobExecutionHandler {
                 "{\"stage\":\"" + stageName.name() + "\",\"status\":\"STARTED\"}"));
     }
 
-    private boolean transitionToReady(AnalysisJob job, String requestId) {
-        return transition(new JobTransitionCommand(
-                job.jobId(),
-                JobStatus.INDEXING,
-                job.version(),
-                JobStatus.READY,
-                Optional.empty(),
-                Optional.empty(),
-                JobEventType.JOB_READY,
-                requestId,
-                "{\"status\":\"READY\"}"));
+    private Result executeContextPipeline(AnalysisJob job, String requestId) {
+        AnalysisJobPipeline.Outcome outcome = pipeline.execute(job, requestId);
+        return switch (outcome.state()) {
+            case COMPLETED -> Result.ACK;
+            case RETRY -> Result.RETRY;
+            case FAILED -> transition(new JobTransitionCommand(
+                    job.jobId(), JobStatus.CONTEXT_BUILDING, job.version(), JobStatus.FAILED,
+                    Optional.empty(), outcome.failure(), JobEventType.JOB_FAILED, requestId,
+                    "{\"status\":\"FAILED\"}")) ? Result.ACK : Result.RETRY;
+        };
     }
 
     private boolean transitionToCanceled(AnalysisJob job, String requestId) {
@@ -151,9 +155,9 @@ public final class AnalysisJobExecutionHandler {
         }
     }
 
-    private boolean isPipelineStatus(JobStatus status) {
+    private boolean isTransitioningStatus(JobStatus status) {
         return switch (status) {
-            case CREATED, QUEUED, CONSUMING, PROBING, CONTEXT_BUILDING, INDEXING, CANCEL_REQUESTED -> true;
+            case CREATED, QUEUED, CONSUMING, PROBING, CANCEL_REQUESTED -> true;
             default -> false;
         };
     }

@@ -50,6 +50,7 @@ final class ContextWorkItemRow {
     private String claimId;
     private String artifactRef;
     private String artifactDigest;
+    private String checkpointPayload;
     private Boolean retryable;
     private long version;
     private Instant updatedAt;
@@ -67,7 +68,28 @@ final class ContextWorkItemRow {
     String getClaimId() { return claimId; }
     String getArtifactRef() { return artifactRef; }
     String getArtifactDigest() { return artifactDigest; }
+    String getCheckpointPayload() { return checkpointPayload; }
     Boolean getRetryable() { return retryable; }
     long getVersion() { return version; }
     Instant getUpdatedAt() { return updatedAt; }
+}
+
+final class VideoSegmentRow {
+    private String segmentId;
+    private int ordinal;
+    private long startMs;
+    private long endMs;
+    private String asrText;
+    private String ocrObservations;
+    private String keyframes;
+    private String contentDigest;
+
+    String getSegmentId() { return segmentId; }
+    int getOrdinal() { return ordinal; }
+    long getStartMs() { return startMs; }
+    long getEndMs() { return endMs; }
+    String getAsrText() { return asrText; }
+    String getOcrObservations() { return ocrObservations; }
+    String getKeyframes() { return keyframes; }
+    String getContentDigest() { return contentDigest; }
 }

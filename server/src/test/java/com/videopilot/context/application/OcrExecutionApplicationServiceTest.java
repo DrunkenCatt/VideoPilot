@@ -140,6 +140,33 @@ class OcrExecutionApplicationServiceTest {
         verify(store, never()).startOcrCall(any());
     }
 
+    @Test
+    void expandsTheDerivedKeyframeManifestBeforeRunningOcr() throws Exception {
+        VideoContextStore store = mock(VideoContextStore.class);
+        DerivedMediaStore objects = mock(DerivedMediaStore.class);
+        OcrPort ocr = mock(OcrPort.class);
+        var manifest = keyframe(0, 0);
+        manifest = new VideoContextStore.CompletedWorkArtifact(
+                manifest.workItem(), manifest.artifactRef(), manifest.artifactDigest(),
+                "{\"frames\":[{\"timestampMs\":2500,\"objectKey\":\"derived/frame-real.jpg\",\"sha256\":\""
+                        + "f".repeat(64) + "\"}]}");
+        when(store.findCompletedArtifacts(OWNER.ownerId(), MEDIA_ID, "KEYFRAME")).thenReturn(List.of(manifest));
+        when(store.createOrReuseWorkItem(eq(OWNER.ownerId()), any()))
+                .thenReturn(ocrItem(0, 2_500, ContextWorkItemStatus.COMPLETED, 1, 2));
+        when(ocr.identity()).thenReturn(new OcrPort.EngineIdentity("tesseract 5.5.1", "d".repeat(64)));
+
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            assertThat(service(store, objects, ocr, executor).recognize(OWNER, JOB_ID, MEDIA_ID))
+                    .isEqualTo(OcrExecutionApplicationService.OcrOutcome.REUSED);
+        }
+
+        ArgumentCaptor<VideoContextStore.WorkItemPlan> plan =
+                ArgumentCaptor.forClass(VideoContextStore.WorkItemPlan.class);
+        verify(store).createOrReuseWorkItem(eq(OWNER.ownerId()), plan.capture());
+        assertThat(plan.getValue().startMs()).isEqualTo(2_500);
+        assertThat(plan.getValue().endMs()).isEqualTo(2_501);
+    }
+
     private OcrExecutionApplicationService service(
             VideoContextStore store,
             DerivedMediaStore objects,
@@ -155,7 +182,7 @@ class OcrExecutionApplicationServiceTest {
                 new ContextWorkItem(UUID.randomUUID(), MEDIA_ID, JOB_ID, ContextWorkItemKind.KEYFRAME,
                         ordinal, timestampMs, timestampMs + 1, "a".repeat(64),
                         ContextWorkItemStatus.COMPLETED, 1, Optional.empty(), false, 2, NOW),
-                "derived/frame-" + ordinal + ".jpg", "b".repeat(64));
+                "derived/frame-" + ordinal + ".jpg", "b".repeat(64), "{}");
     }
 
     private ContextWorkItem ocrItem(

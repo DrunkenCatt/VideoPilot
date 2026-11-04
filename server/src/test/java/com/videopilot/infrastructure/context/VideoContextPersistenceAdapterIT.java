@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.videopilot.context.application.VideoContextApplicationService;
+import com.videopilot.context.application.VideoContextQueryApplicationService;
+import com.videopilot.context.application.VideoContextQueryException;
 import com.videopilot.context.application.VideoContextApplicationService.CompleteCommand;
 import com.videopilot.context.application.VideoContextApplicationService.PrepareCommand;
 import com.videopilot.context.application.VideoContextApplicationService.PublishCommand;
@@ -41,6 +43,9 @@ class VideoContextPersistenceAdapterIT {
 
     @Autowired
     private VideoContextApplicationService service;
+
+    @Autowired
+    private VideoContextQueryApplicationService queries;
 
     @Autowired
     private JdbcClient jdbcClient;
@@ -198,6 +203,25 @@ class VideoContextPersistenceAdapterIT {
                 .isZero();
     }
 
+    @Test
+    void readySegmentsAreCursorPagedAndOwnerScopedByJob() {
+        var plan = prepare();
+        insertContextStage(plan.context().inputFingerprint());
+        service.publish(owner(), publication(plan.context().contextId(), plan.context().inputFingerprint(),
+                List.of(segment(UUID.randomUUID(), 0), segment(UUID.randomUUID(), 1))));
+
+        var page = queries.segments(owner(), jobId, null, 1, 0L, 60_000L);
+
+        assertThat(page.data()).extracting(VideoSegment::ordinal).containsExactly(0);
+        assertThat(page.nextCursor()).contains(0L);
+        assertThat(page.hasMore()).isTrue();
+        OwnerContext foreign = new OwnerContext(new OwnerId(UUID.randomUUID()));
+        assertThatThrownBy(() -> queries.get(foreign, jobId))
+                .isInstanceOfSatisfying(VideoContextQueryException.class,
+                        failure -> assertThat(failure.reason())
+                                .isEqualTo(VideoContextQueryException.Reason.NOT_FOUND));
+    }
+
     private com.videopilot.context.port.VideoContextStore.PlanResult prepare() {
         return service.prepare(owner(), command("extract-v1"));
     }
@@ -229,7 +253,8 @@ class VideoContextPersistenceAdapterIT {
 
     private VideoSegment segment(UUID segmentId, int ordinal) {
         return new VideoSegment(
-                segmentId, ordinal, 0, 30_000, Optional.of("lesson text"), "[]", "[]", "f".repeat(64));
+                segmentId, ordinal, ordinal * 30_000L, (ordinal + 1) * 30_000L,
+                Optional.of("lesson text"), "[]", "[]", "f".repeat(64));
     }
 
     private void insertContextStage(String fingerprint) {

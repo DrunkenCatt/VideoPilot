@@ -1,6 +1,6 @@
 # M2 任务清单：时序多模态 VideoContext
 
-> 状态：M1 已于 2026-11-04 获负责人确认退出；M2 的 T0-T4 已完成，下一任务为 T5。任务按依赖顺序执行，每项先写失败测试或可执行验收场景，再写生产代码。目标是最小可用 VideoContext，不提前实现 M3。
+> 状态：M1 已于 2026-11-04 获负责人确认退出；M2 的 T0-T5 已完成，下一任务为 T6。任务按依赖顺序执行，每项先写失败测试或可执行验收场景，再写生产代码。目标是最小可用 VideoContext，不提前实现 M3。
 
 ## T0：冻结 M2 验收合同、真实样本与状态语义
 
@@ -80,14 +80,15 @@
 
 ## T5：对齐并发布可查询 VideoContext
 
-- [ ] 用确定性对齐规则把 TranscriptSegment、OCR 观察和关键帧合并为有序 `VideoSegment`；覆盖 `[0, durationMs]`，裁剪越界时间，保留来源引用和通道状态，不在 M2 生成 `VideoChunk`。
-- [ ] 在同一完成事务中持久化最终 Segment、Context 版本/摘要/降级状态、completed Checkpoint、JobEvent，并经统一 `JobTransitionService` 从 `CONTEXT_BUILDING` 进入 `READY`。
-- [ ] 提供 owner-scoped Context 摘要和按时间窗/游标读取 Segment 的 application service + REST API；提供 owner 校验后的原视频/关键帧短期 GET URL，链接过期可重新申请。
-- [ ] 替换 M1 fake handler：真实编排只执行尚未完成的步骤；取消、失败、CAS 冲突和重复消息继续沿现有 MQ ACK/retry/DLQ 语义收敛。继续把 Redisson Job 锁视为减冲突优化，`UNAVAILABLE` 时回到 MySQL 裁决；M2 不增加 Checkpoint 缓存或 Redis Pub/Sub。
+- [x] 用确定性对齐规则把 TranscriptSegment、OCR 观察和关键帧合并为有序 `VideoSegment`；覆盖 `[0, durationMs]`，裁剪越界时间，保留来源引用和通道状态，不在 M2 生成 `VideoChunk`。
+- [x] 在同一完成事务中持久化最终 Segment、Context 版本/摘要/降级状态、completed Checkpoint、JobEvent，并经统一 `JobTransitionService` 从 `CONTEXT_BUILDING` 进入 `READY`。
+- [x] 提供 owner-scoped Context 摘要和按时间窗/游标读取 Segment 的 application service + REST API；提供 owner 校验后的原视频/关键帧短期 GET URL，链接过期可重新申请。
+- [x] 替换 M1 fake handler：真实编排只执行尚未完成的步骤；取消、失败、CAS 冲突和重复消息继续沿现有 MQ ACK/retry/DLQ 语义收敛。继续把 Redisson Job 锁视为减冲突优化，`UNAVAILABLE` 时回到 MySQL 裁决；M2 不增加 Checkpoint 缓存或 Redis Pub/Sub。
 - **验收标准**：Segment 时间窗合法、单调且无重复 ordinal；Context 只发布一次；跨 owner 一律不泄露存在性；READY 事件不声称 INDEXING；完整转录/模型输出不进入 MQ。
 - **验证**：对齐规则单测、Context 完成事务/状态机/owner API 集成测试、重复消息测试；`server\mvnw.cmd test` 和相关 `verify -Pintegration`。
 - **预计改动区域**：context application/domain/persistence、analysis handler/transition、web contract/controller、对应测试。
 - **依赖/规模**：T3、T4 / M。
+- **完成记录（2026-11-04）**：新增固定 60 秒确定性对齐器，按可信时长生成连续 Segment，裁剪越界 ASR/OCR/关键帧并保留产物引用；修正关键帧 manifest 必须展开为逐帧 OCR 工作项。真实 M2 pipeline 复用派生、ASR、OCR Checkpoint，只在未完成时执行，并在同一事务发布 Context/Segment/Checkpoint 后通过统一状态服务直接写入 READY JobEvent，不产生 INDEXING 事实。新增 owner-scoped Context/Segment 查询以及原视频/关键帧短期 GET URL，跨 owner 统一隐藏为 404。Redisson 仍只做减冲突锁，MySQL CAS/Checkpoint 是唯一恢复裁决；未增加 Redis Context 缓存或 Pub/Sub。
 
 ## T6：交付视频播放器与统一时间轴
 

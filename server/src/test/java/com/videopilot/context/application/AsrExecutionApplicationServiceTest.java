@@ -191,7 +191,7 @@ class AsrExecutionApplicationServiceTest {
                 new ContextWorkItem(UUID.randomUUID(), MEDIA_ID, JOB_ID, ContextWorkItemKind.AUDIO_SLICE,
                         0, 60_000, 62_500, FINGERPRINT, ContextWorkItemStatus.COMPLETED,
                         1, Optional.empty(), false, 2, NOW),
-                "derived/audio-0.wav", "b".repeat(64));
+                "derived/audio-0.wav", "b".repeat(64), "{}");
     }
 
     private ContextWorkItem asrItem(ContextWorkItemStatus status, int attempt, long version) {

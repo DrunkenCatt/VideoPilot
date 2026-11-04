@@ -4,7 +4,7 @@
 
 - 里程碑：M2 时序多模态 VideoContext
 - 合同冻结日期：2026-11-04
-- 当前阶段：T0-T4 已完成；下一任务为 T5 对齐并发布可查询 VideoContext
+- 当前阶段：T0-T5 已完成；下一任务为 T6 播放器与统一时间轴
 - 范围：FFmpeg 派生、TeleSpeechASR、Tesseract OCR、VideoSegment/VideoContext、分片 Checkpoint、owner-scoped 查询、播放器与统一时间轴
 - 排除：VideoChunk、Embedding、Qdrant、检索、问答、章节、Agent、完整 Manual Replay
 
@@ -199,3 +199,12 @@ MVP ASR 的完整身份为 SiliconFlow 托管模型 `TeleAI/TeleSpeechASR`，不
 - 审计字段：成功调用记录 Tesseract 二进制版本与语言包摘要、图片像素、文本字符、耗时、`estimated_cost=0`、`currency=USD`、`price_version=local-zero-v1` 和 `price_status=AVAILABLE`。
 - Redis 边界：OCR application/domain/infrastructure context 路径未引入 Redis；工作项、attempt、结果引用和审计均以 MySQL 为准，完整 OCR 文本写入受控对象产物和 MySQL Checkpoint，不进入 Redis 或消息。
 - 范围说明：T4 产出 OCR 通道结果与 `DEGRADED` 编排结论；把通道状态发布到最终 Context、生成 VideoSegment 并推进 Job READY 属于 T5。
+
+## 10. T5 自动化证据
+
+- 对齐 RED/GREEN：`VideoContextAlignerTest` 先因实现缺失失败；实现后验证 60 秒窗口完整覆盖可信时长、首尾裁剪、边界观察只进入一个 Segment、ordinal 单调以及内容摘要/标识稳定。边界条件突变为闭区间时测试按预期失败。
+- 编排与重复消息：`VideoContextPipelineApplicationServiceTest` 验证派生、ASR、OCR、对齐、发布和 READY 事件串联，OCR 降级仍可 READY；`AnalysisJobExecutionHandlerTest` 验证不产生 INDEXING、重复消息不重开、Redis 锁不可用时 MySQL CAS 仍裁决、忙锁/未完成步骤返回 retry。
+- OCR 清单修正：`OcrExecutionApplicationServiceTest` 验证派生的关键帧 manifest 会展开为逐帧 OCR 工作项，不把 JSON 清单作为图片输入。
+- owner 查询：application 测试覆盖 Context 未就绪 409、跨 owner 404、游标和时间窗限制、READY 原视频短链；真实 MySQL `VideoContextPersistenceAdapterIT` 7 项通过，覆盖发布回滚、owner 隔离和 Segment 游标分页。
+- 后端任务结束门：`server\mvnw.cmd clean test` 实际执行 254 项测试零失败、1 项按环境跳过，ArchUnit 通过；Maven 最终仅因当前全包 JaCoCo 行覆盖率 `74% < 80%` 失败，未降低阈值或跳过断言。聚焦 MySQL 集成测试使用 `.env` 连接 Compose，7 项全部通过。
+- 未执行：完整 `verify -Pintegration`、真实 TeleSpeechASR 长视频和浏览器播放器验收保留到 T7/T8；T5 不以单元 fixture 冒充长视频退出证据。

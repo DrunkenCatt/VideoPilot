@@ -275,6 +275,11 @@ class MediaUploadApplicationServiceTest {
         }
 
         @Override
+        public URI signGet(String objectKey, Instant expiresAt) {
+            return URI.create("https://storage.example.test/objects/signed");
+        }
+
+        @Override
         public StoredObject complete(
                 String objectKey,
                 String providerUploadId,
