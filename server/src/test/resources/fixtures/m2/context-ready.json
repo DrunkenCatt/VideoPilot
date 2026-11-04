@@ -1,0 +1,40 @@
+{
+  "context": {
+    "contextId": "00000000-0000-0000-0000-000000000101",
+    "jobId": "00000000-0000-0000-0000-000000000102",
+    "mediaId": "00000000-0000-0000-0000-000000000103",
+    "status": "READY",
+    "extractionVersion": "m2-extraction-v1",
+    "alignmentVersion": "m2-align-60s-v1",
+    "durationMs": 3000,
+    "asrState": "AVAILABLE",
+    "ocrState": "DEGRADED",
+    "segmentCount": 1,
+    "updatedAt": "2026-11-04T00:00:00Z",
+    "links": {
+      "segments": "/api/v1/analysis-jobs/00000000-0000-0000-0000-000000000102/context/segments",
+      "playback": "/api/v1/media-assets/00000000-0000-0000-0000-000000000103/playback"
+    }
+  },
+  "segments": {
+    "data": [
+      {
+        "segmentId": "00000000-0000-0000-0000-000000000104",
+        "ordinal": 0,
+        "startMs": 0,
+        "endMs": 3000,
+        "asrText": "Synthetic speech fixture.",
+        "ocr": [],
+        "keyframes": [
+          {
+            "keyframeId": "00000000-0000-0000-0000-000000000105",
+            "timestampMs": 1000,
+            "access": "/api/v1/analysis-jobs/00000000-0000-0000-0000-000000000102/context/keyframes/00000000-0000-0000-0000-000000000105/access"
+          }
+        ]
+      }
+    ],
+    "nextCursor": null,
+    "hasMore": false
+  }
+}

@@ -1,2 +1,3 @@
 com.videopilot.infrastructure.analysis.persistence.AnalysisJobAutoConfiguration
+com.videopilot.infrastructure.context.persistence.VideoContextAutoConfiguration
 com.videopilot.infrastructure.media.persistence.MediaUploadAutoConfiguration

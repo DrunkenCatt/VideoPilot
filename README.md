@@ -4,14 +4,14 @@
 
 项目从零构建；`C:\Users\zzm\Desktop\com\DoVideoAI` 仅作为只读设计参考。先用 Java 模块化单体和固定云端模型供应商跑通教学视频解析闭环，再建设真正由工具观察驱动的 Agent Loop、用户反馈改进闭环和可复现评测体系。
 
-项目总体规划、架构边界、验收指标和逐级里程碑见 [docs/PROJECT_ROADMAP.md](docs/PROJECT_ROADMAP.md)。
+项目总体规划、架构边界、验收指标和逐级里程碑见 [docs/PROJECT_ROADMAP.md](docs/PROJECT_ROADMAP.md)，Redis 与参考项目的对比、当前边界及 M2-M8 演进设计见 [docs/REDIS_ARCHITECTURE.md](docs/REDIS_ARCHITECTURE.md)。
 M1 的启动、演示、接口与故障排查步骤见 [docs/M1_RUNBOOK.md](docs/M1_RUNBOOK.md)。
 
 ## 当前阶段
 
-- 状态：M1 已于 2026-11-04 经项目负责人确认退出；M2 尚未开始
-- 当前可演示：本地账号登录、分片上传、FFprobe 可信校验、媒体资源列表、可靠异步假任务、持久化进度/取消/失败展示和刷新恢复
-- 当前不包含：真实 ASR/OCR、VideoSegment/VideoChunk、Checkpoint 阶段恢复、向量检索和证据问答
+- 状态：M1 已于 2026-11-04 经项目负责人确认退出；M2 已完成 T0-T2，下一任务为 T3
+- 当前可验证：M1 上传/Job 闭环，以及 M2 VideoContext 合同、MySQL 分片 Checkpoint 底座、FFmpeg 音频切片与关键帧派生
+- 当前不包含：业务链路中的真实 ASR/OCR、最终 VideoSegment 发布、播放器时间轴、VideoChunk、向量检索和证据问答
 - 第一目标：可靠的视频解析与有证据问答 MVP
 - 第二目标：可持久化、可预算、可评测的 Agent Loop
 - 第三目标：把经过复核的用户反馈转化为 Agent 候选版本，并通过评测完成晋级或回滚

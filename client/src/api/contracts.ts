@@ -4,6 +4,9 @@ export type UserId = Brand<string, 'UserId'>
 export type MediaId = Brand<string, 'MediaId'>
 export type UploadId = Brand<string, 'UploadId'>
 export type JobId = Brand<string, 'JobId'>
+export type ContextId = Brand<string, 'ContextId'>
+export type SegmentId = Brand<string, 'SegmentId'>
+export type KeyframeId = Brand<string, 'KeyframeId'>
 
 export const API = {
   prefix: '/api/v1',
@@ -19,7 +22,25 @@ export const CONTRACT_LIMITS = {
   maxUploadBytes: 5 * 1024 ** 3,
   defaultPageSize: 20,
   maxPageSize: 100,
+  defaultSegmentPageSize: 100,
+  maxSegmentPageSize: 500,
 } as const
+
+export function contextPath(jobId: JobId): string {
+  return `${API.analysisJobs}/${jobId}/context`
+}
+
+export function contextSegmentsPath(jobId: JobId): string {
+  return `${contextPath(jobId)}/segments`
+}
+
+export function mediaPlaybackPath(mediaId: MediaId): string {
+  return `${API.mediaAssets}/${mediaId}/playback`
+}
+
+export function contextKeyframeAccessPath(jobId: JobId, keyframeId: KeyframeId): string {
+  return `${contextPath(jobId)}/keyframes/${keyframeId}/access`
+}
 
 export type AnalysisMode = 'STANDARD'
 export type MediaStatus = 'UPLOAD_PENDING' | 'UPLOADED' | 'PROBING' | 'READY' | 'FAILED'
@@ -189,4 +210,57 @@ export interface PageMetadata {
 export interface PageResponse<T> {
   data: T[]
   pagination: PageMetadata
+}
+
+export type ContextStatus = 'BUILDING' | 'READY' | 'FAILED'
+export type ContextChannelState = 'PENDING' | 'AVAILABLE' | 'DEGRADED' | 'FAILED'
+
+export interface VideoContext {
+  contextId: ContextId
+  jobId: JobId
+  mediaId: MediaId
+  status: ContextStatus
+  extractionVersion: string
+  alignmentVersion: string
+  durationMs: number
+  asrState: ContextChannelState
+  ocrState: ContextChannelState
+  segmentCount: number
+  updatedAt: string
+  links: {
+    segments: string
+    playback: string
+  }
+}
+
+export interface OcrObservation {
+  text: string
+  confidence: number
+}
+
+export interface KeyframeReference {
+  keyframeId: KeyframeId
+  timestampMs: number
+  access: string
+}
+
+export interface VideoSegment {
+  segmentId: SegmentId
+  ordinal: number
+  startMs: number
+  endMs: number
+  asrText: string
+  ocr: OcrObservation[]
+  keyframes: KeyframeReference[]
+}
+
+export interface SegmentPageResponse {
+  data: VideoSegment[]
+  nextCursor: number | null
+  hasMore: boolean
+}
+
+export interface TemporaryObjectAccess {
+  url: string
+  expiresAt: string
 }

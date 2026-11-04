@@ -5,7 +5,7 @@ MVP 固定下列四个能力实现，但业务代码只依赖项目 Port。供�
 | 能力 | MVP 实现 | 版本配置 | 超时配置 | 成本计量 |
 | --- | --- | --- | --- | --- |
 | LLM | DeepSeek | `DEEPSEEK_MODEL_VERSION` | `DEEPSEEK_TIMEOUT` | 输入/输出 Token |
-| ASR | TeleSpeechASR | `TELESPEECH_ASR_MODEL_VERSION` | `TELESPEECH_ASR_TIMEOUT` | 音频秒数 |
+| ASR | SiliconFlow `TeleAI/TeleSpeechASR` | `TELESPEECH_ASR_MODEL_VERSION` | `TELESPEECH_ASR_TIMEOUT` | 本地可信音频秒数 + 供应商 `usage.seconds`；价格不可得时不伪造成本 |
 | Embedding | BGE-M3 | `BGE_M3_MODEL_VERSION` | `BGE_M3_TIMEOUT` | 输入 Token |
 | OCR | Tesseract | `TESSERACT_VERSION` | `TESSERACT_TIMEOUT` | 本地图片数，不产生云端费用 |
 
@@ -21,3 +21,14 @@ MVP 固定下列四个能力实现，但业务代码只依赖项目 Port。供�
 每次模型或 Agent 执行必须记录 `promptVersion`、`modelVersion`、`embeddingVersion`、`retrievalFormulaVersion` 和 `agentPolicyVersion`。这些字段用于回答“这次结果由哪套配置产生”，是回放、离线比较和回滚的前提；缺任一版本时不得生成可晋级的评测记录。
 
 本文件实现 ADR-0005 已接受的边界，不新增架构选择。真实外部调用、重试和预算阈值属于后续里程碑。
+
+## M2 ASR 合同补充
+
+M2 已根据 SiliconFlow 官方[中文音频转录 API](https://docs.siliconflow.cn/docs/api/audio-transcriptions-post)和[英文 API reference](https://docs.siliconflow.com/en/api-reference/audio/create-audio-transcriptions)确认：
+
+- Endpoint 为 `POST /v1/audio/transcriptions`，使用 Bearer API key 和 multipart `file`/`model` 字段；
+- 固定模型名为 `TeleAI/TeleSpeechASR`；
+- 单文件官方限制为不超过 1 小时且不超过 50 MB；
+- 2026-11-04 真实探针返回 `text`、秒单位 `duration` 和 `usage={type: duration, seconds: N}`，但没有词级时间戳或价格字段。
+
+因此 M2 用版本化 60 秒音频切片的持久化边界作为 `TranscriptSegment` 时间窗，不伪造供应商词级时间戳；同时保存本地可信音频时长和供应商 `usage.seconds`。价格不可得时成本保持未知而不是写 0。完整错误、探针与审计合同见 `tasks/M2/ACCEPTANCE.md`。

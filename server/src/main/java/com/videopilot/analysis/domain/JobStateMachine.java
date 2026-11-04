@@ -27,6 +27,7 @@ public final class JobStateMachine {
             edge(QUEUED, CONSUMING),
             edge(CONSUMING, PROBING),
             edge(PROBING, CONTEXT_BUILDING),
+            edge(CONTEXT_BUILDING, READY),
             edge(CONTEXT_BUILDING, INDEXING),
             edge(INDEXING, READY),
             edge(READY, ANSWERING),

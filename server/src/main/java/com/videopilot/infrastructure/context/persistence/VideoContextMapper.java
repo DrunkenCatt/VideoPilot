@@ -1,0 +1,217 @@
+package com.videopilot.infrastructure.context.persistence;
+
+import com.videopilot.infrastructure.context.persistence.ContextWriteRows.ContextPlanWrite;
+import com.videopilot.infrastructure.context.persistence.ContextWriteRows.WorkItemCompletionWrite;
+import com.videopilot.infrastructure.context.persistence.ContextWriteRows.WorkItemPlanWrite;
+import com.videopilot.infrastructure.context.persistence.ContextWriteRows.ContextPublicationWrite;
+import com.videopilot.infrastructure.context.persistence.ContextWriteRows.SegmentWrite;
+import com.videopilot.infrastructure.context.persistence.ContextWriteRows.WorkItemFailureWrite;
+import org.apache.ibatis.annotations.Insert;
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
+
+@Mapper
+interface VideoContextMapper {
+
+    @Insert("""
+            INSERT INTO video_context (
+                context_id, source_job_id, media_id, input_fingerprint,
+                pipeline_version, extraction_version, alignment_version,
+                duration_ms, status, asr_state, ocr_state, created_at, updated_at
+            )
+            SELECT #{plan.contextId}, #{plan.sourceJobId}, #{plan.mediaId}, #{plan.inputFingerprint},
+                   #{plan.pipelineVersion}, #{plan.extractionVersion}, #{plan.alignmentVersion},
+                   #{plan.durationMs}, 'BUILDING', 'PENDING', 'PENDING', #{plan.createdAt}, #{plan.createdAt}
+            FROM analysis_job job
+            WHERE job.job_id = #{plan.sourceJobId}
+              AND job.media_id = #{plan.mediaId}
+              AND job.owner_id = #{ownerId}
+            ON DUPLICATE KEY UPDATE context_id = context_id
+            """)
+    int insertContextOrIgnore(@Param("ownerId") String ownerId, @Param("plan") ContextPlanWrite plan);
+
+    @Insert("""
+            INSERT INTO context_work_item (
+                work_item_id, media_id, created_by_job_id, kind, ordinal,
+                start_ms, end_ms, input_fingerprint, status, created_at, updated_at
+            )
+            SELECT #{plan.workItemId}, #{plan.mediaId}, #{plan.createdByJobId}, #{plan.kind}, #{plan.ordinal},
+                   #{plan.startMs}, #{plan.endMs}, #{plan.inputFingerprint}, 'PENDING',
+                   #{plan.createdAt}, #{plan.createdAt}
+            FROM analysis_job job
+            WHERE job.job_id = #{plan.createdByJobId}
+              AND job.media_id = #{plan.mediaId}
+              AND job.owner_id = #{ownerId}
+            ON DUPLICATE KEY UPDATE work_item_id = work_item_id
+            """)
+    int insertWorkItemOrIgnore(@Param("ownerId") String ownerId, @Param("plan") WorkItemPlanWrite plan);
+
+    @Select("""
+            SELECT context.*
+            FROM video_context context
+            INNER JOIN media_asset media ON media.media_id = context.media_id
+            WHERE media.owner_id = #{ownerId}
+              AND context.media_id = #{mediaId}
+              AND context.input_fingerprint = #{inputFingerprint}
+            """)
+    VideoContextRow selectContextByInput(
+            @Param("ownerId") String ownerId,
+            @Param("mediaId") String mediaId,
+            @Param("inputFingerprint") String inputFingerprint);
+
+    @Select("""
+            SELECT context.*
+            FROM video_context context
+            INNER JOIN media_asset media ON media.media_id = context.media_id
+            WHERE media.owner_id = #{ownerId} AND context.context_id = #{contextId}
+            """)
+    VideoContextRow selectOwnedContext(@Param("ownerId") String ownerId, @Param("contextId") String contextId);
+
+    @Select("""
+            SELECT item.*
+            FROM context_work_item item
+            INNER JOIN analysis_job job ON job.job_id = item.created_by_job_id
+            WHERE job.owner_id = #{ownerId}
+              AND item.media_id = #{mediaId}
+              AND item.kind = #{kind}
+              AND item.input_fingerprint = #{inputFingerprint}
+            """)
+    ContextWorkItemRow selectWorkItemByInput(
+            @Param("ownerId") String ownerId,
+            @Param("mediaId") String mediaId,
+            @Param("kind") String kind,
+            @Param("inputFingerprint") String inputFingerprint);
+
+    @Select("""
+            SELECT item.*
+            FROM context_work_item item
+            INNER JOIN analysis_job job ON job.job_id = item.created_by_job_id
+            WHERE job.owner_id = #{ownerId} AND item.work_item_id = #{workItemId}
+            """)
+    ContextWorkItemRow selectOwnedWorkItem(
+            @Param("ownerId") String ownerId,
+            @Param("workItemId") String workItemId);
+
+    @Update("""
+            UPDATE context_work_item item
+            INNER JOIN analysis_job job ON job.job_id = item.created_by_job_id
+            SET item.status = 'STARTED',
+                item.claim_id = #{claimId},
+                item.attempt = item.attempt + 1,
+                item.version = item.version + 1,
+                item.started_at = #{claimedAt},
+                item.completed_at = NULL,
+                item.error_category = NULL,
+                item.error_code = NULL,
+                item.error_summary = NULL,
+                item.retryable = NULL,
+                item.updated_at = #{claimedAt}
+            WHERE item.work_item_id = #{workItemId}
+              AND job.owner_id = #{ownerId}
+              AND item.version = #{expectedVersion}
+              AND (
+                  item.status = 'PENDING'
+                  OR (item.status = 'FAILED' AND item.retryable = TRUE)
+                  OR (item.status = 'STARTED' AND item.updated_at <= #{staleBefore})
+              )
+            """)
+    int claim(
+            @Param("ownerId") String ownerId,
+            @Param("workItemId") String workItemId,
+            @Param("expectedVersion") long expectedVersion,
+            @Param("claimId") String claimId,
+            @Param("staleBefore") java.time.Instant staleBefore,
+            @Param("claimedAt") java.time.Instant claimedAt);
+
+    @Update("""
+            UPDATE context_work_item item
+            INNER JOIN analysis_job job ON job.job_id = item.created_by_job_id
+            SET item.status = 'COMPLETED',
+                item.checkpoint_schema_version = #{completion.checkpointSchemaVersion},
+                item.checkpoint_payload = CAST(#{completion.checkpointPayload} AS JSON),
+                item.artifact_ref = #{completion.artifactRef},
+                item.artifact_digest = #{completion.artifactDigest},
+                item.version = item.version + 1,
+                item.completed_at = #{completion.completedAt},
+                item.updated_at = #{completion.completedAt}
+            WHERE item.work_item_id = #{completion.workItemId}
+              AND job.owner_id = #{ownerId}
+              AND item.status = 'STARTED'
+              AND item.claim_id = #{completion.claimId}
+              AND item.version = #{completion.expectedVersion}
+            """)
+    int complete(@Param("ownerId") String ownerId, @Param("completion") WorkItemCompletionWrite completion);
+
+    @Update("""
+            UPDATE context_work_item item
+            INNER JOIN analysis_job job ON job.job_id = item.created_by_job_id
+            SET item.status = 'FAILED',
+                item.error_category = #{failure.errorCategory},
+                item.error_code = #{failure.errorCode},
+                item.error_summary = #{failure.errorSummary},
+                item.retryable = #{failure.retryable},
+                item.version = item.version + 1,
+                item.updated_at = #{failure.failedAt}
+            WHERE item.work_item_id = #{failure.workItemId}
+              AND job.owner_id = #{ownerId}
+              AND item.status = 'STARTED'
+              AND item.claim_id = #{failure.claimId}
+              AND item.version = #{failure.expectedVersion}
+            """)
+    int fail(@Param("ownerId") String ownerId, @Param("failure") WorkItemFailureWrite failure);
+
+    @Update("""
+            UPDATE video_context context
+            INNER JOIN media_asset media ON media.media_id = context.media_id
+            SET context.status = 'READY',
+                context.asr_state = #{publication.asrState},
+                context.ocr_state = #{publication.ocrState},
+                context.segment_count = #{publication.segmentCount},
+                context.version = context.version + 1,
+                context.completed_at = #{publication.completedAt},
+                context.updated_at = #{publication.completedAt}
+            WHERE context.context_id = #{publication.contextId}
+              AND media.owner_id = #{ownerId}
+              AND context.source_job_id = #{publication.jobId}
+              AND context.status = 'BUILDING'
+              AND context.version = #{publication.expectedContextVersion}
+            """)
+    int publishContext(
+            @Param("ownerId") String ownerId,
+            @Param("publication") ContextPublicationWrite publication);
+
+    @Update("""
+            UPDATE job_stage_attempt stage
+            INNER JOIN analysis_job job ON job.job_id = stage.job_id
+            SET stage.status = 'COMPLETED',
+                stage.checkpoint_schema_version = #{publication.checkpointSchemaVersion},
+                stage.checkpoint_payload = CAST(#{publication.checkpointPayload} AS JSON),
+                stage.artifact_ref = #{publication.artifactRef},
+                stage.artifact_digest = #{publication.artifactDigest},
+                stage.completed_at = #{publication.completedAt},
+                stage.updated_at = #{publication.completedAt}
+            WHERE stage.job_id = #{publication.jobId}
+              AND job.owner_id = #{ownerId}
+              AND stage.stage = 'CONTEXT_BUILDING'
+              AND stage.input_fingerprint = #{publication.stageInputFingerprint}
+              AND stage.status = 'STARTED'
+            """)
+    int completeContextStage(
+            @Param("ownerId") String ownerId,
+            @Param("publication") ContextPublicationWrite publication);
+
+    @Insert("""
+            INSERT INTO video_segment (
+                segment_id, context_id, ordinal, start_ms, end_ms, asr_text,
+                ocr_observations, keyframes, content_digest, created_at
+            ) VALUES (
+                #{segment.segmentId}, #{segment.contextId}, #{segment.ordinal},
+                #{segment.startMs}, #{segment.endMs}, #{segment.asrText},
+                CAST(#{segment.ocrObservations} AS JSON), CAST(#{segment.keyframes} AS JSON),
+                #{segment.contentDigest}, #{segment.createdAt}
+            )
+            """)
+    int insertSegment(@Param("segment") SegmentWrite segment);
+}

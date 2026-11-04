@@ -57,6 +57,12 @@ class JobStateMachineTest {
                 JobErrorCategory.BUDGET_EXHAUSTED);
     }
 
+    @Test
+    void contextOnlyPipelineCanBecomeReadyWithoutPretendingToIndex() {
+        assertThat(stateMachine.canTransition(JobStatus.CONTEXT_BUILDING, JobStatus.READY)).isTrue();
+        stateMachine.requireTransition(JobStatus.CONTEXT_BUILDING, JobStatus.READY);
+    }
+
     static Stream<Arguments> legalTransitions() {
         return JobStateMachine.legalTransitions().stream()
                 .map(edge -> Arguments.of(edge.from(), edge.to()));

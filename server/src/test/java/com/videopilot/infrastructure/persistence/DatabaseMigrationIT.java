@@ -40,7 +40,10 @@ class DatabaseMigrationIT {
                     'job_stage_attempt',
                     'job_event_outbox',
                     'analysis_message_failure',
+                    'context_work_item',
                     'model_call',
+                    'video_context',
+                    'video_segment',
                     'identity_user',
                     'user_session'
                   )
@@ -52,13 +55,16 @@ class DatabaseMigrationIT {
         assertThat(tables).containsExactly(
                 "analysis_job",
                 "analysis_message_failure",
+                "context_work_item",
                 "identity_user",
                 "job_event_outbox",
                 "job_stage_attempt",
                 "media_asset",
                 "media_upload_session",
                 "model_call",
-                "user_session");
+                "user_session",
+                "video_context",
+                "video_segment");
     }
 
     @Test

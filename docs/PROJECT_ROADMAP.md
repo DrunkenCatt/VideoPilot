@@ -169,7 +169,23 @@ Vue 工作台按能力纵向组织：`api` 保存版本化合同、传输与统�
 | `UserFeedback` | 明确反馈、原因、纠正内容、关联版本 | MySQL |
 | `EvaluationRun` | 数据集版本、候选版本、逐题结果与聚合指标 | MySQL/文件产物 |
 
-Redis 只保存 active key、限流令牌、锁、短期缓存和 SSE 热事件。Redis 内容全部丢失后，系统仍能从 MySQL 重建任务事实和恢复决策。
+Redis 只保存 active key、限流令牌、锁、短期缓存和 SSE 热事件。Redis 内容全部丢失后，系统仍能从 MySQL 重建任务事实和恢复决策。具体数据准入、一致性、故障语义、参考项目对比和 Key/TTL 规范见 [Redis 使用边界与演进设计](REDIS_ARCHITECTURE.md)。
+
+### 5.3 Redis 能力演进
+
+Redis 是可丢失的加速与协调层，不是业务状态数据库。新增能力必须同时定义权威存储、TTL/容量、版本与 owner 隔离、不可用降级和 Redis 清空验收；锁、限流、缓存命中或 Pub/Sub 通知均无权绕过 application service、数据库 CAS、权限和预算硬门。
+
+| 里程碑 | 计划使用 | 保持在权威存储中的事实 | 退出证据 |
+| --- | --- | --- | --- |
+| M1 | 登录失败计数、active Job 缓存、AnalysisJob 短租约锁 | MySQL 会话/上传/Job/事件/Outbox | 已完成 Redis 清空、重启、owner 隔离和 MQ 重投验收 |
+| M2 | 沿用 Job 锁；仅在真实并发证据出现时增加 Context 同指纹构建短租约 | MySQL 工作项、分片 Checkpoint、Context/Segment/通道状态；MinIO 派生物 | Redis 清空后已完成 ASR/OCR 调用增量为 0，数据库 CAS 仍单赢家 |
+| M3 | 按性能证据增加 owner/version-scoped 摘要或查询缓存 | MySQL/MinIO/Qdrant/Answer Trace | 缓存启停结果等价；不缓存完整转录、Embedding 或答案真源 |
+| M4 | Checkpoint 元数据热缓存、SSE Pub/Sub 热唤醒、供应商/用户/全局限流、运维热指标 | MySQL Checkpoint、JobEvent sequence、预算、ModelCall 和 Outbox | Redis flush/中断下可恢复，SSE 从 MySQL 连续补拉，高成本预算不重置 |
+| M5 | 确定性评测产物和报告投影缓存 | EvaluationRun、逐题 Trace 和版本化报告 | dev/test 与全部版本指纹进入 Key，最终指标不依赖 TTL 数据 |
+| M6 | Agent 实时轨迹投影、Tool/模型流量整形、短租约协调 | AgentRun/Step、ToolCall、ModelCall、预算和终止原因 | Redis 清空后仍可完整回放，越权与超预算仍由确定性硬门拒绝 |
+| M7-M8 | 复核队列/候选对比只读投影与发布通知 | 反馈、复核、评测、晋级和回滚历史 | 缓存丢失不改变裁决，不触发自动晋级、回滚或在线自改 |
+
+引入顺序遵循“先正确、再测量、后缓存”：M2 不提前建设通用 Checkpoint 缓存；M4 根据真实读取频率、延迟与数据库压力决定是否落地，并用禁用 Redis 加速路径的等价性测试证明缓存透明。
 
 ## 6. 可靠任务闭环
 

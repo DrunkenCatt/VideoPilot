@@ -39,6 +39,21 @@ management:
       enabled: false
 
 videopilot:
+  context:
+    derivation:
+      enabled: ${CONTEXT_DERIVATION_ENABLED:false}
+      executable: ${FFMPEG_EXECUTABLE:ffmpeg}
+      temporary-directory: ${CONTEXT_TEMPORARY_DIRECTORY:${java.io.tmpdir}/videopilot-context}
+      extraction-version: ${CONTEXT_EXTRACTION_VERSION:ffmpeg-extract-v1}
+      ffmpeg-version: ${FFMPEG_VERSION:ffmpeg-6-v1}
+      timeout: ${FFMPEG_DERIVATION_TIMEOUT:2h}
+      max-log-bytes: ${FFMPEG_MAX_LOG_BYTES:65536}
+      max-concurrency: ${FFMPEG_MAX_CONCURRENCY:1}
+      audio-slice-duration: ${AUDIO_SLICE_DURATION:10m}
+      fallback-frame-interval: ${FRAME_FALLBACK_INTERVAL:30s}
+      max-frames-per-minute: ${MAX_FRAMES_PER_MINUTE:6}
+      max-output-files: ${FFMPEG_MAX_OUTPUT_FILES:20000}
+      max-output-bytes: ${FFMPEG_MAX_OUTPUT_BYTES:21474836480}
   media:
     enabled: ${MEDIA_API_ENABLED:true}
     probe:
@@ -115,8 +130,8 @@ videopilot:
       cost-unit: token
       cost-tracking: true
     telespeech-asr:
-      provider: TeleSpeechASR
-      model-version: ${TELESPEECH_ASR_MODEL_VERSION:fixed-mvp}
+      provider: SiliconFlow
+      model-version: ${TELESPEECH_ASR_MODEL_VERSION:TeleAI/TeleSpeechASR}
       timeout: ${TELESPEECH_ASR_TIMEOUT:120s}
       cost-unit: audio-second
       cost-tracking: true

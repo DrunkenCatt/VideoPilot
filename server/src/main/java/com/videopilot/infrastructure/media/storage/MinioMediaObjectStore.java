@@ -5,6 +5,7 @@ import com.videopilot.media.domain.MediaAsset;
 import com.videopilot.media.port.MediaObjectStore;
 import com.videopilot.media.port.MediaProbeSource;
 import com.videopilot.media.port.MediaStorageException;
+import com.videopilot.context.port.DerivedMediaStore;
 import io.minio.AbortMultipartUploadArgs;
 import io.minio.BucketExistsArgs;
 import io.minio.CompleteMultipartUploadArgs;
@@ -18,6 +19,7 @@ import io.minio.MakeBucketArgs;
 import io.minio.MinioAsyncClient;
 import io.minio.StatObjectArgs;
 import io.minio.StatObjectResponse;
+import io.minio.PutObjectArgs;
 import io.minio.errors.ErrorResponseException;
 import io.minio.messages.Part;
 import java.net.URI;
@@ -33,7 +35,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
-public final class MinioMediaObjectStore implements MediaObjectStore, MediaProbeSource, AutoCloseable {
+public final class MinioMediaObjectStore implements MediaObjectStore, MediaProbeSource, DerivedMediaStore, AutoCloseable {
 
     private static final String CLIENT_SHA256 = "videopilot-client-sha256";
     private final MinioAsyncClient client;
@@ -162,6 +164,25 @@ public final class MinioMediaObjectStore implements MediaObjectStore, MediaProbe
                 .object(asset.objectKey())
                 .build()).join()) {
             Files.copy(response, target, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw dependency(exception);
+        }
+    }
+
+    @Override
+    public void put(String objectKey, Path source, String contentType, String sha256) throws IOException {
+        long size = Files.size(source);
+        try (var input = Files.newInputStream(source)) {
+            ensureBucket();
+            client.putObject(PutObjectArgs.builder()
+                    .bucket(bucket)
+                    .object(objectKey)
+                    .stream(input, size, -1L)
+                    .contentType(contentType)
+                    .headers(new Http.Headers(Map.of("x-amz-meta-sha256", sha256)))
+                    .build()).join();
         } catch (IOException exception) {
             throw exception;
         } catch (RuntimeException exception) {

@@ -41,6 +41,15 @@ class ArchitectureRulesTest {
             .should().dependOnClassesThat().resideInAPackage("..infrastructure..");
 
     @ArchTest
+    static final ArchRule m2ContextDoesNotDependOnRedisAsAStateStore = noClasses()
+            .that().resideInAnyPackage(
+                    "com.videopilot.context..",
+                    "com.videopilot.infrastructure.context..")
+            .should().dependOnClassesThat().resideInAnyPackage(
+                    "org.springframework.data.redis..",
+                    "org.redisson..");
+
+    @ArchTest
     static final ArchRule boundaryCallersCannotBypassTheJobTransitionService = noClasses()
             .that().haveSimpleNameEndingWith("Controller")
             .or().haveSimpleNameEndingWith("Consumer")
