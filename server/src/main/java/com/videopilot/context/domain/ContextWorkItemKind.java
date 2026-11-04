@@ -3,5 +3,6 @@ package com.videopilot.context.domain;
 public enum ContextWorkItemKind {
     AUDIO_SLICE,
     ASR_SLICE,
-    KEYFRAME
+    KEYFRAME,
+    OCR_FRAME
 }

@@ -212,6 +212,90 @@ interface VideoContextMapper {
             @Param("expectedVersion") long expectedVersion,
             @Param("markedAt") java.time.Instant markedAt);
 
+    @Insert("""
+            INSERT INTO model_call (
+                model_call_id, job_id, request_id, operation_type, provider,
+                model_name, model_version, input_fingerprint, status, attempt,
+                estimated_cost, currency, price_version, price_status, started_at
+            ) VALUES (
+                #{call.modelCallId}, #{call.jobId}, #{call.requestId}, 'OCR', #{call.provider},
+                'Tesseract', #{call.modelVersion}, #{call.inputFingerprint}, 'STARTED', #{call.attempt},
+                0, 'USD', 'local-zero-v1', 'AVAILABLE', #{call.startedAt}
+            )
+            """)
+    int insertOcrModelCall(
+            @Param("call") com.videopilot.context.port.VideoContextStore.OcrModelCallStart call);
+
+    @Update("""
+            UPDATE model_call
+            SET status = 'SUCCEEDED',
+                output_artifact_ref = #{completion.workItem.artifactRef},
+                input_units = #{completion.processedPixels},
+                output_units = #{completion.textCharacters},
+                latency_ms = #{completion.latencyMs},
+                completed_at = #{completion.completedAt},
+                updated_at = #{completion.completedAt}
+            WHERE model_call_id = #{completion.modelCallId} AND status = 'STARTED'
+            """)
+    int completeOcrModelCall(
+            @Param("completion") com.videopilot.context.port.VideoContextStore.OcrCompletion completion);
+
+    @Update("""
+            UPDATE model_call
+            SET status = 'FAILED',
+                error_category = #{failure.workItem.errorCategory},
+                error_code = #{failure.workItem.errorCode},
+                error_summary = #{failure.workItem.errorSummary},
+                latency_ms = #{failure.latencyMs},
+                completed_at = #{failure.completedAt},
+                updated_at = #{failure.completedAt}
+            WHERE model_call_id = #{failure.modelCallId} AND status = 'STARTED'
+            """)
+    int failOcrModelCall(
+            @Param("failure") com.videopilot.context.port.VideoContextStore.OcrFailure failure);
+
+    @Update("""
+            UPDATE model_call
+            SET status = 'FAILED',
+                error_category = 'RETRYABLE',
+                error_code = 'STALE_STARTED',
+                error_summary = 'OCR process ended before a durable outcome was recorded',
+                completed_at = #{markedAt},
+                updated_at = #{markedAt}
+            WHERE job_id = #{jobId}
+              AND operation_type = 'OCR'
+              AND input_fingerprint = #{inputFingerprint}
+              AND attempt = #{attempt}
+              AND status = 'STARTED'
+            """)
+    int markStartedOcrCallFailed(
+            @Param("jobId") String jobId,
+            @Param("inputFingerprint") String inputFingerprint,
+            @Param("attempt") int attempt,
+            @Param("markedAt") java.time.Instant markedAt);
+
+    @Update("""
+            UPDATE context_work_item item
+            INNER JOIN analysis_job job ON job.job_id = item.created_by_job_id
+            SET item.status = 'FAILED',
+                item.error_category = 'RETRYABLE',
+                item.error_code = 'STALE_STARTED',
+                item.error_summary = 'OCR process ended before a durable outcome was recorded',
+                item.retryable = #{retryable},
+                item.version = item.version + 1,
+                item.updated_at = #{markedAt}
+            WHERE item.work_item_id = #{workItemId}
+              AND job.owner_id = #{ownerId}
+              AND item.status = 'STARTED'
+              AND item.version = #{expectedVersion}
+            """)
+    int markStartedOcrWorkFailed(
+            @Param("ownerId") String ownerId,
+            @Param("workItemId") String workItemId,
+            @Param("expectedVersion") long expectedVersion,
+            @Param("retryable") boolean retryable,
+            @Param("markedAt") java.time.Instant markedAt);
+
     @Update("""
             UPDATE context_work_item item
             INNER JOIN analysis_job job ON job.job_id = item.created_by_job_id

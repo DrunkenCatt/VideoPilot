@@ -38,6 +38,15 @@ public interface VideoContextStore {
 
     void markStaleAsrUnknown(OwnerId ownerId, ContextWorkItem workItem, Instant markedAt);
 
+    void startOcrCall(OcrModelCallStart call);
+
+    void completeOcr(OwnerId ownerId, OcrCompletion completion);
+
+    void failOcr(OwnerId ownerId, OcrFailure failure);
+
+    void markStaleOcrFailed(
+            OwnerId ownerId, ContextWorkItem workItem, boolean retryable, Instant markedAt);
+
     void publish(OwnerId ownerId, ContextPublication publication);
 
     record ContextPlan(
@@ -167,6 +176,33 @@ public interface VideoContextStore {
             WorkItemFailure workItem,
             String modelCallId,
             String callStatus,
+            long latencyMs,
+            Instant completedAt) {
+    }
+
+    record OcrModelCallStart(
+            String modelCallId,
+            String jobId,
+            String requestId,
+            String provider,
+            String modelVersion,
+            String inputFingerprint,
+            int attempt,
+            Instant startedAt) {
+    }
+
+    record OcrCompletion(
+            WorkItemCompletion workItem,
+            String modelCallId,
+            long processedPixels,
+            long textCharacters,
+            long latencyMs,
+            Instant completedAt) {
+    }
+
+    record OcrFailure(
+            WorkItemFailure workItem,
+            String modelCallId,
             long latencyMs,
             Instant completedAt) {
     }

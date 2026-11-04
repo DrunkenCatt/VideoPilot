@@ -133,6 +133,43 @@ public class VideoContextPersistenceAdapter implements VideoContextStore {
 
     @Override
     @Transactional
+    public void startOcrCall(OcrModelCallStart call) {
+        if (mapper.insertOcrModelCall(call) != 1) throw new IllegalStateException("OCR call was not started");
+    }
+
+    @Override
+    @Transactional
+    public void completeOcr(OwnerId ownerId, OcrCompletion completion) {
+        if (mapper.completeOcrModelCall(completion) != 1
+                || mapper.complete(ownerId.value().toString(), ContextWriteRows.completion(completion.workItem())) != 1) {
+            throw new IllegalStateException("OCR completion lost its call or work-item claim");
+        }
+    }
+
+    @Override
+    @Transactional
+    public void failOcr(OwnerId ownerId, OcrFailure failure) {
+        if (mapper.failOcrModelCall(failure) != 1
+                || mapper.fail(ownerId.value().toString(), ContextWriteRows.failure(failure.workItem())) != 1) {
+            throw new IllegalStateException("OCR failure lost its call or work-item claim");
+        }
+    }
+
+    @Override
+    @Transactional
+    public void markStaleOcrFailed(
+            OwnerId ownerId, ContextWorkItem workItem, boolean retryable, Instant markedAt) {
+        int callUpdates = mapper.markStartedOcrCallFailed(
+                workItem.createdByJobId().toString(), workItem.inputFingerprint(), workItem.attempt(), markedAt);
+        if (callUpdates > 1 || mapper.markStartedOcrWorkFailed(
+                ownerId.value().toString(), workItem.workItemId().toString(), workItem.version(),
+                retryable, markedAt) != 1) {
+            throw new IllegalStateException("stale OCR work lost its ownership or version race");
+        }
+    }
+
+    @Override
+    @Transactional
     public void publish(OwnerId ownerId, ContextPublication publication) {
         String owner = ownerId.value().toString();
         var write = ContextWriteRows.publication(publication);
