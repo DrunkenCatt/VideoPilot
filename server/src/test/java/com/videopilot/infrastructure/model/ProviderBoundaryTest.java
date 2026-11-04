@@ -45,14 +45,16 @@ class ProviderBoundaryTest {
     void providerNeutralContractsCarryOnlyProjectTypes() {
         var speech = new SpeechRecognitionPort.Result(
                 List.of(new SpeechRecognitionPort.TranscriptSegment(0, 1000, "lesson")), 1000, Optional.empty());
-        var ocr = new OcrPort.Result(List.of(new OcrPort.TextRegion("slide", 0.9)));
+        var ocr = new OcrPort.Result(List.of(new OcrPort.TextRegion("slide", 0.9, 0, 0, 10, 10)), 100);
         var model = new LanguageModelPort.Response("candidate", new LanguageModelPort.Usage(3, 2));
         var embedding = new EmbeddingPort.Result(List.of(List.of(0.1F, 0.2F)), 1);
 
         assertThat(new SpeechRecognitionPort.Request(
                 Path.of("audio.wav"), 0, 1000, "a".repeat(64), "trace").audioFile())
                 .isEqualTo(Path.of("audio.wav"));
-        assertThat(new OcrPort.Request("image", "chi_sim", "fingerprint").language()).isEqualTo("chi_sim");
+        assertThat(new OcrPort.Request(
+                Path.of("image.png"), 0, "chi_sim", "fingerprint", "trace").language())
+                .isEqualTo("chi_sim");
         assertThat(new LanguageModelPort.Request("prompt", "fingerprint").prompt()).isEqualTo("prompt");
         assertThat(new EmbeddingPort.Request(List.of("text"), "fingerprint").texts()).containsExactly("text");
         assertThat(speech.segments()).hasSize(1);
