@@ -78,6 +78,60 @@ public class VideoContextPersistenceAdapter implements VideoContextStore {
     }
 
     @Override
+    public List<CompletedWorkArtifact> findCompletedArtifacts(OwnerId ownerId, UUID mediaId, String kind) {
+        return mapper.selectCompletedArtifacts(ownerId.value().toString(), mediaId.toString(), kind).stream()
+                .map(row -> new CompletedWorkArtifact(
+                        toDomain(row), row.getArtifactRef(), row.getArtifactDigest()))
+                .toList();
+    }
+
+    @Override
+    public ContextWorkItem createOrReuseWorkItem(OwnerId ownerId, WorkItemPlan workItem) {
+        String owner = ownerId.value().toString();
+        mapper.insertWorkItemOrIgnore(owner, ContextWriteRows.workItem(workItem));
+        ContextWorkItemRow stored = mapper.selectWorkItemByInput(
+                owner, workItem.mediaId().toString(), workItem.kind(), workItem.inputFingerprint());
+        if (stored == null) throw new IllegalArgumentException("work item is not owned by the caller");
+        return toDomain(stored);
+    }
+
+    @Override
+    @Transactional
+    public void startModelCall(ModelCallStart call) {
+        if (mapper.insertModelCall(call) != 1) throw new IllegalStateException("model call was not started");
+    }
+
+    @Override
+    @Transactional
+    public void completeAsr(OwnerId ownerId, AsrCompletion completion) {
+        if (mapper.completeModelCall(completion) != 1
+                || mapper.complete(ownerId.value().toString(), ContextWriteRows.completion(completion.workItem())) != 1) {
+            throw new IllegalStateException("ASR completion lost its call or work-item claim");
+        }
+    }
+
+    @Override
+    @Transactional
+    public void failAsr(OwnerId ownerId, AsrFailure failure) {
+        if (mapper.failModelCall(failure) != 1
+                || mapper.failAsrWorkItem(ownerId.value().toString(), failure.callStatus(),
+                        ContextWriteRows.failure(failure.workItem())) != 1) {
+            throw new IllegalStateException("ASR failure lost its call or work-item claim");
+        }
+    }
+
+    @Override
+    @Transactional
+    public void markStaleAsrUnknown(OwnerId ownerId, ContextWorkItem workItem, Instant markedAt) {
+        int callUpdates = mapper.markStartedModelCallUnknown(
+                workItem.createdByJobId().toString(), workItem.inputFingerprint(), workItem.attempt(), markedAt);
+        if (callUpdates > 1 || mapper.markStartedWorkItemUnknown(
+                ownerId.value().toString(), workItem.workItemId().toString(), workItem.version(), markedAt) != 1) {
+            throw new IllegalStateException("stale ASR work lost its ownership or version race");
+        }
+    }
+
+    @Override
     @Transactional
     public void publish(OwnerId ownerId, ContextPublication publication) {
         String owner = ownerId.value().toString();

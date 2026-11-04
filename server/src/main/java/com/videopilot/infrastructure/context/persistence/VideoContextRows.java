@@ -48,6 +48,8 @@ final class ContextWorkItemRow {
     private String status;
     private int attempt;
     private String claimId;
+    private String artifactRef;
+    private String artifactDigest;
     private Boolean retryable;
     private long version;
     private Instant updatedAt;
@@ -63,6 +65,8 @@ final class ContextWorkItemRow {
     String getStatus() { return status; }
     int getAttempt() { return attempt; }
     String getClaimId() { return claimId; }
+    String getArtifactRef() { return artifactRef; }
+    String getArtifactDigest() { return artifactDigest; }
     Boolean getRetryable() { return retryable; }
     long getVersion() { return version; }
     Instant getUpdatedAt() { return updatedAt; }

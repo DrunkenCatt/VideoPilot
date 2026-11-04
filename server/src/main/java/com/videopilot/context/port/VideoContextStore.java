@@ -25,6 +25,19 @@ public interface VideoContextStore {
 
     boolean fail(OwnerId ownerId, WorkItemFailure failure);
 
+    List<CompletedWorkArtifact> findCompletedArtifacts(
+            OwnerId ownerId, UUID mediaId, String kind);
+
+    ContextWorkItem createOrReuseWorkItem(OwnerId ownerId, WorkItemPlan workItem);
+
+    void startModelCall(ModelCallStart call);
+
+    void completeAsr(OwnerId ownerId, AsrCompletion completion);
+
+    void failAsr(OwnerId ownerId, AsrFailure failure);
+
+    void markStaleAsrUnknown(OwnerId ownerId, ContextWorkItem workItem, Instant markedAt);
+
     void publish(OwnerId ownerId, ContextPublication publication);
 
     record ContextPlan(
@@ -124,6 +137,38 @@ public interface VideoContextStore {
             String errorSummary,
             boolean retryable,
             Instant failedAt) {
+    }
+
+    record CompletedWorkArtifact(ContextWorkItem workItem, String artifactRef, String artifactDigest) {
+    }
+
+    record ModelCallStart(
+            String modelCallId,
+            String jobId,
+            String requestId,
+            String provider,
+            String modelVersion,
+            String inputFingerprint,
+            int attempt,
+            long inputUnits,
+            Instant startedAt) {
+    }
+
+    record AsrCompletion(
+            WorkItemCompletion workItem,
+            String modelCallId,
+            String providerTraceId,
+            long providerDurationMs,
+            long latencyMs,
+            Instant completedAt) {
+    }
+
+    record AsrFailure(
+            WorkItemFailure workItem,
+            String modelCallId,
+            String callStatus,
+            long latencyMs,
+            Instant completedAt) {
     }
 
     final class PublicationConflictException extends RuntimeException {

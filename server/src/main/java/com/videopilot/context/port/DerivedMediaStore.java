@@ -5,4 +5,6 @@ import java.nio.file.Path;
 
 public interface DerivedMediaStore {
     void put(String objectKey, Path source, String contentType, String sha256) throws IOException;
+
+    void copyTo(String objectKey, Path target) throws IOException;
 }

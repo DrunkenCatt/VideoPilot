@@ -1,6 +1,6 @@
 # M2 任务清单：时序多模态 VideoContext
 
-> 状态：M1 已于 2026-11-04 获负责人确认退出；M2 的 T0-T2 已完成，下一任务为 T3。任务按依赖顺序执行，每项先写失败测试或可执行验收场景，再写生产代码。目标是最小可用 VideoContext，不提前实现 M3。
+> 状态：M1 已于 2026-11-04 获负责人确认退出；M2 的 T0-T3 已完成，下一任务为 T4。任务按依赖顺序执行，每项先写失败测试或可执行验收场景，再写生产代码。目标是最小可用 VideoContext，不提前实现 M3。
 
 ## T0：冻结 M2 验收合同、真实样本与状态语义
 
@@ -47,15 +47,16 @@
 
 ## T3：完成 TeleSpeechASR 分片执行、调用审计与断点恢复
 
-- [ ] 实现现有 `SpeechRecognitionPort` 的 TeleSpeechASR Adapter，把分片相对时间统一换算为全片毫秒并校验非空、边界、顺序和响应大小；供应商类型不得越过 Adapter。
-- [ ] 使用 ASR 独立有界执行器逐片执行；调用前写 `model_call`，调用后记录 provider/model version、状态、尝试、耗时、音频计量、估算成本/币种/价格版本或明确的不可得事实。
-- [ ] 只对 T0 冻结的临时错误做有限重试且不在线程中 sleep；超时/连接中断标为 `UNKNOWN_OUTCOME`，永久失败使 Job 稳定失败，禁止用 OCR 冒充完整转录。
-- [ ] 每片转录与 completed Checkpoint 原子提交；应用重启、MQ 重投或同 Job 并发时跳过全部已完成且指纹一致的音频片，只处理剩余片。
-- [ ] Redis 清空、重启或暂时不可用后，仍从 MySQL 恢复分片与调用审计；已完成 ASR 分片调用增量为 0，现有 Job 锁丢失时由数据库 CAS/唯一约束保持单赢家。
+- [x] 实现现有 `SpeechRecognitionPort` 的 TeleSpeechASR Adapter，把分片相对时间统一换算为全片毫秒并校验非空、边界、顺序和响应大小；供应商类型不得越过 Adapter。
+- [x] 使用 ASR 独立有界执行器逐片执行；调用前写 `model_call`，调用后记录 provider/model version、状态、尝试、耗时、音频计量、估算成本/币种/价格版本或明确的不可得事实。
+- [x] 只对 T0 冻结的临时错误做有限重试且不在线程中 sleep；超时/连接中断标为 `UNKNOWN_OUTCOME`，永久失败使 Job 稳定失败，禁止用 OCR 冒充完整转录。
+- [x] 每片转录与 completed Checkpoint 原子提交；应用重启、MQ 重投或同 Job 并发时跳过全部已完成且指纹一致的音频片，只处理剩余片。
+- [x] Redis 清空、重启或暂时不可用后，仍从 MySQL 恢复分片与调用审计；已完成 ASR 分片调用增量为 0，现有 Job 锁丢失时由数据库 CAS/唯一约束保持单赢家。
 - **验收标准**：已完成片的供应商调用次数在重启后不增加；重复/乱序消息不重复调用；时间戳正确偏移到全片；每次真实调用都有可审计记录且不含凭据/完整原始响应。
 - **验证**：Adapter fixture 测试、重试/UNKNOWN 测试、调用审计集成测试、进程/应用中断恢复测试；`server\mvnw.cmd test` 和相关 `verify -Pintegration`。
 - **预计改动区域**：ASR Adapter/configuration、VideoContext 编排、model call persistence、恢复测试。
 - **依赖/规模**：T2 / M。
+- **完成记录（2026-11-04）**：新增 SiliconFlow `TeleAI/TeleSpeechASR` multipart Adapter 与独立有界执行池，供应商只返回整片文本时使用可信音频工作项窗口生成全片毫秒范围。新增 `ASR_SLICE`、V10 调用审计字段及唯一 attempt 约束；调用前持久化 STARTED，成功时把 transcript artifact、Checkpoint 和审计原子收敛。429/503/504 仅落为有限可重试失败，不在执行线程重发；超时、连接中断、输出落盘失败和陈旧 STARTED 均进入 UNKNOWN/复核，避免不确定情况下重复付费。真实 MySQL 集成测试证明重复执行调用增量为 0、UNKNOWN 不自动重发、陈旧 STARTED 不重新调用。业务 Job handler 的最终串联仍按计划在 T5 完成。
 
 ## T4：完成 Tesseract OCR、调用审计与视觉通道降级
 
@@ -71,7 +72,7 @@
 
 ### Checkpoint B：可恢复的双通道处理
 
-- [ ] ASR completed 分片在重启/MQ 重投后零重复调用。
+- [x] ASR completed 分片在重启/MQ 重投后零重复调用。
 - [ ] OCR 故障可稳定降级，ASR 硬失败可稳定终止，二者错误语义不混淆。
 - [ ] FFmpeg、TeleSpeechASR、Tesseract 均有独立资源上限、超时、清理和审计证据。
 - [ ] Redis 清空/中断后，MySQL 中 Context/Checkpoint/调用事实不变，已完成 ASR/OCR 的外部调用增量为 0。

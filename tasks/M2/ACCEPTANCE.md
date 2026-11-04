@@ -4,7 +4,7 @@
 
 - 里程碑：M2 时序多模态 VideoContext
 - 合同冻结日期：2026-11-04
-- 当前阶段：T0-T2 已完成；下一任务为 T3 TeleSpeechASR 分片执行、调用审计与断点恢复
+- 当前阶段：T0-T3 已完成；下一任务为 T4 Tesseract OCR、调用审计与视觉通道降级
 - 范围：FFmpeg 派生、TeleSpeechASR、Tesseract OCR、VideoSegment/VideoContext、分片 Checkpoint、owner-scoped 查询、播放器与统一时间轴
 - 排除：VideoChunk、Embedding、Qdrant、检索、问答、章节、Agent、完整 Manual Replay
 
@@ -181,3 +181,12 @@ MVP ASR 的完整身份为 SiliconFlow 托管模型 `TeleAI/TeleSpeechASR`，不
 - 前端任务结束门：执行 `client\npm.cmd run check`，类型检查、Lint、56 项测试、覆盖率和生产构建通过，耗时 29.6 秒。
 - diff/Floor：`git diff --check -- docs tasks server client benchmark .env.example` 与脱敏凭据模式扫描通过；`.env` 未跟踪，视频/探针音频/原始响应均未进入 Git。
 - 未执行：`verify -Pintegration`、依赖审计和真实浏览器检查属于后续实现/合并门；T0 未修改数据库、消息或运行时 UI，不以未执行项冒充通过。
+
+## 8. T3 自动化证据
+
+- Adapter RED/GREEN：`SiliconFlowSpeechRecognitionAdapterTest` 先因实现缺失失败；实现后验证 multipart、Bearer 鉴权、trace、整片文本到可信全片窗口映射、计量、响应大小以及 HTTP 错误分类。
+- 编排 RED/GREEN：`AsrExecutionApplicationServiceTest` 验证成功审计、completed 复用、有限可重试失败和 UNKNOWN 均不会在同一执行线程重发。
+- MySQL 恢复：`AsrRecoveryIT` 在 V10 真实迁移后验证首次成功、第二次调用增量为 0；超时 UNKNOWN 再执行仍为 0；陈旧 STARTED 原子转为 UNKNOWN，不重新调用供应商。
+- 审计字段：成功调用保存 provider/model/attempt、本地音频毫秒、供应商毫秒、trace、latency 和 `price_status=UNAVAILABLE`，不伪造价格或零成本。
+- Redis 边界：ASR application/domain/infrastructure context 路径未引入 Redis 状态依赖；恢复判断完全读取 MySQL 工作项和 `model_call`。
+- 范围说明：T3 完成 ASR 能力与恢复薄切片；真实 Job handler 串联、Context 最终发布和 Job 稳定失败迁移按任务依赖保留到 T5。

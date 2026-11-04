@@ -190,6 +190,20 @@ public final class MinioMediaObjectStore implements MediaObjectStore, MediaProbe
         }
     }
 
+    @Override
+    public void copyTo(String objectKey, Path target) throws IOException {
+        try (GetObjectResponse response = client.getObject(GetObjectArgs.builder()
+                .bucket(bucket)
+                .object(objectKey)
+                .build()).join()) {
+            Files.copy(response, target, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw dependency(exception);
+        }
+    }
+
     private void ensureBucket() {
         boolean exists = client.bucketExists(BucketExistsArgs.builder().bucket(bucket).build()).join();
         if (!exists) {

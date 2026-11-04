@@ -9,9 +9,9 @@ M1 的启动、演示、接口与故障排查步骤见 [docs/M1_RUNBOOK.md](docs
 
 ## 当前阶段
 
-- 状态：M1 已于 2026-11-04 经项目负责人确认退出；M2 已完成 T0-T2，下一任务为 T3
-- 当前可验证：M1 上传/Job 闭环，以及 M2 VideoContext 合同、MySQL 分片 Checkpoint 底座、FFmpeg 音频切片与关键帧派生
-- 当前不包含：业务链路中的真实 ASR/OCR、最终 VideoSegment 发布、播放器时间轴、VideoChunk、向量检索和证据问答
+- 状态：M1 已于 2026-11-04 经项目负责人确认退出；M2 已完成 T0-T3，下一任务为 T4
+- 当前可验证：M1 上传/Job 闭环，以及 M2 VideoContext 合同、MySQL 分片 Checkpoint、FFmpeg 派生和 TeleSpeechASR 分片执行/恢复
+- 当前不包含：Tesseract OCR、最终 VideoSegment 发布、播放器时间轴、VideoChunk、向量检索和证据问答
 - 第一目标：可靠的视频解析与有证据问答 MVP
 - 第二目标：可持久化、可预算、可评测的 Agent Loop
 - 第三目标：把经过复核的用户反馈转化为 Agent 候选版本，并通过评测完成晋级或回滚

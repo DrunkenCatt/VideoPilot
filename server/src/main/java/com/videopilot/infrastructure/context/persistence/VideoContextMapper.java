@@ -11,6 +11,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
+import java.util.List;
 
 @Mapper
 interface VideoContextMapper {
@@ -93,6 +94,123 @@ interface VideoContextMapper {
     ContextWorkItemRow selectOwnedWorkItem(
             @Param("ownerId") String ownerId,
             @Param("workItemId") String workItemId);
+
+    @Select("""
+            SELECT item.*
+            FROM context_work_item item
+            INNER JOIN media_asset media ON media.media_id = item.media_id
+            WHERE media.owner_id = #{ownerId}
+              AND item.media_id = #{mediaId}
+              AND item.kind = #{kind}
+              AND item.status = 'COMPLETED'
+            ORDER BY item.ordinal
+            """)
+    List<ContextWorkItemRow> selectCompletedArtifacts(
+            @Param("ownerId") String ownerId,
+            @Param("mediaId") String mediaId,
+            @Param("kind") String kind);
+
+    @Insert("""
+            INSERT INTO model_call (
+                model_call_id, job_id, request_id, operation_type, provider,
+                model_name, model_version, input_fingerprint, status, attempt,
+                input_units, price_status, started_at
+            ) VALUES (
+                #{call.modelCallId}, #{call.jobId}, #{call.requestId}, 'ASR', #{call.provider},
+                #{call.modelVersion}, #{call.modelVersion}, #{call.inputFingerprint}, 'STARTED', #{call.attempt},
+                #{call.inputUnits}, 'UNAVAILABLE', #{call.startedAt}
+            )
+            """)
+    int insertModelCall(@Param("call") com.videopilot.context.port.VideoContextStore.ModelCallStart call);
+
+    @Update("""
+            UPDATE model_call
+            SET status = 'SUCCEEDED',
+                provider_trace_id = #{completion.providerTraceId},
+                output_artifact_ref = #{completion.workItem.artifactRef},
+                output_units = #{completion.providerDurationMs},
+                latency_ms = #{completion.latencyMs},
+                completed_at = #{completion.completedAt},
+                updated_at = #{completion.completedAt}
+            WHERE model_call_id = #{completion.modelCallId} AND status = 'STARTED'
+            """)
+    int completeModelCall(
+            @Param("completion") com.videopilot.context.port.VideoContextStore.AsrCompletion completion);
+
+    @Update("""
+            UPDATE model_call
+            SET status = #{failure.callStatus},
+                error_category = #{failure.workItem.errorCategory},
+                error_code = #{failure.workItem.errorCode},
+                error_summary = #{failure.workItem.errorSummary},
+                latency_ms = #{failure.latencyMs},
+                completed_at = #{failure.completedAt},
+                updated_at = #{failure.completedAt}
+            WHERE model_call_id = #{failure.modelCallId} AND status = 'STARTED'
+            """)
+    int failModelCall(@Param("failure") com.videopilot.context.port.VideoContextStore.AsrFailure failure);
+
+    @Update("""
+            UPDATE context_work_item item
+            INNER JOIN analysis_job job ON job.job_id = item.created_by_job_id
+            SET item.status = CASE WHEN #{callStatus} = 'UNKNOWN_OUTCOME' THEN 'UNKNOWN' ELSE 'FAILED' END,
+                item.error_category = #{failure.errorCategory},
+                item.error_code = #{failure.errorCode},
+                item.error_summary = #{failure.errorSummary},
+                item.retryable = #{failure.retryable},
+                item.version = item.version + 1,
+                item.updated_at = #{failure.failedAt}
+            WHERE item.work_item_id = #{failure.workItemId}
+              AND job.owner_id = #{ownerId}
+              AND item.status = 'STARTED'
+              AND item.claim_id = #{failure.claimId}
+              AND item.version = #{failure.expectedVersion}
+            """)
+    int failAsrWorkItem(
+            @Param("ownerId") String ownerId,
+            @Param("callStatus") String callStatus,
+            @Param("failure") ContextWriteRows.WorkItemFailureWrite failure);
+
+    @Update("""
+            UPDATE model_call
+            SET status = 'UNKNOWN_OUTCOME',
+                error_category = 'UNKNOWN_OUTCOME',
+                error_code = 'STALE_STARTED',
+                error_summary = 'ASR process ended before a durable outcome was recorded',
+                completed_at = #{markedAt},
+                updated_at = #{markedAt}
+            WHERE job_id = #{jobId}
+              AND operation_type = 'ASR'
+              AND input_fingerprint = #{inputFingerprint}
+              AND attempt = #{attempt}
+              AND status = 'STARTED'
+            """)
+    int markStartedModelCallUnknown(
+            @Param("jobId") String jobId,
+            @Param("inputFingerprint") String inputFingerprint,
+            @Param("attempt") int attempt,
+            @Param("markedAt") java.time.Instant markedAt);
+
+    @Update("""
+            UPDATE context_work_item item
+            INNER JOIN analysis_job job ON job.job_id = item.created_by_job_id
+            SET item.status = 'UNKNOWN',
+                item.error_category = 'UNKNOWN_OUTCOME',
+                item.error_code = 'STALE_STARTED',
+                item.error_summary = 'ASR process ended before a durable outcome was recorded',
+                item.retryable = FALSE,
+                item.version = item.version + 1,
+                item.updated_at = #{markedAt}
+            WHERE item.work_item_id = #{workItemId}
+              AND job.owner_id = #{ownerId}
+              AND item.status = 'STARTED'
+              AND item.version = #{expectedVersion}
+            """)
+    int markStartedWorkItemUnknown(
+            @Param("ownerId") String ownerId,
+            @Param("workItemId") String workItemId,
+            @Param("expectedVersion") long expectedVersion,
+            @Param("markedAt") java.time.Instant markedAt);
 
     @Update("""
             UPDATE context_work_item item

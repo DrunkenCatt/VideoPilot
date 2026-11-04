@@ -40,6 +40,19 @@ management:
 
 videopilot:
   context:
+    asr:
+      enabled: ${ASR_ENABLED:false}
+      base-url: ${SILICONFLOW_ASR_BASE_URL:https://api.siliconflow.cn/v1}
+      api-key: ${SILICONFLOW_API_KEY:}
+      provider: SiliconFlow
+      model-version: ${TELESPEECH_ASR_MODEL_VERSION:TeleAI/TeleSpeechASR}
+      timeout: ${TELESPEECH_ASR_TIMEOUT:120s}
+      temporary-directory: ${ASR_TEMPORARY_DIRECTORY:${java.io.tmpdir}/videopilot-asr}
+      max-audio-bytes: ${ASR_MAX_AUDIO_BYTES:52428800}
+      max-response-bytes: ${ASR_MAX_RESPONSE_BYTES:1048576}
+      max-concurrency: ${ASR_MAX_CONCURRENCY:1}
+      queue-capacity: ${ASR_QUEUE_CAPACITY:2}
+      max-attempts: ${ASR_MAX_ATTEMPTS:3}
     derivation:
       enabled: ${CONTEXT_DERIVATION_ENABLED:false}
       executable: ${FFMPEG_EXECUTABLE:ffmpeg}
