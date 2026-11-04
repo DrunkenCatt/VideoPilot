@@ -1,6 +1,6 @@
 # M2 任务清单：时序多模态 VideoContext
 
-> 状态：M1 已于 2026-11-04 获负责人确认退出；M2 的 T0-T3 已完成，下一任务为 T4。任务按依赖顺序执行，每项先写失败测试或可执行验收场景，再写生产代码。目标是最小可用 VideoContext，不提前实现 M3。
+> 状态：M1 已于 2026-11-04 获负责人确认退出；M2 的 T0-T4 已完成，下一任务为 T5。任务按依赖顺序执行，每项先写失败测试或可执行验收场景，再写生产代码。目标是最小可用 VideoContext，不提前实现 M3。
 
 ## T0：冻结 M2 验收合同、真实样本与状态语义
 
@@ -60,21 +60,22 @@
 
 ## T4：完成 Tesseract OCR、调用审计与视觉通道降级
 
-- [ ] 实现现有 `OcrPort` 的 Tesseract Adapter，使用 OCR 独立有界执行器处理关键帧，限制超时、输出、语言包和并发，并校验置信度/文本大小。
-- [ ] 为每帧写 `model_call` 审计，记录 Tesseract/version、状态、耗时、图片计量和零成本事实；失败信息使用稳定分类，不保存命令行内部路径或整份原始输出。
-- [ ] 逐帧结果与 Checkpoint 原子提交；局部失败继续剩余帧，达到冻结的通道失败条件后把 OCR 标为 `DEGRADED` 并完成 ASR-only Context，不回滚已完成 ASR。
-- [ ] 超时、取消和异常必须销毁子进程并清理临时图片；已完成同指纹帧在重启后不得再次 OCR。
-- [ ] Redis 清空、重启或暂时不可用不得重置 OCR 工作项、attempt 或调用计数；不得把完整 OCR、帧或 Checkpoint payload 放入 Redis。
+- [x] 实现现有 `OcrPort` 的 Tesseract Adapter，使用 OCR 独立有界执行器处理关键帧，限制超时、输出、语言包和并发，并校验置信度/文本大小。
+- [x] 为每帧写 `model_call` 审计，记录 Tesseract/version、状态、耗时、图片计量和零成本事实；失败信息使用稳定分类，不保存命令行内部路径或整份原始输出。
+- [x] 逐帧结果与 Checkpoint 原子提交；局部失败继续剩余帧，达到冻结的通道失败条件后把 OCR 标为 `DEGRADED` 并完成 ASR-only Context，不回滚已完成 ASR。
+- [x] 超时、取消和异常必须销毁子进程并清理临时图片；已完成同指纹帧在重启后不得再次 OCR。
+- [x] Redis 清空、重启或暂时不可用不得重置 OCR 工作项、attempt 或调用计数；不得把完整 OCR、帧或 Checkpoint payload 放入 Redis。
 - **验收标准**：正常帧得到带时间点的 OCR；强制 Tesseract 缺失/超时/坏图时 Job 仍可凭 ASR 进入 READY 且降级事实可查询；ASR 与 OCR 不共享会互相饿死的执行池。
 - **验证**：Tesseract Adapter/清理单测、OCR 部分/整通道失败集成测试、重启跳过测试；`server\mvnw.cmd test`。
 - **预计改动区域**：OCR Adapter/configuration、VideoContext 编排、model call persistence、降级测试。
 - **依赖/规模**：T2 / M；可与 T3 并行。
+- **完成记录（2026-11-04）**：新增受限 Tesseract TSV Adapter，启动时读取二进制版本并对配置语言包内容做 SHA-256 指纹；二进制不可用时保留 `unavailable` 身份并在逐帧执行中稳定降级，不阻止应用启动。OCR 使用独立有界执行池，限制图片字节/像素、输出、文本、并发和超时，超时强制销毁子进程。新增 `OCR_FRAME` 与 V11 迁移，每帧调用前写 OCR 审计，成功时把结果、Checkpoint 和零本地成本事实原子提交；局部永久失败继续处理后续帧并收敛为 `DEGRADED`，completed 同指纹帧重投调用增量为 0。最终 Context/Job READY 与通道状态发布仍由 T5 统一完成。
 
 ### Checkpoint B：可恢复的双通道处理
 
 - [x] ASR completed 分片在重启/MQ 重投后零重复调用。
-- [ ] OCR 故障可稳定降级，ASR 硬失败可稳定终止，二者错误语义不混淆。
-- [ ] FFmpeg、TeleSpeechASR、Tesseract 均有独立资源上限、超时、清理和审计证据。
+- [x] OCR 故障可稳定降级，ASR 硬失败可稳定终止，二者错误语义不混淆。
+- [x] FFmpeg、TeleSpeechASR、Tesseract 均有独立资源上限、超时、清理和审计证据。
 - [ ] Redis 清空/中断后，MySQL 中 Context/Checkpoint/调用事实不变，已完成 ASR/OCR 的外部调用增量为 0。
 
 ## T5：对齐并发布可查询 VideoContext

@@ -73,6 +73,90 @@ class TesseractOcrAdapterTest {
                 .hasMessage("INVALID_IMAGE");
     }
 
+    @Test
+    void keepsMissingBinaryAsAnAuditableDegradedRuntimeDependency() throws Exception {
+        TesseractOcrAdapter adapter = adapter(
+                List.of(temporaryDirectory.resolve("missing-tesseract").toString()),
+                trainedData(), Duration.ofSeconds(1), 4096);
+
+        assertThat(adapter.identity().binaryVersion()).isEqualTo("unavailable");
+        assertThatThrownBy(() -> adapter.recognize(new OcrPort.Request(
+                image(), 0, "eng", "a".repeat(64), "trace")))
+                .isInstanceOf(OcrException.class)
+                .extracting(error -> ((OcrException) error).errorCode())
+                .isEqualTo("UNAVAILABLE");
+    }
+
+    @Test
+    void rejectsUntrustedImageLanguageAndTextLimits() throws Exception {
+        Path validImage = image();
+        TesseractOcrAdapter adapter = adapter(commandPrefix(), trainedData(), Duration.ofSeconds(5), 4096);
+
+        assertThatThrownBy(() -> adapter.recognize(new OcrPort.Request(
+                validImage, 0, "chi_sim", "a".repeat(64), "trace")))
+                .isInstanceOf(OcrException.class)
+                .hasMessage("INVALID_REQUEST");
+
+        Path invalidImage = Files.write(temporaryDirectory.resolve("invalid.png"), new byte[] {1, 2, 3});
+        assertThatThrownBy(() -> adapter.recognize(new OcrPort.Request(
+                invalidImage, 0, "eng", "a".repeat(64), "trace")))
+                .isInstanceOf(OcrException.class)
+                .hasMessage("INVALID_IMAGE");
+
+        assertThatThrownBy(() -> adapter(
+                commandPrefix("-Dfake.mode=text-limit"), trainedData(), Duration.ofSeconds(5), 4096)
+                .recognize(new OcrPort.Request(validImage, 0, "eng", "a".repeat(64), "trace")))
+                .isInstanceOf(OcrException.class)
+                .hasMessage("TEXT_LIMIT");
+    }
+
+    @Test
+    void rejectsPixelByteAndMalformedTsvLimits() throws Exception {
+        Path validImage = image();
+        Path tessdata = trainedData();
+        TesseractOcrAdapter pixelLimited = new TesseractOcrAdapter(
+                commandPrefix(), tessdata, "eng", Duration.ofSeconds(5),
+                4096, 1024, 1024 * 1024, 100, 1);
+        assertThatThrownBy(() -> pixelLimited.recognize(new OcrPort.Request(
+                validImage, 0, "eng", "a".repeat(64), "trace")))
+                .isInstanceOf(OcrException.class)
+                .hasMessage("IMAGE_LIMIT");
+
+        TesseractOcrAdapter byteLimited = new TesseractOcrAdapter(
+                commandPrefix(), tessdata, "eng", Duration.ofSeconds(5),
+                4096, 1024, 1, 1_000_000, 1);
+        assertThatThrownBy(() -> byteLimited.recognize(new OcrPort.Request(
+                validImage, 0, "eng", "a".repeat(64), "trace")))
+                .isInstanceOf(OcrException.class)
+                .hasMessage("IMAGE_LIMIT");
+
+        assertThatThrownBy(() -> adapter(
+                commandPrefix("-Dfake.mode=invalid-tsv"), tessdata, Duration.ofSeconds(5), 4096)
+                .recognize(new OcrPort.Request(validImage, 0, "eng", "a".repeat(64), "trace")))
+                .isInstanceOf(OcrException.class)
+                .hasMessage("INVALID_OUTPUT");
+
+        assertThatThrownBy(() -> new TesseractOcrAdapter(
+                List.of(), tessdata, "eng", Duration.ofSeconds(5),
+                4096, 1024, 1024, 1024, 1))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void rejectsMissingLanguageDataAndFailedVersionProbe() throws Exception {
+        Path emptyTessdata = temporaryDirectory.resolve("empty-tessdata");
+        Files.createDirectories(emptyTessdata);
+        assertThatThrownBy(() -> adapter(
+                commandPrefix(), emptyTessdata, Duration.ofSeconds(5), 4096))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("language data");
+
+        assertThatThrownBy(() -> adapter(
+                commandPrefix("-Dfake.mode=version-fail"), trainedData(), Duration.ofSeconds(5), 4096))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("version probe failed");
+    }
+
     private TesseractOcrAdapter adapter(
             List<String> command, Path tessdata, Duration timeout, int maxOutputBytes) {
         return new TesseractOcrAdapter(

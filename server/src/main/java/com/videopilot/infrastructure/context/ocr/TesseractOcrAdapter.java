@@ -156,7 +156,12 @@ public final class TesseractOcrAdapter implements OcrPort {
     private EngineIdentity inspectIdentity() {
         ArrayList<String> command = new ArrayList<>(commandPrefix);
         command.add("--version");
-        Process process = start(command);
+        Process process;
+        try {
+            process = start(command);
+        } catch (OcrException exception) {
+            return new EngineIdentity("unavailable", languageDigest());
+        }
         try {
             byte[] output = process.getInputStream().readNBytes(maxOutputBytes + 1);
             byte[] errors = process.getErrorStream().readNBytes(maxOutputBytes + 1);

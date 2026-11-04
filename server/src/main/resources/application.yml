@@ -40,6 +40,21 @@ management:
 
 videopilot:
   context:
+    ocr:
+      enabled: ${OCR_ENABLED:false}
+      executable: ${TESSERACT_EXECUTABLE:tesseract}
+      tessdata-directory: ${TESSDATA_DIRECTORY:}
+      language: ${TESSERACT_LANGUAGE:eng}
+      provider: Tesseract
+      timeout: ${TESSERACT_TIMEOUT:30s}
+      temporary-directory: ${OCR_TEMPORARY_DIRECTORY:${java.io.tmpdir}/videopilot-ocr}
+      max-output-bytes: ${OCR_MAX_OUTPUT_BYTES:1048576}
+      max-text-characters: ${OCR_MAX_TEXT_CHARACTERS:100000}
+      max-image-bytes: ${OCR_MAX_IMAGE_BYTES:20971520}
+      max-pixels: ${OCR_MAX_PIXELS:40000000}
+      max-concurrency: ${OCR_MAX_CONCURRENCY:1}
+      queue-capacity: ${OCR_QUEUE_CAPACITY:4}
+      max-attempts: ${OCR_MAX_ATTEMPTS:2}
     asr:
       enabled: ${ASR_ENABLED:false}
       base-url: ${SILICONFLOW_ASR_BASE_URL:https://api.siliconflow.cn/v1}

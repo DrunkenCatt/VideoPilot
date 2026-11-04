@@ -1,4 +1,5 @@
 com.videopilot.infrastructure.analysis.persistence.AnalysisJobAutoConfiguration
 com.videopilot.infrastructure.context.persistence.VideoContextAutoConfiguration
 com.videopilot.infrastructure.context.asr.AsrAutoConfiguration
+com.videopilot.infrastructure.context.ocr.OcrAutoConfiguration
 com.videopilot.infrastructure.media.persistence.MediaUploadAutoConfiguration

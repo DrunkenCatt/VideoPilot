@@ -4,7 +4,7 @@
 
 - 里程碑：M2 时序多模态 VideoContext
 - 合同冻结日期：2026-11-04
-- 当前阶段：T0-T3 已完成；下一任务为 T4 Tesseract OCR、调用审计与视觉通道降级
+- 当前阶段：T0-T4 已完成；下一任务为 T5 对齐并发布可查询 VideoContext
 - 范围：FFmpeg 派生、TeleSpeechASR、Tesseract OCR、VideoSegment/VideoContext、分片 Checkpoint、owner-scoped 查询、播放器与统一时间轴
 - 排除：VideoChunk、Embedding、Qdrant、检索、问答、章节、Agent、完整 Manual Replay
 
@@ -190,3 +190,12 @@ MVP ASR 的完整身份为 SiliconFlow 托管模型 `TeleAI/TeleSpeechASR`，不
 - 审计字段：成功调用保存 provider/model/attempt、本地音频毫秒、供应商毫秒、trace、latency 和 `price_status=UNAVAILABLE`，不伪造价格或零成本。
 - Redis 边界：ASR application/domain/infrastructure context 路径未引入 Redis 状态依赖；恢复判断完全读取 MySQL 工作项和 `model_call`。
 - 范围说明：T3 完成 ASR 能力与恢复薄切片；真实 Job handler 串联、Context 最终发布和 Job 稳定失败迁移按任务依赖保留到 T5。
+
+## 9. T4 自动化证据
+
+- Adapter RED/GREEN：`TesseractOcrAdapterTest` 先因实现缺失失败；实现后以独立子进程验证版本/语言包指纹、TSV 置信度与区域解析、输出上限、坏图分类、缺失二进制降级以及超时进程销毁。
+- 编排 RED/GREEN：`OcrExecutionApplicationServiceTest` 验证结果与调用审计原子完成、completed 复用、单帧永久失败后继续剩余帧并返回 `DEGRADED`。
+- MySQL 恢复：`OcrRecoveryIT` 在 V11 真实迁移后验证首次成功、第二次 OCR 调用增量为 0；永久坏帧重复执行仍为 0，并保留失败工作项和调用审计。
+- 审计字段：成功调用记录 Tesseract 二进制版本与语言包摘要、图片像素、文本字符、耗时、`estimated_cost=0`、`currency=USD`、`price_version=local-zero-v1` 和 `price_status=AVAILABLE`。
+- Redis 边界：OCR application/domain/infrastructure context 路径未引入 Redis；工作项、attempt、结果引用和审计均以 MySQL 为准，完整 OCR 文本写入受控对象产物和 MySQL Checkpoint，不进入 Redis 或消息。
+- 范围说明：T4 产出 OCR 通道结果与 `DEGRADED` 编排结论；把通道状态发布到最终 Context、生成 VideoSegment 并推进 Job READY 属于 T5。
