@@ -70,7 +70,7 @@ public class VideoContextAutoConfiguration {
             FfmpegMediaDeriver deriver,
             ObjectMapper json,
             ContextDerivationProperties properties,
-            @Value("${videopilot.analysis.pipeline-version:m2-context-v1}") String pipelineVersion) {
+            @Value("${videopilot.analysis.pipeline-version:m3-evidence-qa-v1}") String pipelineVersion) {
         return new ContextDerivationApplicationService(
                 contexts, media, objects, deriver, objects, json,
                 Path.of(properties.getTemporaryDirectory()), pipelineVersion,

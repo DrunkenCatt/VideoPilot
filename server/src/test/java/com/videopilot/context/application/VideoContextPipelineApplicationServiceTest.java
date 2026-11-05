@@ -11,6 +11,7 @@ import com.videopilot.analysis.application.AnalysisJobPipeline;
 import com.videopilot.analysis.application.JobTransitionCommand;
 import com.videopilot.analysis.application.JobTransitionService;
 import com.videopilot.analysis.domain.AnalysisJob;
+import com.videopilot.analysis.domain.JobStage;
 import com.videopilot.analysis.domain.JobStatus;
 import com.videopilot.context.domain.ContextChannelState;
 import com.videopilot.context.domain.ContextWorkItem;
@@ -19,6 +20,7 @@ import com.videopilot.context.domain.ContextWorkItemStatus;
 import com.videopilot.context.domain.VideoContext;
 import com.videopilot.context.domain.VideoContextStatus;
 import com.videopilot.context.port.VideoContextStore;
+import com.videopilot.retrieval.application.VideoIndexApplicationService;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -51,9 +53,10 @@ class VideoContextPipelineApplicationServiceTest {
         VideoContextApplicationService contexts = mock(VideoContextApplicationService.class);
         VideoContextStore store = mock(VideoContextStore.class);
         JobTransitionService transitions = mock(JobTransitionService.class);
+        VideoIndexApplicationService indexing = mock(VideoIndexApplicationService.class);
         var pipeline = new VideoContextPipelineApplicationService(
                 derivation, asr, ocr, contexts, store, transitions,
-                new VideoContextAligner(new ObjectMapper(), 60_000), new ObjectMapper());
+                new VideoContextAligner(new ObjectMapper(), 60_000), new ObjectMapper(), indexing);
         when(derivation.derive(any(), any(), any()))
                 .thenReturn(ContextDerivationApplicationService.DerivationOutcome.COMPLETED);
         when(asr.transcribe(any(), any(), any()))
@@ -88,6 +91,36 @@ class VideoContextPipelineApplicationServiceTest {
         verify(transitions).transition(transition.capture());
         assertThat(transition.getValue().expectedStatus()).isEqualTo(JobStatus.CONTEXT_BUILDING);
         assertThat(transition.getValue().targetStatus()).isEqualTo(JobStatus.READY);
+    }
+
+    @Test
+    void sendsM3ContextThroughRealIndexingBeforeReady() {
+        VideoContextStore store = mock(VideoContextStore.class);
+        JobTransitionService transitions = mock(JobTransitionService.class);
+        VideoIndexApplicationService indexing = mock(VideoIndexApplicationService.class);
+        VideoContext context = new VideoContext(CONTEXT_ID, JOB_ID, MEDIA_ID, "c".repeat(64),
+                "m3-evidence-qa-v1", "extract-v1", "align-v1", 60_000, VideoContextStatus.READY,
+                ContextChannelState.AVAILABLE, ContextChannelState.AVAILABLE, 1, 1, NOW, NOW);
+        when(store.findContextByJob(any(), any())).thenReturn(Optional.of(context));
+        when(indexing.inputFingerprint(any(), any())).thenReturn("f".repeat(64));
+        var pipeline = new VideoContextPipelineApplicationService(
+                mock(ContextDerivationApplicationService.class), mock(AsrExecutionApplicationService.class),
+                mock(OcrExecutionApplicationService.class), mock(VideoContextApplicationService.class),
+                store, transitions, new VideoContextAligner(new ObjectMapper(), 60_000),
+                new ObjectMapper(), indexing);
+
+        pipeline.execute(job(), "request-context");
+        pipeline.execute(new AnalysisJob(JOB_ID, OWNER_ID.toString(), MEDIA_ID, JobStatus.INDEXING,
+                Optional.of(JobStage.INDEXING), 0, 5, 5, Optional.empty(), NOW, NOW, Optional.empty()),
+                "request-index");
+
+        ArgumentCaptor<JobTransitionCommand> transitionsMade = ArgumentCaptor.forClass(JobTransitionCommand.class);
+        verify(transitions, org.mockito.Mockito.times(2)).transition(transitionsMade.capture());
+        assertThat(transitionsMade.getAllValues()).extracting(JobTransitionCommand::targetStatus)
+                .containsExactly(JobStatus.INDEXING, JobStatus.READY);
+        assertThat(transitionsMade.getAllValues().getFirst().stageAttempt()).get()
+                .satisfies(stage -> assertThat(stage.stage()).isEqualTo(JobStage.INDEXING));
+        verify(indexing).index(any(), any());
     }
 
     private AnalysisJob job() {

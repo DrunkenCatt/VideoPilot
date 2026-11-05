@@ -10,6 +10,8 @@ import com.videopilot.analysis.domain.AnalysisJob;
 import com.videopilot.analysis.domain.JobErrorCategory;
 import com.videopilot.analysis.domain.JobEventType;
 import com.videopilot.analysis.domain.JobFailure;
+import com.videopilot.analysis.domain.JobStage;
+import com.videopilot.analysis.domain.JobStageAttempt;
 import com.videopilot.analysis.domain.JobStatus;
 import com.videopilot.context.domain.ContextChannelState;
 import com.videopilot.context.domain.ContextWorkItemKind;
@@ -19,6 +21,7 @@ import com.videopilot.context.port.MediaDerivationException;
 import com.videopilot.context.port.VideoContextStore;
 import com.videopilot.identity.application.OwnerContext;
 import com.videopilot.identity.domain.OwnerId;
+import com.videopilot.retrieval.application.VideoIndexApplicationService;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -39,6 +42,7 @@ public class VideoContextPipelineApplicationService implements AnalysisJobPipeli
     private final JobTransitionService transitions;
     private final VideoContextAligner aligner;
     private final ObjectMapper json;
+    private final VideoIndexApplicationService indexing;
 
     public VideoContextPipelineApplicationService(
             ContextDerivationApplicationService derivation,
@@ -48,7 +52,8 @@ public class VideoContextPipelineApplicationService implements AnalysisJobPipeli
             VideoContextStore store,
             JobTransitionService transitions,
             VideoContextAligner aligner,
-            ObjectMapper json) {
+            ObjectMapper json,
+            VideoIndexApplicationService indexing) {
         this.derivation = derivation;
         this.asr = asr;
         this.ocr = ocr;
@@ -57,6 +62,7 @@ public class VideoContextPipelineApplicationService implements AnalysisJobPipeli
         this.transitions = transitions;
         this.aligner = aligner;
         this.json = json;
+        this.indexing = indexing;
     }
 
     @Override
@@ -68,9 +74,15 @@ public class VideoContextPipelineApplicationService implements AnalysisJobPipeli
             return failed(JobErrorCategory.NON_RETRYABLE, "INVALID_OWNER", "Job owner identity is invalid");
         }
 
+        if (job.status() == JobStatus.INDEXING) {
+            indexing.index(owner, job.jobId());
+            transitionReadyFromIndexing(job, requestId);
+            return Outcome.completed();
+        }
+
         VideoContext existing = store.findContextByJob(owner.ownerId(), job.jobId()).orElse(null);
         if (existing != null && existing.status() == VideoContextStatus.READY) {
-            transitionReady(job, requestId, existing.ocrState());
+            transitionAfterContext(job, requestId, owner, existing);
             return Outcome.completed();
         }
 
@@ -134,7 +146,9 @@ public class VideoContextPipelineApplicationService implements AnalysisJobPipeli
                     context.contextId(), job.jobId(), context.version(), stageFingerprint, 1, checkpoint,
                     "mysql:video-context/" + context.contextId(), digest, ContextChannelState.AVAILABLE,
                     ocrState, segments));
-            transitionReady(job, requestId, ocrState);
+            VideoContext published = store.findContextByJob(owner.ownerId(), job.jobId())
+                    .orElseThrow(() -> new IllegalStateException("published context is unavailable"));
+            transitionAfterContext(job, requestId, owner, published);
             return Outcome.completed();
         } catch (JsonProcessingException exception) {
             return failed(JobErrorCategory.NON_RETRYABLE, "CONTEXT_SERIALIZATION", "Context data is invalid");
@@ -195,6 +209,31 @@ public class VideoContextPipelineApplicationService implements AnalysisJobPipeli
                 Optional.empty(), Optional.empty(), JobEventType.JOB_READY, requestId,
                 "{\"status\":\"READY\",\"capability\":\"VIDEO_CONTEXT\",\"ocrState\":\""
                         + ocrState.name() + "\"}"));
+    }
+
+    private void transitionAfterContext(
+            AnalysisJob job,
+            String requestId,
+            OwnerContext owner,
+            VideoContext context) {
+        if (!context.pipelineVersion().startsWith("m3-")) {
+            transitionReady(job, requestId, context.ocrState());
+            return;
+        }
+        String fingerprint = indexing.inputFingerprint(owner, job.jobId());
+        JobStageAttempt stage = JobStageAttempt.started(
+                job.jobId(), JobStage.INDEXING, fingerprint, 1, context.updatedAt());
+        transitions.transition(new JobTransitionCommand(
+                job.jobId(), JobStatus.CONTEXT_BUILDING, job.version(), JobStatus.INDEXING,
+                Optional.of(stage), Optional.empty(), JobEventType.STAGE_STARTED, requestId,
+                "{\"stage\":\"INDEXING\",\"status\":\"STARTED\"}"));
+    }
+
+    private void transitionReadyFromIndexing(AnalysisJob job, String requestId) {
+        transitions.transition(new JobTransitionCommand(
+                job.jobId(), JobStatus.INDEXING, job.version(), JobStatus.READY,
+                Optional.empty(), Optional.empty(), JobEventType.JOB_READY, requestId,
+                "{\"status\":\"READY\",\"capability\":\"VIDEO_CHUNK\"}"));
     }
 
     private Outcome failed(JobErrorCategory category, String code, String summary) {

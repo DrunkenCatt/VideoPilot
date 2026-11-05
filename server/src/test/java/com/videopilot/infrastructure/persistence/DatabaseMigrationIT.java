@@ -43,6 +43,8 @@ class DatabaseMigrationIT {
                     'context_work_item',
                     'model_call',
                     'video_context',
+                    'video_index',
+                    'video_chunk',
                     'video_segment',
                     'identity_user',
                     'user_session'
@@ -63,7 +65,9 @@ class DatabaseMigrationIT {
                 "media_upload_session",
                 "model_call",
                 "user_session",
+                "video_chunk",
                 "video_context",
+                "video_index",
                 "video_segment");
     }
 

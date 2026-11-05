@@ -59,7 +59,7 @@ public class AnalysisJobAutoConfiguration {
     AnalysisJobApplicationService analysisJobApplicationService(
             AnalysisJobPersistenceAdapter store,
             ActiveAnalysisJobCache activeAnalysisJobCache,
-            @Value("${videopilot.analysis.pipeline-version:m2-context-v1}") String pipelineVersion) {
+            @Value("${videopilot.analysis.pipeline-version:m3-evidence-qa-v1}") String pipelineVersion) {
         Clock clock = Clock.systemUTC();
         return new AnalysisJobApplicationService(
                 store, activeAnalysisJobCache, clock::instant, UUID::randomUUID, pipelineVersion);

@@ -50,6 +50,39 @@ class AnalysisJobExecutionHandlerTest {
     }
 
     @Test
+    void runsM3ThroughARealIndexingStageBeforeReady() {
+        FakeStore store = new FakeStore(job(JobStatus.CREATED, 0, 0));
+        JobTransitionService transitions = new JobTransitionService(
+                store,
+                org.mockito.Mockito.mock(com.videopilot.analysis.port.ActiveAnalysisJobCache.class),
+                new JobStateMachine(),
+                () -> NOW);
+        AnalysisJobPipeline pipeline = (job, requestId) -> {
+            JobStatus target = job.status() == JobStatus.CONTEXT_BUILDING ? JobStatus.INDEXING : JobStatus.READY;
+            Optional<JobStageAttempt> stage = target == JobStatus.INDEXING
+                    ? Optional.of(JobStageAttempt.started(
+                            job.jobId(), JobStage.INDEXING, "f".repeat(64), 1, NOW))
+                    : Optional.empty();
+            transitions.transition(new JobTransitionCommand(
+                    job.jobId(), job.status(), job.version(), target, stage, Optional.empty(),
+                    target == JobStatus.READY ? JobEventType.JOB_READY : JobEventType.STAGE_STARTED,
+                    requestId, "{\"status\":\"" + target + "\"}"));
+            return AnalysisJobPipeline.Outcome.completed();
+        };
+        AnalysisJobExecutionHandler handler = new AnalysisJobExecutionHandler(
+                store, transitions, jobId -> JobExecutionLock.LockAttempt.unavailable(), pipeline, () -> NOW);
+
+        assertThat(handler.handle(message())).isEqualTo(AnalysisJobExecutionHandler.Result.ACK);
+
+        assertThat(store.job.status()).isEqualTo(JobStatus.READY);
+        assertThat(store.commits.stream().flatMap(commit -> commit.stageAttempt().stream())
+                .map(JobStageAttempt::stage))
+                .containsExactly(JobStage.CONSUMPTION, JobStage.PROBING, JobStage.CONTEXT_BUILDING, JobStage.INDEXING);
+        assertThat(store.commits).extracting(commit -> commit.expectedStatus())
+                .containsSubsequence(JobStatus.CONTEXT_BUILDING, JobStatus.INDEXING);
+    }
+
+    @Test
     void treatsSerialRedeliveryAfterCommitAsSuccessfulNoOp() {
         FakeStore store = new FakeStore(job(JobStatus.CREATED, 0, 0));
         AnalysisJobExecutionHandler handler = handler(store, JobExecutionLock.AcquireResult.ACQUIRED);

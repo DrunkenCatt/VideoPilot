@@ -270,7 +270,7 @@ T0 新增 ADR-0007：
 | `git diff --check` | 通过；仅有工作区 LF/CRLF 提示，无 whitespace error |
 | `server\mvnw.cmd verify -Pintegration` | 未执行；T0 合同没有数据库/MQ/对象存储行为，留待 T1 首个持久化切片 |
 
-当前不把合同质量门通过包装成 T0 完成。
+合同质量门只是 T0 的一部分；本文件第 9、10、13 节补齐真实探针、ADR 和人工复核后，T0 才正式完成。
 
 ## 13. T0 未完成项
 
@@ -280,3 +280,22 @@ T0 新增 ADR-0007：
 - [x] BGE-M3 完成单条/双条、1024 维、usage、非法模型、成本不可得和应用侧幂等边界探针；项目最大 batch/限流阈值明确留给 T2。
 
 T0 明示硬门已解除，可以进入 T1。
+
+## 14. T1 自动化证据
+
+T1 保持最小实现面：`retrieval` 只新增一个 `VideoChunk`、一个确定性 builder、一个聚合 `VideoIndexStore` 和一个 `VideoIndexApplicationService`。持久化 Adapter 直接以参数化 JDBC 在一个事务内发布 index、chunks 与 INDEXING checkpoint，没有为两张表各建 CRUD service/repository。
+
+| 检查 | RED | GREEN |
+| --- | --- | --- |
+| Chunk/索引 application | `VideoChunkBuilder`、`VideoIndexStore`、`VideoIndexApplicationService` 不存在，测试编译失败 | 5 分钟窗口、尾窗裁剪、Segment 归属、确定性指纹、发布入口单测通过 |
+| M2/M3 状态路径 | 旧 pipeline 只支持 `CONTEXT_BUILDING -> READY`，`INDEXING` 不执行 | M2 context-only 仍直接 READY；M3 记录 INDEXING stage/checkpoint 后才 READY |
+| MySQL 真源 | V12 与持久化 Adapter 不存在 | Flyway v12、同指纹复用、owner 隔离、两条 Chunk 与 checkpoint 完成集成测试通过 |
+
+T1 集成验证使用本机 Compose 的宿主机端口：MySQL `13306`、Redis `16379`、RabbitMQ `15672`、MinIO `19000`、Qdrant `16333`。第一次直接运行失败是因为 integration profile 默认连接 MySQL `3306`；显式映射到 Compose 端口后发现事务 Adapter 被 `final` 阻止代理，移除 `final` 后测试通过。两次失败均未通过跳过测试或降低断言处理。
+
+| T1 命令 | 结果 |
+| --- | --- |
+| `server\mvnw.cmd test` | 通过；275 tests，0 failures，0 errors，1 skipped；JaCoCo 与 ArchUnit 通过；70 秒 |
+| `server\mvnw.cmd -q -Pintegration "-Dtest=DatabaseMigrationIT,VideoIndexPersistenceAdapterIT" test`（显式 Compose 宿主机端口，server 容器停止） | 通过；Flyway 12 个迁移校验、索引发布/复用、owner 隔离和 checkpoint 完成通过 |
+| `server\mvnw.cmd verify -Pintegration` | 已执行但未全绿：运行中的旧 server 容器消费测试 Job，造成恢复/Outbox 污染；宿主机还缺少 `ffmpeg`，既有媒体集成测试无法生成 fixture。T1 相关定向集成测试已在停止 server 后独立通过 |
+| `docker compose up -d --build server` | 通过；使用当前 T1 jar 重建并恢复 server，健康检查为 `healthy` |

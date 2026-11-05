@@ -17,11 +17,11 @@
 
 ## T1：建立最小 VideoChunk、索引真源与真实 INDEXING 状态
 
-- [ ] 用一份前进 Flyway 迁移建立最小 `video_chunk` 与索引版本/状态字段；Chunk 保存 Context/Segment 归属、时间窗、抽取式摘要、关键词、ASR/OCR 检索文本和输入指纹，不保存向量正文到业务响应。
-- [ ] 在 `retrieval` 模块只定义必要的 `VideoChunk`、一个聚合 Store Port 和一个索引 application 编排入口；不按 Chunk/Keyword/Index 拆多套 repository/service。
-- [ ] 以约 5 分钟确定性窗口聚合连续 `VideoSegment`，裁剪到媒体时长并保留 Segment ID；摘要使用有界原文抽取，关键词使用确定性归一化词频，空 OCR 不阻止 ASR Chunk。
-- [ ] 固定指纹：Context/version + Chunk strategy/version + normalized source digest + embedding/index schema version；同指纹为 no-op，版本变化生成新版本，旧版本保留到新版本成功发布。
-- [ ] 让 M3 pipeline 在 Context 完成后通过统一 `JobTransitionService` 进入真实 `INDEXING`，索引成功后才进入 `READY`；M2 context-only pipeline 继续遵循 ADR-0006，不回归伪 INDEXING。
+- [x] 用一份前进 Flyway 迁移建立最小 `video_chunk` 与索引版本/状态字段；Chunk 保存 Context/Segment 归属、时间窗、抽取式摘要、关键词、ASR/OCR 检索文本和输入指纹，不保存向量正文到业务响应。
+- [x] 在 `retrieval` 模块只定义必要的 `VideoChunk`、一个聚合 Store Port 和一个索引 application 编排入口；不按 Chunk/Keyword/Index 拆多套 repository/service。
+- [x] 以约 5 分钟确定性窗口聚合连续 `VideoSegment`，裁剪到媒体时长并保留 Segment ID；摘要使用有界原文抽取，关键词使用确定性归一化词频，空 OCR 不阻止 ASR Chunk。
+- [x] 固定指纹：Context/version + Chunk strategy/version + normalized source digest + embedding/index schema version；同指纹为 no-op，版本变化生成新版本，旧版本保留到新版本成功发布。
+- [x] 让 M3 pipeline 在 Context 完成后通过统一 `JobTransitionService` 进入真实 `INDEXING`，索引成功后才进入 `READY`；M2 context-only pipeline 继续遵循 ADR-0006，不回归伪 INDEXING。
 - **验收标准**：Chunk 时间窗合法、单调并覆盖 Context；重复执行不重复创建；失败不发布半成品索引；状态事件与 MySQL 事实一致；跨 owner 不可读取 Chunk。
 - **验证**：Chunk 纯规则测试、MySQL 唯一约束/CAS/发布事务集成测试、M2/M3 状态机回归测试；`server\mvnw.cmd test` 和相关 `verify -Pintegration`。
 - **预计改动区域**：`retrieval` domain/application/port、retrieval persistence Adapter、Flyway migration、analysis pipeline 接线及测试。
@@ -29,9 +29,9 @@
 
 ### Checkpoint A1：Chunk 与索引真源
 
-- [ ] 真实 Context 可重复生成同一组 5 分钟 Chunk，版本变化不静默复用。
-- [ ] M3 Job 真实记录 INDEXING，M2 context-only Job 仍可直接 READY。
-- [ ] 未引入通用 RAG 框架、工作流 DSL、第二套 Job 状态机或每表 CRUD 层。
+- [x] 真实 Context 可重复生成同一组 5 分钟 Chunk，版本变化不静默复用。
+- [x] M3 Job 真实记录 INDEXING，M2 context-only Job 仍可直接 READY。
+- [x] 未引入通用 RAG 框架、工作流 DSL、第二套 Job 状态机或每表 CRUD 层。
 
 ## T2：接通 BGE-M3、Qdrant 与可重建降级索引
 

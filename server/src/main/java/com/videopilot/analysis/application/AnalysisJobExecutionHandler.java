@@ -59,8 +59,8 @@ public final class AnalysisJobExecutionHandler {
             if (job == null) {
                 return Result.DEAD_LETTER;
             }
-            if (job.status() == JobStatus.CONTEXT_BUILDING) {
-                return executeContextPipeline(job, message.requestId());
+            if (job.status() == JobStatus.CONTEXT_BUILDING || job.status() == JobStatus.INDEXING) {
+                return executePipeline(job, message.requestId());
             }
             boolean advanced = switch (job.status()) {
                 case CREATED -> transitionCreatedToQueued(job, message.requestId());
@@ -70,8 +70,7 @@ public final class AnalysisJobExecutionHandler {
                         job, JobStatus.PROBING, JobStage.PROBING, message.requestId());
                 case PROBING -> transitionToStage(
                         job, JobStatus.CONTEXT_BUILDING, JobStage.CONTEXT_BUILDING, message.requestId());
-                case CONTEXT_BUILDING -> false;
-                case INDEXING -> false;
+                case CONTEXT_BUILDING, INDEXING -> false;
                 case CANCEL_REQUESTED -> transitionToCanceled(job, message.requestId());
                 default -> false;
             };
@@ -121,13 +120,19 @@ public final class AnalysisJobExecutionHandler {
                 "{\"stage\":\"" + stageName.name() + "\",\"status\":\"STARTED\"}"));
     }
 
-    private Result executeContextPipeline(AnalysisJob job, String requestId) {
+    private Result executePipeline(AnalysisJob job, String requestId) {
         AnalysisJobPipeline.Outcome outcome = pipeline.execute(job, requestId);
         return switch (outcome.state()) {
-            case COMPLETED -> Result.ACK;
+            case COMPLETED -> {
+                AnalysisJob latest = store.findById(job.jobId()).orElse(job);
+                if (job.status() == JobStatus.CONTEXT_BUILDING && latest.status() == JobStatus.INDEXING) {
+                    yield executePipeline(latest, requestId);
+                }
+                yield Result.ACK;
+            }
             case RETRY -> Result.RETRY;
             case FAILED -> transition(new JobTransitionCommand(
-                    job.jobId(), JobStatus.CONTEXT_BUILDING, job.version(), JobStatus.FAILED,
+                    job.jobId(), job.status(), job.version(), JobStatus.FAILED,
                     Optional.empty(), outcome.failure(), JobEventType.JOB_FAILED, requestId,
                     "{\"status\":\"FAILED\"}")) ? Result.ACK : Result.RETRY;
         };

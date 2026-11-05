@@ -22,5 +22,7 @@ class VideoPilotApplicationTests {
                 .isEqualTo("SiliconFlow");
         assertThat(environment.getProperty("videopilot.providers.deepseek.model-version"))
                 .isEqualTo("deepseek-ai/DeepSeek-V4-Flash");
+        assertThat(environment.getProperty("videopilot.analysis.pipeline-version"))
+                .isEqualTo("m3-evidence-qa-v1");
     }
 }
