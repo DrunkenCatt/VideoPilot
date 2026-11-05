@@ -199,9 +199,9 @@ onBeforeUnmount(() => eventController?.abort())
     <header class="jobs-heading">
       <div>
         <p class="kicker">
-          M1 · DURABLE ANALYSIS
+          M2 · VIDEO CONTEXT
         </p>
-        <h1>假任务工作台</h1>
+        <h1>视频分析工作台</h1>
       </div>
       <p>所有状态和时间线均来自服务端持久化事件；页面不估算进度。</p>
     </header>
@@ -327,6 +327,7 @@ onBeforeUnmount(() => eventController?.abort())
         :events="events"
         :action-busy="canceling"
         @cancel="cancel"
+        @unauthenticated="emit('unauthenticated')"
       />
       <section
         v-else

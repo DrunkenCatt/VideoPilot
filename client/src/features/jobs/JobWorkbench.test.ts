@@ -68,6 +68,7 @@ function mountWorkbench(mediaGet = vi.fn().mockResolvedValue(readyMedia)) {
     global: {
       stubs: {
         MediaUploadPanel: { template: '<div data-test="upload-stub" />' },
+        VideoContextTimeline: { template: '<div data-test="context-stub" />' },
         MediaLibrary: {
           emits: ['select'],
           setup: () => ({ readyMedia }),
@@ -90,7 +91,7 @@ describe('JobWorkbench', () => {
     const wrapper = mountWorkbench()
     await flushPromises()
 
-    expect(wrapper.get('h1').text()).toContain('假任务工作台')
+    expect(wrapper.get('h1').text()).toContain('视频分析工作台')
     expect(wrapper.get('[data-test="jobs-empty"]').text()).toContain('还没有分析任务')
     expect(wrapper.get('[data-test="selected-media"]').text()).toContain('请先在媒体资源中选择')
   })

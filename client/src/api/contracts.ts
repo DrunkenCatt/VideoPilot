@@ -249,7 +249,7 @@ export interface VideoSegment {
   ordinal: number
   startMs: number
   endMs: number
-  asrText: string
+  asrText: string | null
   ocr: OcrObservation[]
   keyframes: KeyframeReference[]
 }

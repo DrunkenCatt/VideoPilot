@@ -4,7 +4,7 @@
 
 - 里程碑：M2 时序多模态 VideoContext
 - 合同冻结日期：2026-11-04
-- 当前阶段：T0-T5 已完成；下一任务为 T6 播放器与统一时间轴
+- 当前阶段：T0-T6 已完成；下一任务为 T7 真实视频、恢复与降级验收矩阵
 - 范围：FFmpeg 派生、TeleSpeechASR、Tesseract OCR、VideoSegment/VideoContext、分片 Checkpoint、owner-scoped 查询、播放器与统一时间轴
 - 排除：VideoChunk、Embedding、Qdrant、检索、问答、章节、Agent、完整 Manual Replay
 
@@ -208,3 +208,11 @@ MVP ASR 的完整身份为 SiliconFlow 托管模型 `TeleAI/TeleSpeechASR`，不
 - owner 查询：application 测试覆盖 Context 未就绪 409、跨 owner 404、游标和时间窗限制、READY 原视频短链；真实 MySQL `VideoContextPersistenceAdapterIT` 7 项通过，覆盖发布回滚、owner 隔离和 Segment 游标分页。
 - 后端任务结束门：`server\mvnw.cmd clean test` 实际执行 254 项测试零失败、1 项按环境跳过，ArchUnit 通过；Maven 最终仅因当前全包 JaCoCo 行覆盖率 `74% < 80%` 失败，未降低阈值或跳过断言。聚焦 MySQL 集成测试使用 `.env` 连接 Compose，7 项全部通过。
 - 未执行：完整 `verify -Pintegration`、真实 TeleSpeechASR 长视频和浏览器播放器验收保留到 T7/T8；T5 不以单元 fixture 冒充长视频退出证据。
+
+## 12. T6 前端播放器与时间轴证据
+
+- RED：Context API client 与播放器/时间轴组件不存在，新增的 9 项聚焦测试先因模块无法解析失败。
+- GREEN：Context client 使用服务端返回的 owner-scoped links 读取摘要、游标页和临时访问 URL；页面数据结构不包含 ownerId、对象 key 或长期凭据。
+- 交互与恢复：`VideoContextTimeline.test.ts` 覆盖 READY 恢复、OCR DEGRADED、Segment/关键帧 seek、本地播放时间高亮、显式后续页、认证过期、404 隐藏语义、播放/关键帧链接有限续签和失败保留已加载页；Job 工作台继续只维护既有局部状态。
+- 前端质量门：`client\npm.cmd run check` 实际执行，69 项测试零失败；statement 86.95%、branch 80.48%、function 85.88%、line 92.20%，typecheck、ESLint 和 Vite production build 均通过。
+- 浏览器证据：应用内真实浏览器访问 Vite + Compose server，在 320、375、768px 检查登录壳，`scrollWidth <= innerWidth` 且 Console 无 warning/error。浏览器没有已认证会话，本次未向页面输入本机密码，因此 READY Context 的 Range、seek、刷新和降级真实数据链路仍明确保留到 T7；不以组件 fixture 代替 M2 退出证据。

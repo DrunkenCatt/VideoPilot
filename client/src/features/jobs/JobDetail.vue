@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { AnalysisJob, JobEvent, MediaAsset } from '../../api/contracts'
+import VideoContextTimeline from '../context/VideoContextTimeline.vue'
 import { mediaDurationLabel, mediaStatusLabel } from '../media/mediaPresentation'
 import { canCancel, stageLabel, statusLabel } from './jobPresentation'
 
@@ -11,7 +12,7 @@ defineProps<{
   actionBusy: boolean
 }>()
 
-defineEmits<{ cancel: [] }>()
+defineEmits<{ cancel: [], unauthenticated: [] }>()
 </script>
 
 <template>
@@ -85,6 +86,11 @@ defineEmits<{ cancel: [] }>()
       <p>{{ job.failure.summary }}</p>
       <small>{{ job.failure.code }}</small>
     </div>
+
+    <VideoContextTimeline
+      :job="job"
+      @unauthenticated="$emit('unauthenticated')"
+    />
 
     <div class="timeline-heading">
       <div>
