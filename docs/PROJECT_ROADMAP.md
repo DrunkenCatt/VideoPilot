@@ -43,7 +43,7 @@ VideoPilot 首版聚焦教学长视频。它要把课程讲解稳定地转换为
 | 异步与协调 | RabbitMQ、Spring AMQP、Redis 7.x、Redisson | 异步任务、发布确认、消费确认、死信、去重、锁、限流和短期状态 |
 | 业务与对象存储 | MySQL 8、MinIO | 业务真源、执行轨迹、Checkpoint、视频与派生产物 |
 | 检索 | Qdrant、BGE-M3 Embedding | 视频片段向量索引与语义召回 |
-| 视频与 AI | FFmpeg、Tesseract、LangChain4j、DeepSeek、TeleSpeechASR | 媒体处理、OCR、云端推理、ASR 与结构化输出；MVP 固定供应商 |
+| 视频与 AI | FFmpeg、Tesseract、LangChain4j、SiliconFlow 托管的 DeepSeek、TeleSpeechASR | 媒体处理、OCR、云端推理、ASR 与结构化输出；MVP 固定供应商 |
 | 本地部署 | Docker Compose | MySQL、Redis、RabbitMQ、MinIO、Qdrant 编排 |
 
 “Java 单体”表示一个 Spring Boot 部署单元承载 API、任务消费者、业务编排和 Agent Runtime；MySQL、Redis、RabbitMQ、MinIO、Qdrant 仍是独立基础设施。代码内部必须按领域模块隔离，不能形成一个由 Controller 直接调用几十个 Service 的大泥球。

@@ -41,6 +41,20 @@ class TesseractOcrAdapterTest {
     }
 
     @Test
+    void fingerprintsEveryConfiguredLanguagePack() throws Exception {
+        Path tessdata = trainedData();
+        Files.write(tessdata.resolve("chi_sim.traineddata"), new byte[] {4, 5, 6});
+        TesseractOcrAdapter adapter = new TesseractOcrAdapter(
+                commandPrefix(), tessdata, "chi_sim+eng", Duration.ofSeconds(5),
+                4096, 1024, 1024 * 1024, 1_000_000, 1);
+
+        assertThat(adapter.identity().languagePackDigest()).matches("[0-9a-f]{64}");
+        assertThat(adapter.recognize(new OcrPort.Request(
+                image(), 0, "chi_sim+eng", "a".repeat(64), "trace"))
+                .regions()).singleElement();
+    }
+
+    @Test
     void killsTimedOutProcess() throws Exception {
         Path image = image();
         TesseractOcrAdapter adapter = adapter(

@@ -6,8 +6,13 @@ import {
   contextKeyframeAccessPath,
   contextPath,
   contextSegmentsPath,
+  jobAnswerPath,
+  jobAnswersPath,
+  jobRetrievalPath,
   mediaPlaybackPath,
+  type AnswerResponse,
   type AnalysisJob,
+  type EvidenceHit,
   type JobEvent,
   type KeyframeId,
   type VideoContext,
@@ -37,6 +42,41 @@ describe('M1 API contract', () => {
 
     expect(event.sequence).toBe(7)
     expect(job.version).toBe(3)
+  })
+})
+
+describe('M3 API contract', () => {
+  it('uses job-scoped retrieval and answer resource paths', () => {
+    const jobId = 'job-1' as AnalysisJob['jobId']
+
+    expect(jobRetrievalPath(jobId)).toBe('/api/v1/analysis-jobs/job-1/retrieval')
+    expect(jobAnswersPath(jobId)).toBe('/api/v1/analysis-jobs/job-1/answers')
+    expect(jobAnswerPath(jobId, 'answer-1')).toBe('/api/v1/analysis-jobs/job-1/answers/answer-1')
+  })
+
+  it('keeps score provenance and degradation explicit on evidence hits', () => {
+    const hit = {
+      channels: ['ASR'],
+      scores: { semanticRaw: 0.9, semanticNormalized: 1, keywordRaw: 0.6, keywordNormalized: 0.15, visualRaw: 0, visualNormalized: 0, total: 0.75 },
+    } as EvidenceHit
+
+    expect(hit.channels).toEqual(['ASR'])
+    expect(hit.scores.total).toBe(0.75)
+  })
+
+  it('models verified answers and refusals as a discriminated union', () => {
+    const answered = {
+      status: 'ANSWERED',
+      claims: [{ claimId: 'claim-1', text: 'A supported claim', citations: [{ citationId: 'citation-1' }] }],
+    } as AnswerResponse
+    const refused = {
+      status: 'REFUSED',
+      claims: [],
+      refusalReason: 'NO_SUFFICIENT_EVIDENCE',
+    } as AnswerResponse
+
+    expect(answered.status === 'ANSWERED' && answered.claims[0]?.citations).toHaveLength(1)
+    expect(refused.status === 'REFUSED' && refused.refusalReason).toBe('NO_SUFFICIENT_EVIDENCE')
   })
 })
 

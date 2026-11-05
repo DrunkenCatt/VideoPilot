@@ -10,7 +10,7 @@ Accepted
 
 ## Context
 
-MVP 固定使用 DeepSeek、TeleSpeechASR、BGE-M3 和 Tesseract，但供应商 SDK、错误和计费口径不应渗入业务层。外部调用还可能超时或重复计费，Agent 循环必须有确定性上限。
+MVP 固定使用 DeepSeek 模型、TeleSpeechASR、BGE-M3 和 Tesseract，但供应商 SDK、错误和计费口径不应渗入业务层。外部调用还可能超时或重复计费，Agent 循环必须有确定性上限。LLM 的具体托管供应商与模型由 ADR-0007 补充确定。
 
 ## Decision
 

@@ -20,8 +20,8 @@ class ProviderBoundaryTest {
     @Test
     void bindsFixedProviderCatalogWithoutCallingProviders() {
         var source = new MapConfigurationPropertySource();
-        source.put("videopilot.providers.deepseek.provider", "DeepSeek");
-        source.put("videopilot.providers.deepseek.model-version", "deepseek-chat");
+        source.put("videopilot.providers.deepseek.provider", "SiliconFlow");
+        source.put("videopilot.providers.deepseek.model-version", "deepseek-ai/DeepSeek-V4-Flash");
         source.put("videopilot.providers.deepseek.timeout", "30s");
         source.put("videopilot.providers.deepseek.cost-unit", "token");
 
@@ -29,7 +29,8 @@ class ProviderBoundaryTest {
                 .bind("videopilot.providers", ProviderCatalogProperties.class)
                 .orElseThrow(() -> new IllegalStateException("Provider catalog did not bind"));
 
-        assertThat(properties.deepseek().provider()).isEqualTo("DeepSeek");
+        assertThat(properties.deepseek().provider()).isEqualTo("SiliconFlow");
+        assertThat(properties.deepseek().modelVersion()).isEqualTo("deepseek-ai/DeepSeek-V4-Flash");
         assertThat(properties.deepseek().timeout()).isEqualTo(Duration.ofSeconds(30));
         assertThat(properties.deepseek().costUnit()).isEqualTo("token");
     }

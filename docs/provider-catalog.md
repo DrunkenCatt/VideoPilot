@@ -4,7 +4,7 @@ MVP 固定下列四个能力实现，但业务代码只依赖项目 Port。供�
 
 | 能力 | MVP 实现 | 版本配置 | 超时配置 | 成本计量 |
 | --- | --- | --- | --- | --- |
-| LLM | DeepSeek | `DEEPSEEK_MODEL_VERSION` | `DEEPSEEK_TIMEOUT` | 输入/输出 Token |
+| LLM | SiliconFlow 托管的 `deepseek-ai/DeepSeek-V4-Flash` | `SILICONFLOW_LLM_MODEL_VERSION` | `SILICONFLOW_LLM_TIMEOUT` | 输入/输出 Token；响应无成本字段时记录不可得 |
 | ASR | SiliconFlow `TeleAI/TeleSpeechASR` | `TELESPEECH_ASR_MODEL_VERSION` | `TELESPEECH_ASR_TIMEOUT` | 本地可信音频秒数 + 供应商 `usage.seconds`；价格不可得时不伪造成本 |
 | Embedding | BGE-M3 | `BGE_M3_MODEL_VERSION` | `BGE_M3_TIMEOUT` | 输入 Token |
 | OCR | Tesseract | 启动时探测二进制版本 + 语言包 SHA-256 | `TESSERACT_TIMEOUT` | 图片像素/文本字符；本地成本 `0 USD` |
@@ -20,7 +20,7 @@ MVP 固定下列四个能力实现，但业务代码只依赖项目 Port。供�
 
 每次模型或 Agent 执行必须记录 `promptVersion`、`modelVersion`、`embeddingVersion`、`retrievalFormulaVersion` 和 `agentPolicyVersion`。这些字段用于回答“这次结果由哪套配置产生”，是回放、离线比较和回滚的前提；缺任一版本时不得生成可晋级的评测记录。
 
-本文件实现 ADR-0005 已接受的边界，不新增架构选择。M2 已接入 ASR/OCR 的调用审计与有限恢复；LLM、Embedding 和 Agent 预算仍属于后续里程碑。
+本文件实现 ADR-0005 与 ADR-0007 已接受的边界。M2 已接入 ASR/OCR 的调用审计与有限恢复；LLM、Embedding 和 Agent 预算仍属于后续里程碑。
 
 ## M2 ASR 合同补充
 

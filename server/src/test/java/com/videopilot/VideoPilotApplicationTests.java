@@ -18,5 +18,9 @@ class VideoPilotApplicationTests {
     @Test
     void contextLoadsWithIsolatedTestConfiguration() {
         assertThat(environment.getActiveProfiles()).containsExactly("test");
+        assertThat(environment.getProperty("videopilot.providers.deepseek.provider"))
+                .isEqualTo("SiliconFlow");
+        assertThat(environment.getProperty("videopilot.providers.deepseek.model-version"))
+                .isEqualTo("deepseek-ai/DeepSeek-V4-Flash");
     }
 }

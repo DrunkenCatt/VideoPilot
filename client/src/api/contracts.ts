@@ -7,6 +7,10 @@ export type JobId = Brand<string, 'JobId'>
 export type ContextId = Brand<string, 'ContextId'>
 export type SegmentId = Brand<string, 'SegmentId'>
 export type KeyframeId = Brand<string, 'KeyframeId'>
+export type ChunkId = Brand<string, 'ChunkId'>
+export type AnswerId = Brand<string, 'AnswerId'>
+export type ClaimId = Brand<string, 'ClaimId'>
+export type CitationId = Brand<string, 'CitationId'>
 
 export const API = {
   prefix: '/api/v1',
@@ -24,6 +28,12 @@ export const CONTRACT_LIMITS = {
   maxPageSize: 100,
   defaultSegmentPageSize: 100,
   maxSegmentPageSize: 500,
+  defaultRetrievalTopK: 5,
+  maxRetrievalTopK: 20,
+  maxQueryLength: 1_000,
+  defaultAnswerPageSize: 20,
+  maxAnswerPageSize: 100,
+  maxClaimsPerAnswer: 8,
 } as const
 
 export function contextPath(jobId: JobId): string {
@@ -40,6 +50,18 @@ export function mediaPlaybackPath(mediaId: MediaId): string {
 
 export function contextKeyframeAccessPath(jobId: JobId, keyframeId: KeyframeId): string {
   return `${contextPath(jobId)}/keyframes/${keyframeId}/access`
+}
+
+export function jobRetrievalPath(jobId: JobId): string {
+  return `${API.analysisJobs}/${jobId}/retrieval`
+}
+
+export function jobAnswersPath(jobId: JobId): string {
+  return `${API.analysisJobs}/${jobId}/answers`
+}
+
+export function jobAnswerPath(jobId: JobId, answerId: AnswerId | string): string {
+  return `${jobAnswersPath(jobId)}/${answerId}`
 }
 
 export type AnalysisMode = 'STANDARD'
@@ -263,4 +285,97 @@ export interface SegmentPageResponse {
 export interface TemporaryObjectAccess {
   url: string
   expiresAt: string
+}
+
+export type EvidenceChannel = 'ASR' | 'OCR' | 'KEYFRAME'
+export type DegradedChannel = 'VECTOR_STORE' | 'SEMANTIC' | 'OCR'
+
+export interface EvidenceScoreBreakdown {
+  semanticRaw: number
+  semanticNormalized: number
+  keywordRaw: number
+  keywordNormalized: number
+  visualRaw: number
+  visualNormalized: number
+  total: number
+}
+
+export interface EvidenceHit {
+  chunkId: ChunkId
+  segmentIds: SegmentId[]
+  startMs: number
+  endMs: number
+  excerpt: string
+  channels: EvidenceChannel[]
+  scores: EvidenceScoreBreakdown
+}
+
+export interface RetrievalResponse {
+  query: string
+  retrievalFormulaVersion: string
+  embeddingVersion: string
+  chunkVersion: string
+  degradedChannels: DegradedChannel[]
+  hits: EvidenceHit[]
+}
+
+export interface AnswerRequest {
+  question: string
+}
+
+export interface CitedEvidence {
+  citationId: CitationId
+  segmentId: SegmentId
+  startMs: number
+  endMs: number
+  channel: EvidenceChannel
+  quote: string
+}
+
+export interface AnswerClaim {
+  claimId: ClaimId
+  text: string
+  citations: CitedEvidence[]
+}
+
+export interface AnswerExecutionVersions {
+  promptVersion: string
+  modelVersion: string
+  embeddingVersion: string
+  retrievalFormulaVersion: string
+  chunkVersion: string
+}
+
+interface AnswerResponseBase {
+  answerId: AnswerId
+  question: string
+  degradedChannels: DegradedChannel[]
+  versions: AnswerExecutionVersions
+  createdAt: string
+}
+
+export interface AnsweredResponse extends AnswerResponseBase {
+  status: 'ANSWERED'
+  claims: AnswerClaim[]
+  refusalReason: null
+}
+
+export type RefusalReason =
+  | 'NO_SUFFICIENT_EVIDENCE'
+  | 'EVIDENCE_BELOW_THRESHOLD'
+  | 'CITATION_VALIDATION_FAILED'
+  | 'QUESTION_OUT_OF_SCOPE'
+
+export interface RefusedResponse extends AnswerResponseBase {
+  status: 'REFUSED'
+  claims: []
+  refusalReason: RefusalReason
+}
+
+export type AnswerResponse = AnsweredResponse | RefusedResponse
+
+export interface AnswerPageResponse {
+  data: AnswerResponse[]
+  nextCursor: number | null
+  hasMore: boolean
 }

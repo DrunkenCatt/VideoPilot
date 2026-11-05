@@ -13,7 +13,7 @@ MVP 完成后再建设动态工具型 Agent Loop，以及“用户反馈 -> 复�
 - 从零新建项目；`C:\Users\zzm\Desktop\com\DoVideoAI` 只作为只读参考，不复制其业务源码。
 - 项目名称为 `VideoPilot`，Java 根包为 `com.videopilot`。
 - 首版只处理用户本地上传的教学视频，部署在本地或单服务器，不开放公网。
-- 首版固定 DeepSeek、TeleSpeechASR、BGE-M3 和 Tesseract；通过 Adapter 隔离供应商类型。
+- 首版固定 SiliconFlow 托管的 DeepSeek、TeleSpeechASR、BGE-M3，以及本地 Tesseract；通过 Adapter 隔离供应商类型。
 - 消息队列使用 RabbitMQ 和 Spring AMQP，不使用 RocketMQ。
 - 暂缓在线视频链接、多供应商路由、多 Agent、自动剪辑、完整学习管理系统和公网运营功能。
 
@@ -22,7 +22,7 @@ MVP 完成后再建设动态工具型 Agent Loop，以及“用户反馈 -> 复�
 - Java 21、Spring Boot 3.5.16、Undertow、MyBatis-Plus、Flyway
 - Vue 3、Vite、SSE、Marked
 - MySQL 8、Redis 7.x、Redisson、RabbitMQ、MinIO、Qdrant
-- FFmpeg、Tesseract、LangChain4j、DeepSeek、TeleSpeechASR、BGE-M3
+- FFmpeg、Tesseract、LangChain4j、SiliconFlow 托管的 DeepSeek、TeleSpeechASR、BGE-M3
 - Docker Compose
 
 ## 架构规则

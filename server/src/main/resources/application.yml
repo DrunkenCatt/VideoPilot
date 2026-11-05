@@ -152,9 +152,9 @@ videopilot:
     bootstrap-password: ${IDENTITY_BOOTSTRAP_PASSWORD:}
   providers:
     deepseek:
-      provider: DeepSeek
-      model-version: ${DEEPSEEK_MODEL_VERSION:deepseek-chat}
-      timeout: ${DEEPSEEK_TIMEOUT:30s}
+      provider: SiliconFlow
+      model-version: ${SILICONFLOW_LLM_MODEL_VERSION:deepseek-ai/DeepSeek-V4-Flash}
+      timeout: ${SILICONFLOW_LLM_TIMEOUT:30s}
       cost-unit: token
       cost-tracking: true
     telespeech-asr:
