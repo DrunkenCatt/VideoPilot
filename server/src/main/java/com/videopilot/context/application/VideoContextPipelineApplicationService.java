@@ -28,7 +28,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import org.springframework.transaction.annotation.Transactional;
 
 public class VideoContextPipelineApplicationService implements AnalysisJobPipeline {
 
@@ -61,7 +60,6 @@ public class VideoContextPipelineApplicationService implements AnalysisJobPipeli
     }
 
     @Override
-    @Transactional
     public Outcome execute(AnalysisJob job, String requestId) {
         OwnerContext owner;
         try {

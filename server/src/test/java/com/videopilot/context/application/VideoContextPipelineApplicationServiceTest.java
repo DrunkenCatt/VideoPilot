@@ -25,6 +25,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.transaction.annotation.Transactional;
 
 class VideoContextPipelineApplicationServiceTest {
 
@@ -33,6 +34,14 @@ class VideoContextPipelineApplicationServiceTest {
     private static final UUID MEDIA_ID = UUID.fromString("30000000-0000-0000-0000-000000000001");
     private static final UUID CONTEXT_ID = UUID.fromString("40000000-0000-0000-0000-000000000001");
     private static final Instant NOW = Instant.parse("2026-11-04T08:00:00Z");
+
+    @Test
+    void doesNotHoldOneTransactionAcrossExternalMediaAndModelCalls() throws Exception {
+        var execute = VideoContextPipelineApplicationService.class
+                .getMethod("execute", AnalysisJob.class, String.class);
+
+        assertThat(execute.getAnnotation(Transactional.class)).isNull();
+    }
 
     @Test
     void publishesAlignedContextAndReadyEventWithoutAnIndexingTransition() {

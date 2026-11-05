@@ -87,10 +87,10 @@ class VideoContextPersistenceAdapterIT {
                 .param("mediaId", mediaId.toString()).update();
         jdbcClient.sql("DELETE FROM video_context WHERE media_id = :mediaId")
                 .param("mediaId", mediaId.toString()).update();
-        jdbcClient.sql("DELETE FROM job_stage_attempt WHERE job_id = :jobId")
-                .param("jobId", jobId.toString()).update();
-        jdbcClient.sql("DELETE FROM analysis_job WHERE job_id = :jobId")
-                .param("jobId", jobId.toString()).update();
+        jdbcClient.sql("DELETE FROM job_stage_attempt WHERE job_id IN (SELECT job_id FROM analysis_job WHERE media_id = :mediaId)")
+                .param("mediaId", mediaId.toString()).update();
+        jdbcClient.sql("DELETE FROM analysis_job WHERE media_id = :mediaId")
+                .param("mediaId", mediaId.toString()).update();
         jdbcClient.sql("DELETE FROM media_asset WHERE media_id = :mediaId")
                 .param("mediaId", mediaId.toString()).update();
     }
@@ -222,6 +222,22 @@ class VideoContextPersistenceAdapterIT {
                                 .isEqualTo(VideoContextQueryException.Reason.NOT_FOUND));
     }
 
+    @Test
+    void readyContextIsReusableByAnotherJobForTheSameMediaAndPipeline() {
+        var plan = prepare();
+        insertContextStage(plan.context().inputFingerprint());
+        service.publish(owner(), publication(plan.context().contextId(), plan.context().inputFingerprint(),
+                List.of(segment(UUID.randomUUID(), 0))));
+        UUID repeatedJobId = UUID.randomUUID();
+        insertAnalysisJob(repeatedJobId, "Reuse context");
+
+        assertThat(queries.get(owner(), repeatedJobId).contextId())
+                .isEqualTo(plan.context().contextId());
+        assertThat(queries.segments(owner(), repeatedJobId, null, 20, 0L, 60_000L).data())
+                .extracting(VideoSegment::ordinal)
+                .containsExactly(0);
+    }
+
     private com.videopilot.context.port.VideoContextStore.PlanResult prepare() {
         return service.prepare(owner(), command("extract-v1"));
     }
@@ -242,6 +258,25 @@ class VideoContextPersistenceAdapterIT {
 
     private OwnerContext owner() {
         return new OwnerContext(new OwnerId(ownerId));
+    }
+
+    private void insertAnalysisJob(UUID insertedJobId, String goal) {
+        jdbcClient.sql("""
+                INSERT INTO analysis_job (
+                    job_id, owner_id, media_id, analysis_key, idempotency_key,
+                    request_fingerprint, goal, mode, pipeline_version, status
+                ) VALUES (
+                    :jobId, :ownerId, :mediaId, :analysisKey, :idempotencyKey,
+                    REPEAT('b', 64), :goal, 'STANDARD', 'm2-v1', 'CONTEXT_BUILDING'
+                )
+                """)
+                .param("jobId", insertedJobId.toString())
+                .param("ownerId", ownerId.toString())
+                .param("mediaId", mediaId.toString())
+                .param("analysisKey", "analysis-" + insertedJobId)
+                .param("idempotencyKey", "idempotency-" + insertedJobId)
+                .param("goal", goal)
+                .update();
     }
 
     private PublishCommand publication(UUID contextId, String fingerprint, List<VideoSegment> segments) {

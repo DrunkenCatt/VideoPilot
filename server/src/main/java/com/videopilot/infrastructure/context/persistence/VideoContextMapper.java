@@ -72,9 +72,20 @@ interface VideoContextMapper {
 
     @Select("""
             SELECT context.*
-            FROM video_context context
-            INNER JOIN analysis_job job ON job.job_id = context.source_job_id
-            WHERE job.owner_id = #{ownerId} AND context.source_job_id = #{jobId}
+            FROM analysis_job requested
+            INNER JOIN video_context context
+                ON context.media_id = requested.media_id
+               AND context.pipeline_version = requested.pipeline_version
+            INNER JOIN analysis_job source
+                ON source.job_id = context.source_job_id
+               AND source.owner_id = requested.owner_id
+            WHERE requested.owner_id = #{ownerId}
+              AND requested.job_id = #{jobId}
+              AND (context.source_job_id = requested.job_id OR context.status = 'READY')
+            ORDER BY (context.source_job_id = requested.job_id) DESC,
+                     context.completed_at DESC,
+                     context.created_at DESC
+            LIMIT 1
             """)
     VideoContextRow selectOwnedContextByJob(
             @Param("ownerId") String ownerId,
@@ -104,13 +115,20 @@ interface VideoContextMapper {
 
     @Select("""
             SELECT segment.*
-            FROM video_segment segment
-            INNER JOIN video_context context ON context.context_id = segment.context_id
-            INNER JOIN analysis_job job ON job.job_id = context.source_job_id
-            WHERE job.owner_id = #{ownerId}
-              AND context.source_job_id = #{jobId}
+            FROM analysis_job requested
+            INNER JOIN video_context context
+                ON context.media_id = requested.media_id
+               AND context.pipeline_version = requested.pipeline_version
+               AND context.status = 'READY'
+            INNER JOIN analysis_job source
+                ON source.job_id = context.source_job_id
+               AND source.owner_id = requested.owner_id
+            INNER JOIN video_segment segment ON segment.context_id = context.context_id
+            WHERE requested.owner_id = #{ownerId}
+              AND requested.job_id = #{jobId}
               AND context.status = 'READY'
               AND JSON_SEARCH(segment.keyframes, 'one', #{keyframeId}, NULL, '$[*].keyframeId') IS NOT NULL
+            ORDER BY context.completed_at DESC
             LIMIT 1
             """)
     VideoSegmentRow selectOwnedKeyframeSegment(

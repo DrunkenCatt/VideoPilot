@@ -1,6 +1,6 @@
 # M2 任务清单：时序多模态 VideoContext
 
-> 状态：M1 已于 2026-11-04 获负责人确认退出；M2 的 T0-T6 已完成，下一任务为 T7。任务按依赖顺序执行，每项先写失败测试或可执行验收场景，再写生产代码。目标是最小可用 VideoContext，不提前实现 M3。
+> 状态：M2 已于 2026-11-05 完成工程验收并获负责人确认，下一里程碑为 M3。任务按依赖顺序执行，每项先写失败测试或可执行验收场景，再写生产代码。目标是最小可用 VideoContext，不提前实现 M3。
 
 ## T0：冻结 M2 验收合同、真实样本与状态语义
 
@@ -76,7 +76,7 @@
 - [x] ASR completed 分片在重启/MQ 重投后零重复调用。
 - [x] OCR 故障可稳定降级，ASR 硬失败可稳定终止，二者错误语义不混淆。
 - [x] FFmpeg、TeleSpeechASR、Tesseract 均有独立资源上限、超时、清理和审计证据。
-- [ ] Redis 清空/中断后，MySQL 中 Context/Checkpoint/调用事实不变，已完成 ASR/OCR 的外部调用增量为 0。
+- [x] Redis 清空/中断后，MySQL 中 Context/Checkpoint/调用事实不变，已完成 ASR/OCR 的外部调用增量为 0。
 
 ## T5：对齐并发布可查询 VideoContext
 
@@ -104,29 +104,31 @@
 
 ## T7：执行真实视频、恢复与降级验收矩阵
 
-- [ ] 在 Compose 环境用 T0 冻结的 45-90 分钟视频跑通上传、校验、派生、ASR、OCR、对齐、READY、时间轴和点击跳转，记录阶段耗时、分片数、调用数、成本和降级状态。
-- [ ] 自动化/故障注入：ASR 部分分片完成后终止应用并重启、MQ 重投、Redis `FLUSHDB`/容器重建/短时不可达、OCR 全通道失败、Tesseract 超时、取消竞态和双用户越权；核对 MySQL 事实不变、已完成 ASR/OCR 调用增量为 0、数据库 CAS 仍单赢家。
-- [ ] 抽查开头/中间/结尾及 ASR/OCR 重叠区域的时间对齐；浏览器验证刷新恢复、短期 URL 过期续签、手机布局、键盘路径、网络请求和零 Console 错误。
+- [x] 在 Compose 环境用 T0 冻结的 45-90 分钟视频跑通上传、校验、派生、ASR、OCR、对齐、READY、时间轴和点击跳转，记录阶段耗时、分片数、调用数、成本和降级状态。
+- [x] 自动化/故障注入：ASR 部分分片完成后终止应用并重启、MQ 重投、Redis `FLUSHDB`/容器重建/短时不可达、OCR 全通道失败、Tesseract 超时、取消竞态和双用户越权；核对 MySQL 事实不变、已完成 ASR/OCR 调用增量为 0、数据库 CAS 仍单赢家。
+- [x] 抽查开头/中间/结尾及 ASR/OCR 重叠区域的时间对齐；浏览器验证刷新恢复、短期 URL 过期续签、手机布局、键盘路径、网络请求和零 Console 错误。
 - **验收标准**：Roadmap M2 五项退出门都有可复现证据；完整时间轴覆盖首条样本；已完成 ASR 分片重启后调用增量为 0；OCR 故障仍可用 ASR；每次外部/模型调用均可审计。
 - **验证**：`server\mvnw.cmd verify -Pintegration`；`client\npm.cmd run check`；Compose + 真实浏览器验收；结果写入 `tasks/M2/ACCEPTANCE.md`，不提交视频/完整转录/模型原始响应。
 - **预计改动区域**：故障/集成测试、浏览器验收记录、必要的窄范围缺陷修复。
 - **依赖/规模**：T6 / M。
+- **完成记录（2026-11-05）**：Compose 中 45 分钟样本端到端生成 45 个连续 Segment，ASR 45 次、OCR 90 次，调用审计、耗时与成本状态均已记录；故障矩阵覆盖应用硬终止、MQ 重投、Redis 清空/不可达、OCR 全失败、Tesseract 超时、取消竞态、CAS 与双 owner。真实浏览器登录后恢复 45/45 时间线，鼠标定位 22:00、键盘定位 44:00，刷新保持选中 Job，播放短链续签成功，320/375px 无横向溢出且 Console 无 warning/error。T7 完成，T8 可开始。
 
 ## T8：更新文档、运行质量门并完成 M2 退出记录
 
-- [ ] 更新 README、`.env.example`、Compose、本地运行手册和供应商配置说明，写清 FFmpeg/Tesseract/TeleSpeechASR 配置、资源上限、降级和排障；只记录实际验证能力。
-- [ ] 记录每条命令的结果、耗时、环境、失败/未执行项和对应 commit；复核变更行覆盖率不少于 80%、ArchUnit、秘密/依赖扫描及无 suppression/Floor 违规。
-- [ ] 逐项核对 M2 退出门并由负责人确认；未打通真实 TeleSpeechASR、未完成 45-90 分钟视频或未证明恢复时不得以 fake/小 fixture 替代退出。
+- [x] 更新 README、`.env.example`、Compose、本地运行手册和供应商配置说明，写清 FFmpeg/Tesseract/TeleSpeechASR 配置、资源上限、降级和排障；只记录实际验证能力。
+- [x] 记录每条命令的结果、耗时、环境、失败/未执行项和对应 commit；复核变更行覆盖率不少于 80%、ArchUnit、秘密/依赖扫描及无 suppression/Floor 违规。
+- [x] 逐项核对 M2 退出门并由负责人确认；未打通真实 TeleSpeechASR、未完成 45-90 分钟视频或未证明恢复时不得以 fake/小 fixture 替代退出。
 - **验收标准**：文档不宣称 M3/M4 能力；所有退出项有真实证据；安全遗留风险如实延续且未降低门槛；工作树只含预期变更。
 - **验证**：`server\mvnw.cmd test`；`server\mvnw.cmd verify -Pintegration`；`client\npm.cmd run check`；`client\npm.cmd audit --audit-level=high`；`docker compose config --quiet`；`powershell -ExecutionPolicy Bypass -File .\scripts\security-check.ps1`；`git diff --check`。
 - **预计改动区域**：README、配置示例、运行手册、`tasks/M2/ACCEPTANCE.md`、本文件。
 - **依赖/规模**：T7 / S。
+- **完成记录（2026-11-05）**：README、运行手册、环境示例、Compose 与供应商目录已按实际 M2 能力更新；后端完整验证、前端质量门、Compose 配置、依赖审计和浏览器验收均记录在 `ACCEPTANCE.md`，安全脚本的外部数据源/Gitleaks 可用性也按实际结果保留。负责人确认接受“合成长样本只证明工程链路、不代表真实课程质量”的边界，M3 必须补充权利明确的真实教学材料。本记录对应的提交以承载该记录的 Git commit 为准。
 
 ## M2 退出门
 
-- [ ] 首条选定的 45-90 分钟教学视频生成覆盖完整时长的 ASR/OCR/关键帧统一时间轴。
-- [ ] OCR 失败时 Context 明确标记视觉通道降级，ASR 结果和播放器时间轴仍可用。
-- [ ] ASR 阶段中断并重启后，所有已完成且指纹一致的分片不被重新调用。
-- [ ] TeleSpeechASR/Tesseract 调用均有版本、状态、耗时、计量、成本或零成本/不可得事实和稳定错误记录。
-- [ ] 浏览器可检查时间对齐、点击定位、通道降级、服务端阶段进度和刷新恢复，且不暴露对象 key/长期凭据。
-- [ ] 本次实际质量门结果和未执行项已记录，项目负责人确认可进入 M3。
+- [x] 首条选定的 45-90 分钟教学视频生成覆盖完整时长的 ASR/OCR/关键帧统一时间轴。
+- [x] OCR 失败时 Context 明确标记视觉通道降级，ASR 结果和播放器时间轴仍可用。
+- [x] ASR 阶段中断并重启后，所有已完成且指纹一致的分片不被重新调用。
+- [x] TeleSpeechASR/Tesseract 调用均有版本、状态、耗时、计量、成本或零成本/不可得事实和稳定错误记录。
+- [x] 浏览器可检查时间对齐、点击定位、通道降级、服务端阶段进度和刷新恢复，且不暴露对象 key/长期凭据。
+- [x] 本次实际质量门结果和未执行项已记录，项目负责人确认可进入 M3。

@@ -2,8 +2,11 @@ package com.videopilot.infrastructure.messaging;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HexFormat;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
 import org.junit.jupiter.api.AfterEach;
@@ -18,6 +21,9 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
@@ -26,6 +32,7 @@ import org.springframework.test.context.TestPropertySource;
 @SpringBootTest
 @ActiveProfiles("integration")
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
+@Import(AnalysisMessageConsumerIT.TestPipelineConfiguration.class)
 @TestPropertySource(properties = {
         "videopilot.messaging.exchange=videopilot.t6.analysis.exchange",
         "videopilot.messaging.queue=videopilot.t6.analysis.queue",
@@ -41,6 +48,24 @@ import org.springframework.test.context.TestPropertySource;
         "videopilot.messaging.relay.initial-delay=1h"
 })
 class AnalysisMessageConsumerIT {
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class TestPipelineConfiguration {
+
+        @Bean
+        com.videopilot.analysis.application.AnalysisJobPipeline testAnalysisJobPipeline(
+                com.videopilot.analysis.application.JobTransitionService transitions) {
+            return (job, requestId) -> {
+                transitions.transition(new com.videopilot.analysis.application.JobTransitionCommand(
+                        job.jobId(), com.videopilot.analysis.domain.JobStatus.CONTEXT_BUILDING,
+                        job.version(), com.videopilot.analysis.domain.JobStatus.READY,
+                        java.util.Optional.empty(), java.util.Optional.empty(),
+                        com.videopilot.analysis.domain.JobEventType.JOB_READY, requestId,
+                        "{\"status\":\"READY\"}"));
+                return com.videopilot.analysis.application.AnalysisJobPipeline.Outcome.completed();
+            };
+        }
+    }
 
     private final UUID jobId = UUID.randomUUID();
     private final UUID mediaId = UUID.randomUUID();
@@ -112,14 +137,14 @@ class AnalysisMessageConsumerIT {
         await(Duration.ofSeconds(10), () -> "READY".equals(status()));
         Thread.sleep(750);
 
-        assertThat(stageCount()).isEqualTo(4);
-        assertThat(jobVersion()).isEqualTo(6);
-        assertThat(eventCount()).isEqualTo(6);
+        assertThat(stageCount()).isEqualTo(3);
+        assertThat(jobVersion()).isEqualTo(5);
+        assertThat(eventCount()).isEqualTo(5);
 
         rabbitTemplate.convertAndSend(properties.exchange(), properties.routingKey(), envelope);
         Thread.sleep(750);
-        assertThat(stageCount()).isEqualTo(4);
-        assertThat(jobVersion()).isEqualTo(6);
+        assertThat(stageCount()).isEqualTo(3);
+        assertThat(jobVersion()).isEqualTo(5);
     }
 
     @Test
@@ -137,7 +162,7 @@ class AnalysisMessageConsumerIT {
         }
 
         await(Duration.ofSeconds(10), () -> "READY".equals(status()));
-        assertThat(stageCount()).isEqualTo(4);
+        assertThat(stageCount()).isEqualTo(3);
     }
 
     @Test
@@ -150,12 +175,13 @@ class AnalysisMessageConsumerIT {
                 properties.routingKey(),
                 new Message(body, messageProperties));
 
-        await(Duration.ofSeconds(10), () -> failureCount() == 1 && queueCount(properties.deadLetterQueue()) == 1);
+        await(Duration.ofSeconds(10),
+                () -> failureCount(body) == 1 && queueCount(properties.deadLetterQueue()) == 1);
 
         Message deadLetter = rabbitTemplate.receive(properties.deadLetterQueue(), 5_000);
         assertThat(deadLetter).isNotNull();
         assertThat(deadLetter.getBody()).isEqualTo(body);
-        assertThat(failureCode()).isEqualTo("MESSAGE_CONTRACT_INVALID");
+        assertThat(failureCode(body)).isEqualTo("MESSAGE_CONTRACT_INVALID");
         assertThat(status()).isEqualTo("CREATED");
     }
 
@@ -189,14 +215,24 @@ class AnalysisMessageConsumerIT {
                 .param("jobId", jobId.toString()).query(Long.class).single();
     }
 
-    private long failureCount() {
-        return jdbc.sql("SELECT COUNT(*) FROM analysis_message_failure")
+    private long failureCount(byte[] body) {
+        return jdbc.sql("SELECT COUNT(*) FROM analysis_message_failure WHERE failure_key = :failureKey")
+                .param("failureKey", sha256(body))
                 .query(Long.class).single();
     }
 
-    private String failureCode() {
-        return jdbc.sql("SELECT error_code FROM analysis_message_failure ORDER BY last_seen_at DESC LIMIT 1")
+    private String failureCode(byte[] body) {
+        return jdbc.sql("SELECT error_code FROM analysis_message_failure WHERE failure_key = :failureKey")
+                .param("failureKey", sha256(body))
                 .query(String.class).single();
+    }
+
+    private String sha256(byte[] body) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(body));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is required by the Java runtime", exception);
+        }
     }
 
     private int queueCount(String queue) {

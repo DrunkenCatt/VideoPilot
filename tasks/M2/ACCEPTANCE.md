@@ -216,3 +216,59 @@ MVP ASR 的完整身份为 SiliconFlow 托管模型 `TeleAI/TeleSpeechASR`，不
 - 交互与恢复：`VideoContextTimeline.test.ts` 覆盖 READY 恢复、OCR DEGRADED、Segment/关键帧 seek、本地播放时间高亮、显式后续页、认证过期、404 隐藏语义、播放/关键帧链接有限续签和失败保留已加载页；Job 工作台继续只维护既有局部状态。
 - 前端质量门：`client\npm.cmd run check` 实际执行，69 项测试零失败；statement 86.95%、branch 80.48%、function 85.88%、line 92.20%，typecheck、ESLint 和 Vite production build 均通过。
 - 浏览器证据：应用内真实浏览器访问 Vite + Compose server，在 320、375、768px 检查登录壳，`scrollWidth <= innerWidth` 且 Console 无 warning/error。浏览器没有已认证会话，本次未向页面输入本机密码，因此 READY Context 的 Range、seek、刷新和降级真实数据链路仍明确保留到 T7；不以组件 fixture 代替 M2 退出证据。
+
+## 13. T7 真实长视频、恢复与降级证据
+
+### 13.1 45 分钟 Compose 全链路
+
+- 输入为 Git 忽略目录中的 T0 冻结合成教学样本 `benchmark/local/videopilot-m2-synthetic-45m.mp4`，SHA-256 为 `E21859536375E9B6AEF70B4AAFCF06E5FADEBF8C4898278273BE66B02EE51869`，可信时长 `2700000 ms`。上传使用 3 个分片；端到端到 READY 为 `291.6 s`，其中真实 Context pipeline 为 `283.9 s`，MySQL 中 Context 从创建到原子发布为 `281.164 s`。
+- 最终 Context 为 READY，ASR/OCR 均 AVAILABLE；45 个连续 `60000 ms` VideoSegment 完整覆盖 `[0,2700000]`，ordinal `0..44`，相邻窗口空洞数为 0。45 个 Segment 均有非空 ASR、OCR 观察和关键帧引用。
+- 派生/Checkpoint 为 45 个 AUDIO_SLICE、45 个 ASR_SLICE、90 个 OCR_FRAME 和 1 个 KEYFRAME coordinator，全部 COMPLETED。真实模型审计为 45 次 TeleSpeechASR 成功与 90 次 Tesseract 成功；ASR 输入/输出计量均为 `2700000 ms`，平均/最大延迟 `5345.4/6725 ms`，供应商未提供价格，明确记录 `price_status=UNAVAILABLE`；OCR 处理 `82944000` 像素、产出 `7542` 字符，平均/最大延迟 `292.7/716 ms`，本地成本 `0 USD` 且价格状态 AVAILABLE。
+- 开头/中间/结尾抽查 ordinal `0/22/44`，窗口分别为 `[0,60000]`、`[1320000,1380000]`、`[2640000,2700000]`；三个窗口均同时存在 ASR、28 条 OCR 观察与 2 个关键帧引用。验收只记录长度和计数，不保存完整转录或模型原始响应。
+- 新增 `scripts/run-m2-compose-sample.ps1` 复用登录、流式分片上传、校验、提交和轮询流程，输出只包含 ID、状态、耗时与计数；不会输出 `.env` 凭据、转录或供应商响应。
+
+### 13.2 故障矩阵
+
+| 场景 | 实际结果 |
+| --- | --- |
+| 部分 ASR 后硬终止 | 10 分钟样本在 3 个 ASR_SLICE 已原子完成、1 个调用 STARTED 时强制终止。重启和 MQ 重投后 3 个 completed 分片及 3 条成功调用均未增加；中断中的 STARTED 调用保持不确定事实，不会冒险重复付费，陈旧后由既有恢复规则转 UNKNOWN/人工复核。`AsrRecoveryIT` 同时证明 completed 重投为零调用、UNKNOWN 不自动重发。 |
+| MQ 重投 | `AnalysisMessageConsumerIT.concurrentAndSerialRedeliveryConvergeOnOneFakePipeline` 验证并发与串行重投只产生一组完成事实；Context pipeline 的同指纹 completed 工作项由 MySQL 唯一约束与 CAS 复用。 |
+| Redis `FLUSHDB`/不可达 | 对部分 ASR 作业执行 `FLUSHDB` 前后，MySQL 均保持 `CONTEXT_BUILDING` 且 completed ASR 数保持 3，Redis key 从 2 变 0；停止 Redis 后，已完成 45 分钟 Context 仍可从 MySQL 查询为 READY/45 段。`AnalysisJobCreationIT` 和 `ApplicationRestartRecoveryIT` 覆盖 active key 重建与空 Redis 重启恢复。 |
+| OCR 全通道失败 | 用不存在的 Tesseract executable 跑 60 秒新媒体：Job/Context 仍 READY，ASR AVAILABLE、OCR DEGRADED、1 个 Segment 可用；1 次 ASR 成功，4 次 OCR 失败均有稳定分类和零本地成本审计。随后恢复正常 Tesseract 配置。 |
+| Tesseract 超时 | `TesseractOcrAdapterTest.killsTimedOutProcess` 验证超时分类、强制销毁子进程和临时文件清理。 |
+| 取消竞态 | `AnalysisJobPersistenceAdapterIT.cancellationAndConsumerRaceEndsOnALegalCasBranch` 验证取消与 Consumer 同时 CAS 时只收敛到合法的 CANCELED/CANCEL_REQUESTED 分支。 |
+| 双用户越权 | 临时第二 owner 对 45 分钟 Context、Segments 和 playback 均得到 404；临时用户与会话在验证后删除。 |
+| CAS 单赢家 | `VideoContextPersistenceAdapterIT.concurrentClaimHasExactlyOneWinner` 在真实 MySQL 上证明并发 claim 恰好一个成功。 |
+| 同媒体不同目标复用 | 第二个 Job 复用 READY Context，45 段可查且新增模型调用为 0；查询只复用同 owner、同媒体、同 pipeline 的 READY Context。 |
+
+硬终止恰好发生在一次外部调用期间，因此该调用没有可证明的供应商结果。系统选择 UNKNOWN/复核而不是自动重发，这是 T0 冻结的付费调用安全语义；验收目标“已完成分片调用增量为 0”已满足，不把“不确定调用自动重试并最终 READY”写成已实现能力。
+
+### 13.3 本轮发现并修复的窄缺陷
+
+- 移除整条长视频 pipeline 的外层事务。此前 45 分钟处理期间逐片 completed Checkpoint 对其他连接不可见，进程中断会丢失本轮事务内进度；现在每片的既有事务可独立提交，静态回归测试禁止重新给编排入口增加 `@Transactional`。
+- Context Controller 原先依赖组件扫描时机的 `@ConditionalOnBean`，Compose 中实际未注册。新增延后于 `VideoContextAutoConfiguration` 的 Web 自动配置：真实查询服务存在时显式注册，轻量无数据库测试上下文则不装载；生产接口和轻量健康测试均有回归证据。
+- 同 owner、同媒体但不同目标的新 Job 原先无法读取已 READY 的共享 Context。Mapper 现在只在同 pipeline 的 READY Context 上复用，关键帧查询使用相同 owner/pipeline 边界；真实 MySQL 集成测试覆盖零新增调用复用。
+- Compose server 镜像补入 FFmpeg、Tesseract 与英文语言包，并把正式 M2 默认切片设为 60 秒；`.env.example` 只记录非秘密配置。
+
+### 13.4 质量门与尚待浏览器确认项
+
+- `client\\npm.cmd run check`：通过，69 项测试零失败；statement `86.95%`、branch `80.48%`、function `85.88%`、line `92.20%`，生产构建成功。
+- `server\\mvnw.cmd clean test`：通过，265 项测试零失败、1 项按宿主机 FFmpeg 条件跳过；JaCoCo 80% bundle 门与 ArchUnit 通过，约 57 秒。新增结果导向单测覆盖恢复裁决、持久化原子边界、Context API 映射和派生资源限制绑定，没有降低阈值或增加 suppression。
+- `server\\mvnw.cmd clean verify -Pintegration`：在带 FFmpeg/Tesseract 的 Java 21 验证容器中连接 Compose 的 MySQL、Redis、RabbitMQ、MinIO 与 Qdrant，265 项单元测试和 52 项集成测试全部零失败；JaCoCo 80% bundle 门与 ArchUnit 通过，总耗时 `6m12s`。验证命令把本机 `.env` 的宿主机端口改为容器内地址，并显式保持 `IDENTITY_SECURE_COOKIE=true`；未修改安全断言或本机 `.env`。
+- 运行态 API：重新构建并启动 Compose server 后，45 分钟 Context 查询为 READY，单页返回 45 段且覆盖 `[0,2700000]`；间隔 2 秒重新申请播放短链得到不同 URL，对新 URL 发出 `Range: bytes=0-1023` 返回 HTTP 206 和 `Content-Range: bytes 0-1023/17962074`。未记录短链正文、Cookie 或对象 key。
+- 真实浏览器使用负责人确认的本机 `m1-reviewer` 账号登录；密码只从 Git 忽略的 `.env` 读取并提交给 localhost 登录页，未进入聊天、日志或截图。选择正式 45 分钟 READY Job 后，页面显示 `45 / 45 SEGMENTS`，原生 video 的可信时长为 `2700s` 且 `readyState=4`。
+- 定位与恢复：鼠标点击 `22:00 — 23:00` 后播放器为 `1320s`；对 `44:00 — 45:00` 按 Enter 后为 `2640s`。刷新页面后仍恢复同一 Job、媒体和 `45 / 45 SEGMENTS`，不是前端假状态。
+- 短链与网络：点击“续签播放链接”后 video `src` 发生变化；独立 HTTP Range 核验返回 206 与 `Content-Range: bytes 0-1023/17962074`。页面和记录不包含短链正文、Cookie、object key 或长期 MinIO 凭据。
+- 响应式与 Console：320px 时 `scrollWidth=innerWidth=320`，375px 时 `scrollWidth=360 <= innerWidth=375`；两种视口播放器可见且无横向内容溢出。验收期间 Console warning/error 数为 0。截图仅保存在 Git 忽略的 `benchmark/local/t7-browser-timeline.png`。
+- 项目负责人于 2026-11-05 审阅上述证据和“合成样本不代表真实课程质量”的限制后确认 M2 工程验收；M3 数据集仍须加入权利明确的真实教学材料。
+
+## 14. T8 文档、质量门与退出记录
+
+- 文档：README、`.env.example`、Compose、`docs/M2_RUNBOOK.md`、供应商目录和 Roadmap 已按实际 M2 能力更新。文档没有宣称 M3 检索、M4 证据问答或真实课程质量已经完成；运行手册明确记录资源上限、OCR 降级、UNKNOWN 外部调用、恢复方式和排障入口。
+- 后端完整门：在带 Java 21、FFmpeg/Tesseract 且连接 Compose 依赖的验证容器中执行 `server\\mvnw.cmd clean verify -Pintegration`，265 项单元测试和 52 项集成测试零失败，JaCoCo 80% bundle 门与 ArchUnit 通过，总耗时 `6m12s`。T8 最后移除一处新测试中的泛型 suppression 后，另执行 `-Dtest=VideoContextApplicationServiceTest test`，3 项零失败，编译、覆盖率门通过，耗时 `25.4s`。
+- 前端完整门：执行 `client\\npm.cmd run check`，类型检查、ESLint、69 项测试、覆盖率和 production build 全部通过；statement `86.95%`、branch `80.48%`、function `85.88%`、line `92.20%`。该次执行未单独采集墙钟时间，因此不补造耗时。
+- 配置与工作树：`docker compose config --quiet`、`git diff --check` 和变更 diff 的凭据模式扫描均通过，匹配数为 0；没有降低覆盖率/ArchUnit 阈值、跳过测试或新增 suppression。Git 的 LF/CRLF 提示不影响检查结果。用户自有的未跟踪目录 `mynote/` 不在本次改动或提交范围内。
+- 前端依赖审计：`npm audit --audit-level=high` 退出码为 0，耗时 `11.9s`；高危/严重问题为 0，仍有 11 个 moderate 开发工具链问题。自动完全修复会包含 breaking change，本里程碑不以强制降级依赖换取零告警。
+- 统一安全脚本：`scripts/security-check.ps1` 先完成后端 265 项测试、JaCoCo 和 ArchUnit，随后 OWASP Dependency-Check 因 NVD API 连续 16 次请求失败且无进展而人工终止，故整条脚本明确记为未通过，不冒充成功。脚本因前序失败未走到 npm/Gitleaks；npm 审计已单独完成，本机没有 `gitleaks`，也未配置经批准的 `GITLEAKS_IMAGE`，因此 Gitleaks 未执行。后续应配置 NVD API key/可用镜像和批准的 Gitleaks 安装后重跑，不降低 fail-closed 规则。
+- 退出结论：负责人已确认上述证据和限制，M2 六项退出门全部核对完成，可以进入 M3。该结论属于工程链路验收；正式质量基线仍不得使用授权未核实的 P8/P67，M3 必须补入权利明确的真实教学材料。
+- 提交：本节与 T8 完成记录由同一个 Git commit 承载；具体 commit id 以仓库历史为准，避免在提交内容中写入无法自指验证的哈希。

@@ -30,8 +30,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping(M1ApiContracts.API_PREFIX)
 @ConditionalOnBean(VideoContextQueryApplicationService.class)
+@RequestMapping(M1ApiContracts.API_PREFIX)
 @Validated
 public class VideoContextController {
 

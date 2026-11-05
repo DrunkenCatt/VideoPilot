@@ -1,4 +1,4 @@
-# M0 固定供应商清单
+# MVP 固定供应商清单
 
 MVP 固定下列四个能力实现，但业务代码只依赖项目 Port。供应商 SDK 响应必须在 Adapter 边界完成校验、转换和错误归一化，不能进入 `analysis`、`retrieval`、`answer` 或 `agent` 的业务模型。
 
@@ -7,7 +7,7 @@ MVP 固定下列四个能力实现，但业务代码只依赖项目 Port。供�
 | LLM | DeepSeek | `DEEPSEEK_MODEL_VERSION` | `DEEPSEEK_TIMEOUT` | 输入/输出 Token |
 | ASR | SiliconFlow `TeleAI/TeleSpeechASR` | `TELESPEECH_ASR_MODEL_VERSION` | `TELESPEECH_ASR_TIMEOUT` | 本地可信音频秒数 + 供应商 `usage.seconds`；价格不可得时不伪造成本 |
 | Embedding | BGE-M3 | `BGE_M3_MODEL_VERSION` | `BGE_M3_TIMEOUT` | 输入 Token |
-| OCR | Tesseract | `TESSERACT_VERSION` | `TESSERACT_TIMEOUT` | 本地图片数，不产生云端费用 |
+| OCR | Tesseract | 启动时探测二进制版本 + 语言包 SHA-256 | `TESSERACT_TIMEOUT` | 图片像素/文本字符；本地成本 `0 USD` |
 
 ## Port 与 Adapter 边界
 
@@ -20,7 +20,7 @@ MVP 固定下列四个能力实现，但业务代码只依赖项目 Port。供�
 
 每次模型或 Agent 执行必须记录 `promptVersion`、`modelVersion`、`embeddingVersion`、`retrievalFormulaVersion` 和 `agentPolicyVersion`。这些字段用于回答“这次结果由哪套配置产生”，是回放、离线比较和回滚的前提；缺任一版本时不得生成可晋级的评测记录。
 
-本文件实现 ADR-0005 已接受的边界，不新增架构选择。真实外部调用、重试和预算阈值属于后续里程碑。
+本文件实现 ADR-0005 已接受的边界，不新增架构选择。M2 已接入 ASR/OCR 的调用审计与有限恢复；LLM、Embedding 和 Agent 预算仍属于后续里程碑。
 
 ## M2 ASR 合同补充
 
@@ -32,3 +32,12 @@ M2 已根据 SiliconFlow 官方[中文音频转录 API](https://docs.siliconflow
 - 2026-11-04 真实探针返回 `text`、秒单位 `duration` 和 `usage={type: duration, seconds: N}`，但没有词级时间戳或价格字段。
 
 因此 M2 用版本化 60 秒音频切片的持久化边界作为 `TranscriptSegment` 时间窗，不伪造供应商词级时间戳；同时保存本地可信音频时长和供应商 `usage.seconds`。价格不可得时成本保持未知而不是写 0。完整错误、探针与审计合同见 `tasks/M2/ACCEPTANCE.md`。
+
+## M2 OCR 合同补充
+
+- Compose server 镜像安装 `tesseract-ocr` 与 `tesseract-ocr-eng`，默认语言包目录为 `/usr/share/tesseract-ocr/5/tessdata`；
+- Adapter 以受限子进程读取 TSV，限制图片字节/像素、输出、文本、并发和超时，超时后强制销毁进程；
+- 调用成功记录 Tesseract 版本、语言包摘要、像素、文本字符、耗时和本地零成本；失败只保存稳定分类，不保存内部路径或完整 stderr；
+- OCR 故障允许 Context 明确降级为 ASR-only，不能反向把 ASR 硬失败包装成成功。
+
+具体启动配置和排障见 `docs/M2_RUNBOOK.md`。
