@@ -68,11 +68,48 @@ class SiliconFlowLanguageModelAdapterTest {
                         exception -> assertThat(exception.code()).isEqualTo("RESPONSE_LIMIT"));
     }
 
+    @Test
+    void rejectsMalformedCandidateJsonAndClassifiesHttpTimeoutAsUnknown() throws Exception {
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/v1/chat/completions", exchange -> respond(exchange, 200, """
+                {"choices":[{"finish_reason":"stop","message":{"content":"not-json"}}],
+                 "usage":{"prompt_tokens":1,"completion_tokens":1}}
+                """));
+        server.start();
+        assertThatThrownBy(() -> adapter(4096).generate(new LanguageModelPort.Request("prompt", "a".repeat(64))))
+                .isInstanceOfSatisfying(LanguageModelException.class, exception -> {
+                    assertThat(exception.reason()).isEqualTo(LanguageModelException.Reason.NON_RETRYABLE);
+                    assertThat(exception.code()).isEqualTo("INVALID_RESPONSE");
+                });
+
+        server.stop(0);
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/v1/chat/completions", exchange -> {
+            try {
+                Thread.sleep(250);
+                respond(exchange, 200, "{}");
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        server.start();
+        assertThatThrownBy(() -> adapter(4096, Duration.ofMillis(50))
+                .generate(new LanguageModelPort.Request("prompt", "a".repeat(64))))
+                .isInstanceOfSatisfying(LanguageModelException.class, exception -> {
+                    assertThat(exception.reason()).isEqualTo(LanguageModelException.Reason.UNKNOWN_OUTCOME);
+                    assertThat(exception.code()).isEqualTo("TIMEOUT");
+                });
+    }
+
     private SiliconFlowLanguageModelAdapter adapter(int maxResponseBytes) {
+        return adapter(maxResponseBytes, Duration.ofSeconds(2));
+    }
+
+    private SiliconFlowLanguageModelAdapter adapter(int maxResponseBytes, Duration timeout) {
         String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/v1";
         return new SiliconFlowLanguageModelAdapter(
                 HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build(), json,
-                baseUrl, "secret", "deepseek-ai/DeepSeek-V4-Flash", Duration.ofSeconds(2),
+                baseUrl, "secret", "deepseek-ai/DeepSeek-V4-Flash", timeout,
                 1200, 20_000, maxResponseBytes, 1);
     }
 

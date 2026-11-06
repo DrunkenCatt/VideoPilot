@@ -421,3 +421,21 @@ T6 首个独立切片复核现有真实中文教学视频 Job，而不是用 fix
 | 浏览器复核 | 刷新后恢复回答/拒答；ASR/OCR 引用仍为原生可点击按钮并可 seek；Console warning/error 为 0 |
 
 版本 Trace 同时包含 `chunk-5m-v1`、`m3-index-schema-v1`、`siliconflow-bge-m3-1024-v1`、`hybrid-0.60-0.25-0.15-v1`、`answer-evidence-v1` 和 `deepseek-ai/DeepSeek-V4-Flash`。本切片只证明一条真实视频的完整候选链路；故障矩阵和全量 18 道种子结果在后续 T6 切片单独执行和提交。
+
+## 20. T6.2 故障与对抗矩阵
+
+矩阵复用生产 application service、Adapter 和 MySQL/Qdrant 边界，不新增测试专用故障框架。DeepSeek 的坏 JSON 与真实 HTTP timeout 原先只有生产处理、没有直接 Adapter 测试，本切片补齐；同时修正 `AnswerPersistenceAdapterIT` 未回滚数据导致跨测试唯一键冲突的问题。
+
+| 场景 | 可执行证据 | 结果 |
+| --- | --- | --- |
+| Qdrant 不可用 | `VideoIndexApplicationServiceTest.keepsDurableEmbeddingsAndPublishesExplicitDegradationWhenQdrantIsUnavailable` | 保留持久化向量并发布 `VECTOR_STORE_DEGRADED` |
+| collection 删除 | `QdrantVectorIndexAdapterIT.rebuildsDeletedCollectionFromDurableVectorFacts` | 从 MySQL 向量事实重建，不再次调用 Embedding |
+| Embedding 不可用 | `RetrievalApplicationServiceTest.keepsKeywordAndOcrRecallWhenQueryEmbeddingIsUnavailable` | 明确 `SEMANTIC` 降级，关键词/OCR 路径保留 |
+| Embedding 后重投 | `VideoIndexPersistenceAdapterIT.persistsEmbeddingFactsAndDoesNotRepeatACompletedProviderCall` | 同指纹调用增量为 0 |
+| DeepSeek timeout / 坏 JSON | `SiliconFlowLanguageModelAdapterTest.rejectsMalformedCandidateJsonAndClassifiesHttpTimeoutAsUnknown` | timeout 为 `UNKNOWN_OUTCOME/TIMEOUT`；坏 JSON 为不可重试 `INVALID_RESPONSE` |
+| 伪造、跨视频、越界、错绑引用 | `AnswerEvidenceGateTest` + `AnswerPersistenceAdapterIT` | 只加载当前 owner/job/index 的证据；候选只提交 evidence ID/quote，时间窗由持久化 Segment 派生，模型不能覆盖；伪造与错绑整答拒绝 |
+| 无证据 | `AnswerApplicationServiceTest.refusesWithoutCallingModelWhenRetrievalHasNoEvidence` | 不调用 LLM，发布 `NO_SUFFICIENT_EVIDENCE` |
+| 重复问题 | `AnswerPersistenceAdapterIT.atomicallyClaimsAuditsPublishesAndReadsOwnerScopedVerifiedAnswer` | 同 key 返回已有占用，不重复高成本调用；异指纹冲突 |
+| 双 owner 越权 | 同一 persistence IT 的跨 owner 读取断言 | Job、Evidence 与 Answer 均不可见 |
+
+定向单元矩阵通过 24 tests；新建 V1-V14 一次性数据库后的 MySQL/Qdrant 矩阵通过 6 tests。首次把 Answer 与 Index IT 放入同一数据库执行时暴露固定 owner/媒体指纹冲突；给 Answer IT 增加事务回滚后，同一命令通过，未修改生产 schema 或降低唯一约束。浏览器随后重新加载真实 Job，正常回答和明确拒答仍可恢复，Console warning/error 为 0。
