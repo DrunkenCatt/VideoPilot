@@ -67,13 +67,13 @@
 
 ## T4：交付结构化证据问答、受限对齐与确定性硬门
 
-- [ ] 用一份前进迁移建立最小问答记录、`answer_claim` 和 `cited_evidence`；保存 query、状态、拒答原因、版本 Trace 与发布时间，不创建 Conversation/AgentRun/ToolCall 表。
-- [ ] 实现 SiliconFlow DeepSeek `LanguageModelPort` Adapter 和有界结构化 JSON schema；Prompt 只提供 T3 的候选证据 ID、时间窗和必要原文，限制 Claim 数、输入/输出 Token、超时、并发和响应大小。
-- [ ] `AnswerApplicationService` 在一次纵切中完成检索、调用审计、候选解析、确定性验证和发布；客户端 idempotency key + 输入指纹避免同一请求重复高成本调用，UNKNOWN 不自动冒险重发。
-- [ ] Java 硬门逐条验证 owner/media/context/Chunk/Segment 归属、时间窗合法、引用 ID 来自当前候选、引用文本可在 ASR/OCR 原文定位、每条事实 Claim 至少绑定一条证据；LLM 结果不能覆盖失败。
-- [ ] Citation Alignment 只在声明 Segment 与前后相邻 Segment 内进行规范化空白/标点和有界近似匹配；记录原候选、对齐结果类型和最终证据位置，禁止全片搜索改时间戳。
-- [ ] 无检索命中、证据低于阈值、全部 Claim 硬门失败或不可回答题均发布明确拒答；部分 Claim 失败时采用 T0 冻结策略，不能静默展示无引用事实。
-- [ ] 提供 owner-scoped 提问和已发布记录查询 API；响应只包含已通过硬门的 `AnswerClaim/CitedEvidence`、降级状态和稳定拒答/失败原因。
+- [x] 用一份前进迁移建立最小问答记录、`answer_claim` 和 `cited_evidence`；保存 query、状态、拒答原因、版本 Trace 与发布时间，不创建 Conversation/AgentRun/ToolCall 表。
+- [x] 实现 SiliconFlow DeepSeek `LanguageModelPort` Adapter 和有界结构化 JSON schema；Prompt 只提供 T3 的候选证据 ID、时间窗和必要原文，限制 Claim 数、输入/输出 Token、超时、并发和响应大小。
+- [x] `AnswerApplicationService` 在一次纵切中完成检索、调用审计、候选解析、确定性验证和发布；客户端 idempotency key + 输入指纹避免同一请求重复高成本调用，UNKNOWN 不自动冒险重发。
+- [x] Java 硬门逐条验证 owner/media/context/Chunk/Segment 归属、时间窗合法、引用 ID 来自当前候选、引用文本可在 ASR/OCR 原文定位、每条事实 Claim 至少绑定一条证据；LLM 结果不能覆盖失败。
+- [x] Citation Alignment 只在声明 Segment 与前后相邻 Segment 内进行规范化空白/标点和有界近似匹配；记录原候选、对齐结果类型和最终证据位置，禁止全片搜索改时间戳。
+- [x] 无检索命中、证据低于阈值、全部 Claim 硬门失败或不可回答题均发布明确拒答；部分 Claim 失败时采用 T0 冻结策略，不能静默展示无引用事实。
+- [x] 提供 owner-scoped 提问和已发布记录查询 API；响应只包含已通过硬门的 `AnswerClaim/CitedEvidence`、降级状态和稳定拒答/失败原因。
 - **验收标准**：每条发布 Claim 有可定位引用；伪造、跨视频、越界、引用错绑和全片“漂移修复”均被拦截；无证据明确拒答；模型/Prompt/Embedding/检索公式版本及 Token/成本/延迟可追踪。
 - **验证**：候选解析与证据门纯规则测试、DeepSeek fixture 测试、MySQL 发布事务/idempotency/owner 集成测试、伪造引用与不可回答种子题；`server\mvnw.cmd test` 及相关 `verify -Pintegration`。
 - **预计改动区域**：answer domain/application/port、DeepSeek/persistence/web Adapter、Flyway migration、对应测试。

@@ -351,3 +351,27 @@ T3 只增加一个 `RetrievalApplicationService`：它直接完成 semantic/keyw
 | `server\mvnw.cmd -Dtest=RetrievalBenchmarkLocalIT test -Pintegration` | 通过；真实 SiliconFlow BGE-M3、真实 Qdrant、12 道本地种子，生成版本化脱敏报告 |
 
 本机既有 `videopilot` 数据库仍存在历史 Flyway checksum 漂移，未执行 repair。T3 使用一次性 `videopilot_t3_validation` 从 V1-V13 全量迁移；验证完成后删除临时数据库和授权，并查询 `information_schema` 确认该库数量为 0。当前 server 容器仍是提交前镜像，未把验证库或本地 benchmark 数据带入运行容器。
+
+## 17. T4 自动化证据
+
+T4 保持一个 `AnswerApplicationService`、一个聚合 `AnswerStore`、一个 SiliconFlow LLM Adapter 和一个确定性 `AnswerEvidenceGate`。V14 只增加 `answer_record`、`answer_claim`、`cited_evidence`，没有提前创建 Conversation、AgentRun、ToolCall、通用工作流或多供应商路由。
+
+| 检查 | RED | GREEN |
+| --- | --- | --- |
+| 引用定位与受限对齐 | 硬门不存在 | exact/Unicode+标点空白规范化/至多 10% 且最多 6 字符近似匹配，只搜索声明 Segment 及相邻各一个 Segment |
+| 伪造与错绑引用 | 真实 quote 可被绑定到完全无关 Claim | evidence ID 必须来自当前候选；Claim 与引用至少有一个确定性词项交集；任一 Claim 失败则整答拒答 |
+| 幂等与 UNKNOWN | 没有回答级持久化占用 | owner/job/idempotency key 原子唯一占用；同 key 不重复调用；超时记录 `UNKNOWN_OUTCOME` 且不自动重发 |
+| MySQL 真实边界 | `final` Adapter 令事务代理启动失败；首 Segment 的 unsigned `ordinal - 1` 下溢 | 移除无意义 `final` 并用 `CASE ordinal=0` 保护邻域下界；V1-V14 全量迁移及发布事务通过 |
+
+审查时临时把 Claim/quote 词项交集从 `anyMatch` 反转为 `noneMatch`，三个证据门测试按预期失败；恢复生产条件后定向测试重新通过，mutation 未存活。
+
+SiliconFlow Adapter 固定 `deepseek-ai/DeepSeek-V4-Flash`，使用 JSON mode，并限制 Prompt 20,000 字符、输出 1,200 Token、响应 65,536 bytes、并发 1 和 30 秒超时。Prompt 只包含问题以及按检索顺序最多 12 条 selectable evidence 的 ID、时间窗、通道和每条最多 900 字符必要原文；硬门不接受未实际暴露给模型的 evidence ID，也不保存完整 Prompt 或供应商原始响应。模型返回只是候选，Java 才能发布 `ANSWERED`。
+
+明确拒答覆盖无命中、最高证据分低于 `0.20`、不可回答候选以及任何 Claim/Citation 硬门失败。传输失败和 UNKNOWN 不伪装成拒答，使用统一依赖错误并保留 `model_call` 审计。GET/POST API 都按 owner/job 限定；历史只读取 `ANSWERED/REFUSED` 已发布记录。
+
+| T4 命令 | 结果 |
+| --- | --- |
+| `server\mvnw.cmd clean test` | 通过；315 tests，0 failures，0 errors，1 skipped；ArchUnit 与 JaCoCo 80% 门通过 |
+| `server\mvnw.cmd -Dtest=AnswerPersistenceAdapterIT surefire:test -Pintegration`（专用 V1-V14 数据库） | 通过；幂等冲突、owner 隔离、相邻 Segment、模型审计、Claim/Citation 发布和历史读取 1 test |
+
+T4 使用一次性 `videopilot_t4_validation` 数据库，不对既有 `videopilot` 数据库执行 Flyway repair。该结果验证固定 fixture 与真实 MySQL 事务边界；真实中文视频的 DeepSeek 回答质量和六道 answer seed 聚合报告留在 T6 端到端验收，不在 T4 小样本上宣称产品回答质量。
