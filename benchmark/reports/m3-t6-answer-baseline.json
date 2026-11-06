@@ -1,0 +1,72 @@
+{
+  "totalCases" : 6,
+  "expectedStatusMatches" : 2,
+  "citationCount" : 2,
+  "localizedCitationCount" : 2,
+  "citationLocalizationRate" : 1.0,
+  "localizationRule" : "A citation is localized when its persisted window is valid and overlaps a reviewed requiredCitation window or its one-segment alignment neighborhood.",
+  "limitations" : "Single 7-minute Chinese tutorial, dev split, one reviewer; no semantic fact-coverage score is inferred.",
+  "commit" : "3ddec0d",
+  "createdAt" : "2026-11-06T14:56:28.041250600Z",
+  "cases" : [ {
+    "caseId" : "m3-p08-a01",
+    "expectedAnswerability" : "answerable",
+    "actualStatus" : "REFUSED",
+    "expectedStatusMatch" : false,
+    "claimCount" : 0,
+    "citationCount" : 0,
+    "localizedCitationCount" : 0,
+    "refusalReason" : "NO_SUFFICIENT_EVIDENCE",
+    "degradedChannels" : [ ]
+  }, {
+    "caseId" : "m3-p08-a02",
+    "expectedAnswerability" : "answerable",
+    "actualStatus" : "REFUSED",
+    "expectedStatusMatch" : false,
+    "claimCount" : 0,
+    "citationCount" : 0,
+    "localizedCitationCount" : 0,
+    "refusalReason" : "NO_SUFFICIENT_EVIDENCE",
+    "degradedChannels" : [ ]
+  }, {
+    "caseId" : "m3-p08-a03",
+    "expectedAnswerability" : "answerable",
+    "actualStatus" : "ERROR_DEPENDENCY_UNAVAILABLE",
+    "expectedStatusMatch" : false,
+    "claimCount" : 0,
+    "citationCount" : 0,
+    "localizedCitationCount" : 0,
+    "refusalReason" : "DEPENDENCY_UNAVAILABLE",
+    "degradedChannels" : [ ]
+  }, {
+    "caseId" : "m3-p08-a04",
+    "expectedAnswerability" : "answerable",
+    "actualStatus" : "REFUSED",
+    "expectedStatusMatch" : false,
+    "claimCount" : 0,
+    "citationCount" : 0,
+    "localizedCitationCount" : 0,
+    "refusalReason" : "CITATION_VALIDATION_FAILED",
+    "degradedChannels" : [ ]
+  }, {
+    "caseId" : "m3-p08-a05",
+    "expectedAnswerability" : "answerable",
+    "actualStatus" : "ANSWERED",
+    "expectedStatusMatch" : true,
+    "claimCount" : 2,
+    "citationCount" : 2,
+    "localizedCitationCount" : 2,
+    "refusalReason" : null,
+    "degradedChannels" : [ ]
+  }, {
+    "caseId" : "m3-p08-a06",
+    "expectedAnswerability" : "unanswerable",
+    "actualStatus" : "REFUSED",
+    "expectedStatusMatch" : true,
+    "claimCount" : 0,
+    "citationCount" : 0,
+    "localizedCitationCount" : 0,
+    "refusalReason" : "NO_SUFFICIENT_EVIDENCE",
+    "degradedChannels" : [ ]
+  } ]
+}

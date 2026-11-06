@@ -439,3 +439,27 @@ T6 首个独立切片复核现有真实中文教学视频 Job，而不是用 fix
 | 双 owner 越权 | 同一 persistence IT 的跨 owner 读取断言 | Job、Evidence 与 Answer 均不可见 |
 
 定向单元矩阵通过 24 tests；新建 V1-V14 一次性数据库后的 MySQL/Qdrant 矩阵通过 6 tests。首次把 Answer 与 Index IT 放入同一数据库执行时暴露固定 owner/媒体指纹冲突；给 Answer IT 增加事务回滚后，同一命令通过，未修改生产 schema 或降低唯一约束。浏览器随后重新加载真实 Job，正常回答和明确拒答仍可恢复，Console warning/error 为 0。
+
+## 21. T6.3 全量工程种子基线
+
+候选 commit `3ddec0d` 在一次性 V1-V14 数据库、真实 SiliconFlow BGE-M3/DeepSeek 和真实 Qdrant 上运行全部 18 道种子。Runner 直接调用生产检索和回答 application service；报告不保存问题、回答原文、Prompt、转录或向量。
+
+| 检索分组 | 可评分题 | Recall@3 | Hit@1 | MRR@3 |
+| --- | ---: | ---: | ---: | ---: |
+| 总体 | 11 | 100.00% | 81.82% | 90.91% |
+| 精确 | 4 | 100.00% | 75.00% | 87.50% |
+| 模糊 | 3 | 100.00% | 100.00% | 100.00% |
+| OCR/关键帧 | 4 | 100.00% | 75.00% | 87.50% |
+
+| Answer case | 期望 | 实际 | Claim / Citation | 脱敏结果 |
+| --- | --- | --- | ---: | --- |
+| `m3-p08-a01` | answerable | REFUSED | 0 / 0 | `NO_SUFFICIENT_EVIDENCE` |
+| `m3-p08-a02` | answerable | REFUSED | 0 / 0 | `NO_SUFFICIENT_EVIDENCE` |
+| `m3-p08-a03` | answerable | ERROR | 0 / 0 | DeepSeek 30 秒 timeout，保持 `UNKNOWN_OUTCOME` |
+| `m3-p08-a04` | answerable | REFUSED | 0 / 0 | `CITATION_VALIDATION_FAILED` |
+| `m3-p08-a05` | answerable | ANSWERED | 2 / 2 | 2 条引用均落在人工窗或冻结的相邻 1 Segment 对齐邻域 |
+| `m3-p08-a06` | unanswerable | REFUSED | 0 / 0 | `NO_SUFFICIENT_EVIDENCE`，拒答符合预期 |
+
+回答共 6 题，期望状态命中 2 题；唯一发布的 2 条 Claim 各有 Citation，2/2 引用可定位，引用定位率 100%。这如实暴露了当前固定 Prompt/30 秒 provider timeout 下的回答覆盖不足，不把安全拒答当作回答质量达标。M3 退出门要求引用可靠、不可回答题拒答和真实链路成立，并未冻结 answerable 命中率；该结果作为后续 M5 challenge set 与 Prompt 候选的基线，不在 M3 临时放宽证据门。
+
+本次首次运行因 Job 仍是 benchmark 的 `INDEXING` fixture 状态而在 Answer claim 返回 `NOT_READY`，补齐 READY 测试事实后继续；第二次运行真实出现 DeepSeek timeout，Runner 起初中止，改为把依赖失败记录为逐题 outcome；引用窗最初未计入冻结的相邻 Segment 对齐规则，按验收合同加入一段邻域后 2/2 已发布引用通过。最终 `RetrievalBenchmarkLocalIT` 通过（1 test，约 1 分 50 秒），JaCoCo 门通过。真实浏览器随后复查主 Job 的正常回答、拒答和 Console，均未受 benchmark 运行影响。

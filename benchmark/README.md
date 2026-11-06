@@ -36,11 +36,11 @@ M3 继续复用 `retrieval-case.schema.json` 和 `answer-case.schema.json`，不
 
 ## M3 检索 Runner
 
-`RetrievalBenchmarkRunner` 直接调用生产 `RetrievalApplicationService`，不复制融合或排序算法。显式运行 `RetrievalBenchmarkLocalIT` 会从 `benchmark/local/m3-p08/retrieval-cases.jsonl` 读取工程种子，在专用验证数据库建立索引并生成 `benchmark/reports/m3-t3-baseline.json`：
+`RetrievalBenchmarkRunner` 直接调用生产 `RetrievalApplicationService`，不复制融合或排序算法。显式运行 `RetrievalBenchmarkLocalIT` 会从 `benchmark/local/m3-p08/` 读取 12 道检索和 6 道回答工程种子，在专用验证数据库建立索引，并生成 `benchmark/reports/m3-t3-baseline.json` 与 `benchmark/reports/m3-t6-answer-baseline.json`：
 
 ```powershell
 cd server
-.\mvnw.cmd -Dtest=RetrievalBenchmarkLocalIT test -Pintegration
+.\mvnw.cmd -Dtest=RetrievalBenchmarkLocalIT -Dbenchmark.commit=<候选commit> test -Pintegration
 ```
 
-运行前需要导出 `SILICONFLOW_API_KEY`，并把 integration profile 的 MySQL、Qdrant 等端口指向健康的 Compose 服务和一次性验证数据库。报告只保存聚合指标、失败 case ID、分组方法、版本和 commit，不保存问题全文、完整转录、OCR 或向量。
+运行前需要导出 `SILICONFLOW_API_KEY`，并把 integration profile 的 MySQL、Qdrant 等端口指向健康的 Compose 服务和一次性验证数据库。检索报告保存聚合指标、失败 case ID、分组方法、版本和 commit；回答报告按 case ID 保存状态、Claim/Citation 数和定位结果。两份报告均不保存问题全文、完整转录、OCR、模型回答原文、Prompt 或向量。远端 timeout 和硬门拒答属于候选版基线结果，不会被 Runner 重试或改写成通过。
