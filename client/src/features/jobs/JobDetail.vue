@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import type { AnalysisJob, JobEvent, MediaAsset } from '../../api/contracts'
+import { ref } from 'vue'
+
+import type { AnalysisJob, CitedEvidence, JobEvent, MediaAsset } from '../../api/contracts'
+import AnswerWorkspace from '../answer/AnswerWorkspace.vue'
 import VideoContextTimeline from '../context/VideoContextTimeline.vue'
 import { mediaDurationLabel, mediaStatusLabel } from '../media/mediaPresentation'
 import { canCancel, stageLabel, statusLabel } from './jobPresentation'
@@ -10,9 +13,16 @@ defineProps<{
   mediaUnavailable: boolean
   events: JobEvent[]
   actionBusy: boolean
+  csrfToken: string
 }>()
 
 defineEmits<{ cancel: [], unauthenticated: [] }>()
+
+const seekTarget = ref<CitedEvidence | null>(null)
+
+function cite(citation: CitedEvidence) {
+  seekTarget.value = { ...citation }
+}
 </script>
 
 <template>
@@ -87,10 +97,19 @@ defineEmits<{ cancel: [], unauthenticated: [] }>()
       <small>{{ job.failure.code }}</small>
     </div>
 
-    <VideoContextTimeline
-      :job="job"
-      @unauthenticated="$emit('unauthenticated')"
-    />
+    <div class="evidence-answer-layout">
+      <VideoContextTimeline
+        :job="job"
+        :seek-target="seekTarget"
+        @unauthenticated="$emit('unauthenticated')"
+      />
+      <AnswerWorkspace
+        :job="job"
+        :csrf-token="csrfToken"
+        @cite="cite"
+        @unauthenticated="$emit('unauthenticated')"
+      />
+    </div>
 
     <div class="timeline-heading">
       <div>

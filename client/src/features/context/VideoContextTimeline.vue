@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 
-import type { AnalysisJob, KeyframeReference, VideoContext, VideoSegment } from '../../api/contracts'
+import type { AnalysisJob, CitedEvidence, KeyframeReference, VideoContext, VideoSegment } from '../../api/contracts'
 import { createContextApi, type ContextApi } from '../../api/context'
 import { ApiClientError } from '../../api/session'
 import { stageLabel } from '../jobs/jobPresentation'
@@ -9,8 +9,10 @@ import { stageLabel } from '../jobs/jobPresentation'
 const props = withDefaults(defineProps<{
   job: AnalysisJob
   api?: ContextApi
+  seekTarget?: CitedEvidence | null
 }>(), {
   api: () => createContextApi(),
+  seekTarget: null,
 })
 const emit = defineEmits<{ unauthenticated: [] }>()
 
@@ -104,11 +106,36 @@ async function load() {
     segments.value = page.data
     nextCursor.value = page.nextCursor
     hasMore.value = page.hasMore
+    if (props.seekTarget) await seekToCitation(props.seekTarget, currentRevision)
   } catch (error) {
     if (currentRevision === revision) handleError(error)
   } finally {
     if (currentRevision === revision) loading.value = false
   }
+}
+
+async function seekToCitation(citation: CitedEvidence, expectedRevision = revision) {
+  const loadedContext = context.value
+  if (!loadedContext) return
+  if (!segments.value.some((segment) => segment.segmentId === citation.segmentId)) {
+    try {
+      const page = await props.api.segments(loadedContext.links.segments, {
+        pageSize: 100,
+        fromMs: citation.startMs,
+        toMs: citation.endMs,
+      })
+      if (expectedRevision !== revision || context.value?.contextId !== loadedContext.contextId) return
+      const known = new Set(segments.value.map((segment) => segment.segmentId))
+      segments.value.push(...page.data.filter((segment) => !known.has(segment.segmentId)))
+      segments.value.sort((left, right) => left.ordinal - right.ordinal)
+    } catch (error) {
+      if (expectedRevision !== revision || context.value?.contextId !== loadedContext.contextId) return
+      pageError.value = safeMessage(error)
+      if (error instanceof ApiClientError && error.code === 'AUTHENTICATION_REQUIRED') emit('unauthenticated')
+      return
+    }
+  }
+  if (expectedRevision === revision) seek(citation.startMs)
 }
 
 async function loadMore() {
@@ -197,6 +224,9 @@ async function handleKeyframeError() {
 }
 
 watch(() => [props.job.jobId, props.job.status] as const, load, { immediate: true })
+watch(() => props.seekTarget, (citation) => {
+  if (citation) void seekToCitation(citation)
+})
 </script>
 
 <template>

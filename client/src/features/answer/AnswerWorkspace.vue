@@ -32,7 +32,7 @@ const submitting = ref(false)
 const errorMessage = ref('')
 let revision = 0
 let idempotencyKey: string | null = null
-let requestController: AbortController | null = null
+let requestController: globalThis.AbortController | null = null
 
 const refusalLabels: Record<RefusalReason, string> = {
   NO_SUFFICIENT_EVIDENCE: '视频证据不足，无法可靠回答。',
@@ -57,7 +57,7 @@ function formatTime(milliseconds: number): string {
 }
 
 function safeMessage(error: unknown): string {
-  if (error instanceof DOMException && error.name === 'AbortError') return '请求超时，尚未获得可发布答案。你可以使用原问题重试。'
+  if (error instanceof globalThis.DOMException && error.name === 'AbortError') return '请求超时，尚未获得可发布答案。你可以使用原问题重试。'
   if (!(error instanceof ApiClientError)) return '无法连接本地问答服务，请确认后端已启动。'
   if (error.code === 'AUTHENTICATION_REQUIRED') return '会话已过期，请重新登录。'
   if (error.code === 'RESOURCE_NOT_FOUND') return '任务不存在，或当前账号无权访问。'
@@ -108,7 +108,7 @@ async function submit() {
   errorMessage.value = ''
   submitting.value = true
   idempotencyKey ??= globalThis.crypto.randomUUID()
-  const controller = new AbortController()
+  const controller = new globalThis.AbortController()
   requestController = controller
   const timeout = globalThis.setTimeout(() => controller.abort(), props.timeoutMs)
   try {

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type {
   AnalysisJob,
+  CitedEvidence,
   SegmentPageResponse,
   TemporaryObjectAccess,
   VideoContext,
@@ -253,5 +254,33 @@ describe('VideoContextTimeline', () => {
     resolveFirst({ ...playback, url: 'http://storage.invalid/video-stale' })
     await flushPromises()
     expect(wrapper.get('[data-test="context-player"]').attributes('src')).toBe(secondAccess.url)
+  })
+
+  it('loads a missing cited segment in a bounded window and seeks the existing player', async () => {
+    const first: SegmentPageResponse = { data: [segments[0]!], nextCursor: 1, hasMore: true }
+    const citedPage: SegmentPageResponse = { data: [segments[1]!], nextCursor: null, hasMore: false }
+    const pages = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(citedPage)
+    const api = contextApi({ segments: pages })
+    const wrapper = mount(VideoContextTimeline, { props: { job, api } })
+    await flushPromises()
+    const citation = {
+      citationId: '70000000-0000-0000-0000-000000000008',
+      segmentId: segments[1]!.segmentId,
+      startMs: 72_000,
+      endMs: 89_000,
+      channel: 'ASR',
+      quote: '继续讲解第二节。',
+    } as CitedEvidence
+
+    await wrapper.setProps({ seekTarget: citation })
+    await flushPromises()
+
+    expect(pages).toHaveBeenNthCalledWith(2, context.links.segments, {
+      pageSize: 100,
+      fromMs: 72_000,
+      toMs: 89_000,
+    })
+    expect(wrapper.get<HTMLVideoElement>('[data-test="context-player"]').element.currentTime).toBe(72)
+    expect(wrapper.get('[data-test="segment-1"]').attributes('aria-current')).toBe('true')
   })
 })

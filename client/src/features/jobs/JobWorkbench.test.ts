@@ -69,6 +69,7 @@ function mountWorkbench(mediaGet = vi.fn().mockResolvedValue(readyMedia)) {
       stubs: {
         MediaUploadPanel: { template: '<div data-test="upload-stub" />' },
         VideoContextTimeline: { template: '<div data-test="context-stub" />' },
+        AnswerWorkspace: { template: '<div data-test="answer-stub" />' },
         MediaLibrary: {
           emits: ['select'],
           setup: () => ({ readyMedia }),

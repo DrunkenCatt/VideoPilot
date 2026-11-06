@@ -199,11 +199,11 @@ onBeforeUnmount(() => eventController?.abort())
     <header class="jobs-heading">
       <div>
         <p class="kicker">
-          M2 · VIDEO CONTEXT
+          M3 · EVIDENCE ANSWERS
         </p>
         <h1>视频分析工作台</h1>
       </div>
-      <p>所有状态和时间线均来自服务端持久化事件；页面不估算进度。</p>
+      <p>视频、时间线与问答均来自已持久化事实；答案必须回到可跳转的证据。</p>
     </header>
 
     <p
@@ -326,6 +326,7 @@ onBeforeUnmount(() => eventController?.abort())
         :media-unavailable="jobMediaUnavailable"
         :events="events"
         :action-busy="canceling"
+        :csrf-token="session.csrfToken"
         @cancel="cancel"
         @unauthenticated="emit('unauthenticated')"
       />

@@ -202,6 +202,6 @@ function sessionExpired() {
       />
     </template>
 
-    <footer><span>VideoPilot / M1</span><span>Local-first · Evidence-bound</span></footer>
+    <footer><span>VideoPilot / M3</span><span>Local-first · Evidence-bound</span></footer>
   </div>
 </template>
