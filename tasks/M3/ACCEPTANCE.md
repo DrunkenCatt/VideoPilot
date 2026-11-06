@@ -375,3 +375,32 @@ SiliconFlow Adapter 固定 `deepseek-ai/DeepSeek-V4-Flash`，使用 JSON mode，
 | `server\mvnw.cmd -Dtest=AnswerPersistenceAdapterIT surefire:test -Pintegration`（专用 V1-V14 数据库） | 通过；幂等冲突、owner 隔离、相邻 Segment、模型审计、Claim/Citation 发布和历史读取 1 test |
 
 T4 使用一次性 `videopilot_t4_validation` 数据库，不对既有 `videopilot` 数据库执行 Flyway repair。该结果验证固定 fixture 与真实 MySQL 事务边界；真实中文视频的 DeepSeek 回答质量和六道 answer seed 聚合报告留在 T6 端到端验收，不在 T4 小样本上宣称产品回答质量。
+
+## 18. T5 自动化与浏览器证据
+
+T5 直接扩展现有 Job/Context 工作台：新增一个局部 `AnswerWorkspace` 和窄 `answers` API client，引用继续驱动 M2 的唯一播放器与时间轴。没有新增全局 store、聊天路由、第二个播放器、前端检索实现或供应商响应模型。
+
+| 检查 | RED | GREEN |
+| --- | --- | --- |
+| 问答状态与恢复 | 无前端问答入口 | pending、防重复、成功、拒答、依赖失败、认证过期、超时、历史恢复和 Job 切换迟到响应均有组件/API 测试 |
+| 引用跳转 | Claim 与现有时间轴未连接 | 引用按钮传递 `CitedEvidence`，必要时按证据窗补取 Segment，复用唯一播放器 seek 并高亮 Segment |
+| 真实运行装配 | Answer Controller 未注册，随后因 `final` 类无法建立校验代理 | AutoConfiguration 显式注册 Controller，控制器允许 Spring 校验代理；对应上下文回归测试通过 |
+| M2/M3 Context 复用 | 同内容 Segment ID 未包含 Context，M3 发布因与 M2 主键重复而持续回滚 | Segment ID 绑定 Context ID；同 Context 保持稳定、不同 Context 不冲突；异常消息现在记录 job/message 和堆栈 |
+| 响应式布局 | 768px 双栏溢出 141px，320px 因根节点最小宽度溢出 15px | 768/375/320px 均为顺序单栏，`scrollWidth == clientWidth`，长 Claim/引用在自身宽度内换行 |
+
+真实浏览器使用 `bilibili-BV1cr4y1671t-p08-redis-data-structures.mp4`，Job `9c7cce98-e6b3-4ac7-afca-df5067e8a8f8`。本地 `.env` 的旧 `ANALYSIS_PIPELINE_VERSION=m2-context-v1` 已改为 `m3-evidence-qa-v1` 后重建容器；该文件受忽略且不提交凭据。数据库确认 Job 为 READY，Context 有 8 个 Segment，索引有 2 个 Chunk，Embedding 为 `siliconflow-bge-m3-1024-v1`，无降级。
+
+浏览器提交“Redis 最常见的五种基本数据类型是什么？”后先出现 pending，再发布 1 条 Claim：“Redis最常见的五种基本数据类型是String、Hash、List、Set、SortedSet。”，绑定一条 ASR 与一条 OCR 证据，均位于 `00:00-01:00`。点击和 Enter 激活引用后，页面仍只有 1 个 `<video>`，播放器获得焦点，`00:00-01:00` Segment 高亮。提交“讲师最喜欢喝哪种咖啡？”后明确显示“视频证据不足，无法可靠回答”，未混淆为依赖失败；刷新后两条已发布记录、两条引用和拒答均从后端恢复。
+
+浏览器在 768/375/320px 三档复验均无横向溢出，引用是 `type=button`、`tabIndex=0` 的原生按钮；键盘 Enter 可完成跳转。最终 Console 的 error/warning 列表为空。真实运行时发现并修复的 Controller 装配、校验代理和跨 Context Segment 主键问题均没有通过伪造 fixture 或降低证据门绕过。
+
+| T5 命令/检查 | 结果 |
+| --- | --- |
+| `client\npm.cmd run check` | 通过；14 files、88 tests；statements 87.34%、branches 80.41%、functions 87.24%、lines 92.57%；typecheck、lint、build 通过 |
+| `server\mvnw.cmd test` | 通过；317 tests，0 failures，0 errors，1 skipped；ArchUnit 与 JaCoCo 门通过 |
+| Segment Context 归属 RED/GREEN | 新构造参数测试先因生产合同缺少 Context ID 编译失败；实现后 `VideoContextAlignerTest,VideoContextPipelineApplicationServiceTest` 通过 |
+| 迟到响应 mutation | 临时反转当前 revision 守卫后 `AnswerWorkspaceTest` 按预期失败；恢复生产条件后完整前端检查通过 |
+| `docker compose up -d --build server` | 通过；当前镜像包含 T5 Controller 与 Segment 修复，server 健康检查为 `healthy` |
+| `git diff --check` | 通过；仅有工作区 LF/CRLF 提示，无 whitespace error |
+
+T5 至此完成。种子集全量问答、Qdrant/Embedding/DeepSeek 故障矩阵、聚合质量报告和完整 `verify -Pintegration` 属于 T6，未在本节提前宣称完成。

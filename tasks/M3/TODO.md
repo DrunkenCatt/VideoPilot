@@ -81,11 +81,11 @@
 
 ## T5：交付“视频/证据 + 问答”双工作区
 
-- [ ] 在现有 Job/Context 工作台内增加问答区和前端 API 合同，不新建全局 store、路由级聊天系统或第二套媒体播放器状态。
-- [ ] 提交问题时展示真实 pending/success/refused/failed 状态并防重复提交；刷新或切换 Job 后从后端读取已发布结果，迟到响应不得污染当前视频。
-- [ ] 按 `AnswerClaim` 展示答案，每条 Claim 紧邻列出 `CitedEvidence` 的通道、时间戳和短摘录；点击或键盘激活引用复用 M2 播放器 seek，并高亮相应 Segment。
-- [ ] 对拒答、无证据、Qdrant/Embedding 降级、OCR 降级、认证过期、超时和后端失败提供明确且互不混淆的状态，不用通用“出错了”掩盖证据事实。
-- [ ] 保持桌面双栏、窄屏顺序布局和原生可访问控件；长 Claim/引用不产生横向溢出，焦点顺序和状态提示可被辅助技术读取。
+- [x] 在现有 Job/Context 工作台内增加问答区和前端 API 合同，不新建全局 store、路由级聊天系统或第二套媒体播放器状态。
+- [x] 提交问题时展示真实 pending/success/refused/failed 状态并防重复提交；刷新或切换 Job 后从后端读取已发布结果，迟到响应不得污染当前视频。
+- [x] 按 `AnswerClaim` 展示答案，每条 Claim 紧邻列出 `CitedEvidence` 的通道、时间戳和短摘录；点击或键盘激活引用复用 M2 播放器 seek，并高亮相应 Segment。
+- [x] 对拒答、无证据、Qdrant/Embedding 降级、OCR 降级、认证过期、超时和后端失败提供明确且互不混淆的状态，不用通用“出错了”掩盖证据事实。
+- [x] 保持桌面双栏、窄屏顺序布局和原生可访问控件；长 Claim/引用不产生横向溢出，焦点顺序和状态提示可被辅助技术读取。
 - **验收标准**：用户可完成提问、按 Claim 核对引用、点击跳转、拒答识别和刷新恢复；320/375/768px 可读；键盘路径完整；Console 无 error/warning；前端不接触向量、对象 key、Prompt 或供应商原始响应。
 - **验证**：组件/API 失败测试覆盖成功、拒答、降级、迟到响应、seek 和刷新；`client\npm.cmd run check`；真实浏览器检查布局、可访问树、Console、网络和视频跳转。
 - **预计改动区域**：client answer/retrieval API contracts、现有工作台/时间轴组件、样式与测试。
