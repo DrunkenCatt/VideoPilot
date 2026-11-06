@@ -1,6 +1,7 @@
 package com.videopilot.infrastructure.web;
 
 import com.videopilot.analysis.application.AnalysisJobException;
+import com.videopilot.answer.application.AnswerException;
 import com.videopilot.context.application.VideoContextQueryException;
 import com.videopilot.identity.application.IdentityException;
 import com.videopilot.infrastructure.error.ErrorCode;
@@ -82,6 +83,19 @@ public final class GlobalExceptionHandler {
             case NOT_READY -> ErrorCode.CONFLICT;
         };
         LOGGER.warn("Retrieval request failed code={}", errorCode);
+        return response(errorCode, statusFor(errorCode));
+    }
+
+    @ExceptionHandler(AnswerException.class)
+    ResponseEntity<ApiErrorResponse> handleAnswerFailure(AnswerException exception) {
+        ErrorCode errorCode = switch (exception.reason()) {
+            case INVALID_REQUEST -> ErrorCode.INVALID_REQUEST;
+            case NOT_FOUND -> ErrorCode.RESOURCE_NOT_FOUND;
+            case NOT_READY, IN_PROGRESS -> ErrorCode.CONFLICT;
+            case IDEMPOTENCY_KEY_REUSED -> ErrorCode.IDEMPOTENCY_KEY_REUSED;
+            case DEPENDENCY_UNAVAILABLE -> ErrorCode.DEPENDENCY_UNAVAILABLE;
+        };
+        LOGGER.warn("Answer request failed code={}", errorCode);
         return response(errorCode, statusFor(errorCode));
     }
 

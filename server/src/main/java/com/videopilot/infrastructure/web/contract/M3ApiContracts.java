@@ -4,6 +4,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 public final class M3ApiContracts {
 
@@ -99,7 +101,7 @@ public final class M3ApiContracts {
             List<EvidenceHitResponse> hits) {
     }
 
-    public record AnswerRequest(String question) {
+    public record AnswerRequest(@NotBlank @Size(max = MAX_QUERY_LENGTH) String question) {
     }
 
     public record CitedEvidenceResponse(

@@ -31,7 +31,10 @@ class AnswerEvidenceGateTest {
     void alignsOnlyWithinOneAdjacentSegment() {
         var declared = evidence(SEGMENT, 0, 0, 10_000, "先介绍列表。", true);
         var neighbor = evidence(NEIGHBOR, 1, 10_000, 20_000, "集合中的元素不会重复。", false);
-        var candidate = candidate(SEGMENT + "#ASR", "集合中的元素不会重复");
+        var candidate = new AnswerEvidenceGate.Candidate(true, List.of(
+                new AnswerEvidenceGate.CandidateClaim("集合中的元素不会重复", List.of(
+                        new AnswerEvidenceGate.CandidateCitation(
+                                SEGMENT + "#ASR", "集合中的元素不会重复")))));
 
         var result = new AnswerEvidenceGate(8, 600, 4, 300).validate(candidate, List.of(declared, neighbor));
 
@@ -65,6 +68,20 @@ class AnswerEvidenceGateTest {
 
         assertThat(new AnswerEvidenceGate(8, 600, 4, 300).validate(noCitation, List.of()).accepted()).isFalse();
         assertThat(new AnswerEvidenceGate(8, 600, 4, 300).validate(tooMany, List.of()).accepted()).isFalse();
+    }
+
+    @Test
+    void rejectsARealQuoteBoundToAnUnrelatedClaim() {
+        var evidence = evidence(SEGMENT, 0, 10_000, "Redis String 可以存储文本。", true);
+        var candidate = new AnswerEvidenceGate.Candidate(true, List.of(
+                new AnswerEvidenceGate.CandidateClaim("视频证明地球是圆的", List.of(
+                        new AnswerEvidenceGate.CandidateCitation(
+                                SEGMENT + "#ASR", "Redis String 可以存储文本")))));
+
+        var result = new AnswerEvidenceGate(8, 600, 4, 300).validate(candidate, List.of(evidence));
+
+        assertThat(result.accepted()).isFalse();
+        assertThat(result.failure()).isEqualTo("CITATION_VALIDATION_FAILED");
     }
 
     private AnswerEvidenceGate.Candidate candidate(String evidenceId, String quote) {

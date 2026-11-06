@@ -39,6 +39,18 @@ management:
       enabled: false
 
 videopilot:
+  answer:
+    base-url: ${SILICONFLOW_LLM_BASE_URL:https://api.siliconflow.cn/v1}
+    api-key: ${SILICONFLOW_API_KEY:}
+    provider: SiliconFlow
+    model: ${SILICONFLOW_LLM_MODEL_VERSION:deepseek-ai/DeepSeek-V4-Flash}
+    prompt-version: ${ANSWER_PROMPT_VERSION:answer-evidence-v1}
+    timeout: ${SILICONFLOW_LLM_TIMEOUT:30s}
+    max-output-tokens: ${ANSWER_MAX_OUTPUT_TOKENS:1200}
+    max-prompt-characters: ${ANSWER_MAX_PROMPT_CHARACTERS:20000}
+    max-response-bytes: ${ANSWER_MAX_RESPONSE_BYTES:65536}
+    max-concurrency: ${ANSWER_MAX_CONCURRENCY:1}
+    minimum-evidence-score: ${ANSWER_MINIMUM_EVIDENCE_SCORE:0.20}
   retrieval:
     candidate-limit: ${RETRIEVAL_CANDIDATE_LIMIT:50}
     max-query-characters: ${RETRIEVAL_MAX_QUERY_CHARACTERS:1000}

@@ -3,11 +3,16 @@ package com.videopilot.answer.application;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 public final class AnswerEvidenceGate {
+
+    private static final Pattern TOKEN_RUN = Pattern.compile("[\\p{IsHan}]+|[\\p{L}\\p{N}]{2,}");
 
     private final int maxClaims;
     private final int maxClaimCharacters;
@@ -45,6 +50,9 @@ public final class AnswerEvidenceGate {
                 VerifiedCitation aligned = align(citation, sources);
                 if (aligned == null) return ValidationResult.rejected("CITATION_VALIDATION_FAILED");
                 citations.add(aligned);
+            }
+            if (!supported(claim.text(), citations)) {
+                return ValidationResult.rejected("CITATION_VALIDATION_FAILED");
             }
             verified.add(new VerifiedClaim(claim.text().trim(), citations));
         }
@@ -122,6 +130,30 @@ public final class AnswerEvidenceGate {
         StringBuilder result = new StringBuilder(normalized.length());
         normalized.codePoints().filter(Character::isLetterOrDigit).forEach(result::appendCodePoint);
         return result.toString();
+    }
+
+    private boolean supported(String claim, List<VerifiedCitation> citations) {
+        Set<String> claimTokens = tokens(claim);
+        Set<String> quoteTokens = new LinkedHashSet<>();
+        citations.forEach(citation -> quoteTokens.addAll(tokens(citation.quote())));
+        return claimTokens.stream().anyMatch(quoteTokens::contains);
+    }
+
+    private Set<String> tokens(String value) {
+        Set<String> result = new LinkedHashSet<>();
+        TOKEN_RUN.matcher(value.toLowerCase(Locale.ROOT)).results().forEach(match -> {
+            String token = match.group();
+            if (token.codePoints().allMatch(point -> Character.UnicodeScript.of(point)
+                    == Character.UnicodeScript.HAN)) {
+                int[] points = token.codePoints().toArray();
+                for (int index = 0; index + 1 < points.length; index++) {
+                    result.add(new String(points, index, 2));
+                }
+            } else {
+                result.add(token);
+            }
+        });
+        return result;
     }
 
     public record Candidate(boolean answerable, List<CandidateClaim> claims) {
