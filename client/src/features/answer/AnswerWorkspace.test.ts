@@ -179,4 +179,32 @@ describe('AnswerWorkspace', () => {
     expect(wrapper.find('[data-test="answer-claim"]').exists()).toBe(false)
     expect(api.list).toHaveBeenLastCalledWith(nextJob.jobId)
   })
+
+  it('does not read or submit answers before the job is ready', async () => {
+    const api = answersApi()
+    const building = { ...job, status: 'INDEXING' as const }
+    const wrapper = mount(AnswerWorkspace, { props: { job: building, csrfToken: session.csrfToken, api } })
+    await flushPromises()
+
+    expect(api.list).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('视频索引尚未就绪')
+  })
+
+  it.each([
+    [new TypeError('connection failed'), '无法连接本地问答服务'],
+    [new ApiClientError(500, { code: 'INTERNAL_ERROR', retryable: true }), '问答服务暂时不可用'],
+    [new ApiClientError(400, { code: 'INVALID_REQUEST', retryable: false }), '问题未提交'],
+  ])('presents remaining transport failures without calling them refusals', async (failure, expected) => {
+    const wrapper = mount(AnswerWorkspace, {
+      props: {
+        job,
+        csrfToken: session.csrfToken,
+        api: answersApi({ list: vi.fn().mockRejectedValue(failure) }),
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="answer-error"]').text()).toContain(expected)
+    expect(wrapper.find('[data-test="answer-refused"]').exists()).toBe(false)
+  })
 })

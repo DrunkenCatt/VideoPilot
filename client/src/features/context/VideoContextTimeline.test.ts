@@ -283,4 +283,26 @@ describe('VideoContextTimeline', () => {
     expect(wrapper.get<HTMLVideoElement>('[data-test="context-player"]').element.currentTime).toBe(72)
     expect(wrapper.get('[data-test="segment-1"]').attributes('aria-current')).toBe('true')
   })
+
+  it('seeks an already loaded citation without fetching another segment window', async () => {
+    const pages = vi.fn().mockResolvedValue({ data: segments, nextCursor: null, hasMore: false })
+    const api = contextApi({ segments: pages })
+    const wrapper = mount(VideoContextTimeline, { props: { job, api } })
+    await flushPromises()
+
+    await wrapper.setProps({
+      seekTarget: {
+        citationId: '70000000-0000-0000-0000-000000000009',
+        segmentId: segments[0]!.segmentId,
+        startMs: 15_000,
+        endMs: 30_000,
+        channel: 'OCR',
+        quote: '第一章',
+      } as CitedEvidence,
+    })
+    await flushPromises()
+
+    expect(pages).toHaveBeenCalledTimes(1)
+    expect(wrapper.get<HTMLVideoElement>('[data-test="context-player"]').element.currentTime).toBe(15)
+  })
 })
