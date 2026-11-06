@@ -404,3 +404,20 @@ T5 直接扩展现有 Job/Context 工作台：新增一个局部 `AnswerWorkspac
 | `git diff --check` | 通过；仅有工作区 LF/CRLF 提示，无 whitespace error |
 
 T5 至此完成。种子集全量问答、Qdrant/Embedding/DeepSeek 故障矩阵、聚合质量报告和完整 `verify -Pintegration` 属于 T6，未在本节提前宣称完成。
+
+## 19. T6.1 真实端到端候选证据
+
+T6 首个独立切片复核现有真实中文教学视频 Job，而不是用 fixture 替代运行事实。脱敏机器可读记录为 `benchmark/reports/m3-t6-e2e.json`；它不包含完整转录、Prompt、模型原始响应、向量或凭据。
+
+| 边界 | 实际结果 |
+| --- | --- |
+| 媒体与流水线 | 07:14 中文 Redis 教程；`m3-evidence-qa-v1`；Job 最终 `READY` |
+| Context | 8 个 Segment；ASR/OCR 均 `AVAILABLE`；耗时 4,006,467 ms |
+| 索引 | 2 个 `chunk-5m-v1` Chunk 覆盖 0-434,747 ms，最大窗口 300,000 ms；索引阶段 1,379 ms，发布事务 742 ms |
+| Embedding | SiliconFlow `BAAI/bge-m3` 1 次，4,142 input tokens，527 ms；`siliconflow-bge-m3-1024-v1` |
+| 检索与回答 | query embedding 2 次；SiliconFlow `deepseek-ai/DeepSeek-V4-Flash` 2 次，1,961 input / 235 output tokens，累计 5,161 ms |
+| 成本事实 | 三类远端调用的 `priceStatus` 均为 `UNAVAILABLE`，未把未知成本伪造为 0 |
+| 发布事实 | 1 条 `ANSWERED`、1 条 `REFUSED`；1 条 Claim 绑定 2 条可定位 Citation，定位率 100% |
+| 浏览器复核 | 刷新后恢复回答/拒答；ASR/OCR 引用仍为原生可点击按钮并可 seek；Console warning/error 为 0 |
+
+版本 Trace 同时包含 `chunk-5m-v1`、`m3-index-schema-v1`、`siliconflow-bge-m3-1024-v1`、`hybrid-0.60-0.25-0.15-v1`、`answer-evidence-v1` 和 `deepseek-ai/DeepSeek-V4-Flash`。本切片只证明一条真实视频的完整候选链路；故障矩阵和全量 18 道种子结果在后续 T6 切片单独执行和提交。

@@ -1,0 +1,78 @@
+{
+  "candidateCommit": "391516b",
+  "jobId": "9c7cce98-e6b3-4ac7-afca-df5067e8a8f8",
+  "media": {
+    "filename": "bilibili-BV1cr4y1671t-p08-redis-data-structures.mp4",
+    "durationMs": 434747,
+    "language": "zh-CN"
+  },
+  "pipelineVersion": "m3-evidence-qa-v1",
+  "result": "READY",
+  "stages": {
+    "contextBuildingMs": 4006467,
+    "indexingMs": 1379,
+    "indexPublishingMs": 742
+  },
+  "artifacts": {
+    "segmentCount": 8,
+    "chunkCount": 2,
+    "firstChunkStartMs": 0,
+    "lastChunkEndMs": 434747,
+    "maximumChunkDurationMs": 300000,
+    "vectorCollection": "videopilot_chunks_m3_bge_m3_1024_v1",
+    "degradation": "NONE"
+  },
+  "modelCalls": [
+    {
+      "operation": "EMBEDDING",
+      "provider": "SiliconFlow",
+      "model": "BAAI/bge-m3",
+      "calls": 1,
+      "inputTokens": 4142,
+      "outputTokens": 0,
+      "latencyMs": 527,
+      "priceStatus": "UNAVAILABLE"
+    },
+    {
+      "operation": "RETRIEVAL_EMBEDDING",
+      "provider": "SiliconFlow",
+      "model": "BAAI/bge-m3",
+      "calls": 2,
+      "inputTokens": 26,
+      "outputTokens": 0,
+      "latencyMs": 354,
+      "priceStatus": "UNAVAILABLE"
+    },
+    {
+      "operation": "ANSWER",
+      "provider": "SiliconFlow",
+      "model": "deepseek-ai/DeepSeek-V4-Flash",
+      "calls": 2,
+      "inputTokens": 1961,
+      "outputTokens": 235,
+      "latencyMs": 5161,
+      "priceStatus": "UNAVAILABLE"
+    }
+  ],
+  "versions": {
+    "chunk": "chunk-5m-v1",
+    "indexSchema": "m3-index-schema-v1",
+    "embedding": "siliconflow-bge-m3-1024-v1",
+    "retrievalFormula": "hybrid-0.60-0.25-0.15-v1",
+    "prompt": "answer-evidence-v1",
+    "languageModel": "deepseek-ai/DeepSeek-V4-Flash"
+  },
+  "published": {
+    "answered": 1,
+    "refused": 1,
+    "claims": 1,
+    "citations": 2,
+    "citationLocalizationRate": 1.0
+  },
+  "browser": {
+    "historyRestoredAfterRefresh": true,
+    "citationSeekVerified": true,
+    "warningOrErrorCount": 0
+  },
+  "createdAt": "2026-11-06T21:00:00+08:00"
+}
