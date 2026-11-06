@@ -12,6 +12,7 @@ import com.videopilot.infrastructure.web.AnswerController;
 import com.videopilot.retrieval.application.RetrievalApplicationService;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
+import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 class AnswerConfigurationTest {
@@ -58,5 +59,13 @@ class AnswerConfigurationTest {
         assertThat(properties.getMaxResponseBytes()).isEqualTo(4096);
         assertThat(properties.getMaxConcurrency()).isOne();
         assertThat(properties.getMinimumEvidenceScore()).isEqualTo(.2);
+    }
+
+    @Test
+    void answerControllerCanBeProxiedForMethodValidation() {
+        ProxyFactory proxy = new ProxyFactory(new AnswerController(mock(com.videopilot.answer.application.AnswerApplicationService.class)));
+        proxy.setProxyTargetClass(true);
+
+        assertThat(proxy.getProxy()).isInstanceOf(AnswerController.class);
     }
 }

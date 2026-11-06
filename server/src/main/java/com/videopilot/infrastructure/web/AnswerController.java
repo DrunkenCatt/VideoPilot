@@ -27,7 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 @ConditionalOnBean(AnswerApplicationService.class)
 @RequestMapping(M1ApiContracts.API_PREFIX)
 @Validated
-public final class AnswerController {
+public class AnswerController {
 
     private final AnswerApplicationService answers;
 
