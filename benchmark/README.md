@@ -33,3 +33,14 @@ Schema 采用 JSON Schema 2020-12。示例 ID 仅用于说明，不对应真实�
 M3 继续复用 `retrieval-case.schema.json` 和 `answer-case.schema.json`，不新增同义字段或第二套标注格式。首轮只建立单视频 `dev` 工程种子，用于报告基线和暴露失败题；M5 才扩样并冻结按视频/主题隔离的正式 `test`。
 
 工程种子可以在仅有一名复核者时报告，但必须同时报告样本量和复核限制，不能称为满足本目录“双人复核”规则的正式发布分数。原视频、完整字幕、工作标注和未脱敏证据仍只放在 `benchmark/local/`。
+
+## M3 检索 Runner
+
+`RetrievalBenchmarkRunner` 直接调用生产 `RetrievalApplicationService`，不复制融合或排序算法。显式运行 `RetrievalBenchmarkLocalIT` 会从 `benchmark/local/m3-p08/retrieval-cases.jsonl` 读取工程种子，在专用验证数据库建立索引并生成 `benchmark/reports/m3-t3-baseline.json`：
+
+```powershell
+cd server
+.\mvnw.cmd -Dtest=RetrievalBenchmarkLocalIT test -Pintegration
+```
+
+运行前需要导出 `SILICONFLOW_API_KEY`，并把 integration profile 的 MySQL、Qdrant 等端口指向健康的 Compose 服务和一次性验证数据库。报告只保存聚合指标、失败 case ID、分组方法、版本和 commit，不保存问题全文、完整转录、OCR 或向量。

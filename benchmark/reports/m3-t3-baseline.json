@@ -1,0 +1,34 @@
+{
+  "totalCases" : 12,
+  "scoredCases" : 11,
+  "recallAt3" : 1.0,
+  "hitAt1" : 0.8181818181818182,
+  "mrrAt3" : 0.9090909090909091,
+  "groups" : {
+    "ocr" : {
+      "scoredCases" : 4,
+      "recallAt3" : 1.0,
+      "hitAt1" : 0.75,
+      "mrrAt3" : 0.875
+    },
+    "exact" : {
+      "scoredCases" : 4,
+      "recallAt3" : 1.0,
+      "hitAt1" : 0.75,
+      "mrrAt3" : 0.875
+    },
+    "fuzzy" : {
+      "scoredCases" : 3,
+      "recallAt3" : 1.0,
+      "hitAt1" : 1.0,
+      "mrrAt3" : 1.0
+    }
+  },
+  "failures" : [ ],
+  "groupingMethod" : "ocr/keyframe=>ocr; multi-hit/window>60s=>fuzzy; otherwise=>exact",
+  "formulaVersion" : "hybrid-0.60-0.25-0.15-v1",
+  "embeddingVersion" : "siliconflow-bge-m3-1024-v1",
+  "chunkVersion" : "chunk-5m-v1",
+  "commit" : "46f0ae7",
+  "createdAt" : "2026-11-06T07:52:45.451155700Z"
+}

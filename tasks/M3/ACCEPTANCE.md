@@ -321,3 +321,33 @@ T2 沿用 T1 的一个 `VideoIndexApplicationService` 和一个聚合 `VideoInde
 | `server\mvnw.cmd verify -Pintegration` | T2 相关边界已定向执行；全套仍受宿主机缺少 FFmpeg 和既有 `videopilot` Flyway checksum 漂移阻塞，不通过跳过测试或 repair 掩盖 |
 
 验证结束后已删除本轮创建的 `videopilot_t2_validation` 临时数据库及对应临时授权，并恢复原有 server 容器到 `healthy`；该容器仍运行提交前的 T1 镜像，未用 checksum repair 强行部署 T2。
+
+## 16. T3 自动化证据
+
+T3 只增加一个 `RetrievalApplicationService`：它直接完成 semantic/keyword/OCR 三路候选、按通道最大值归一化、固定 `0.60/0.25/0.15` 加权、Chunk 去重和稳定 TopK。关键词与 OCR 从 MySQL 的最多 50 个 owner-scoped Chunk 在 Java 中确定性计分；没有新增 Elasticsearch、分词服务、Retriever 策略族、检索 DSL 或第二套索引。REST 与 benchmark Runner 使用同一个 application service 和 `EvidenceHit`。
+
+| 检查 | RED | GREEN |
+| --- | --- | --- |
+| 三路融合与降级 | 无生产检索入口 | 正常、Qdrant 连接失败的内存余弦回退、Embedding 不可用的 keyword/OCR 路径使用同一融合代码，并返回明确 degraded channels |
+| owner/复用边界 | 新 Job 复用视频固有 Index 时按 `source_job_id` 查询会误报 404 | 按当前 Job 的 owner/media/pipeline 解析可复用 READY Context/Index；跨 owner 仍返回 NOT_FOUND |
+| BGE-M3 真实中文请求 | Adapter 发送可选 `dimensions=1024` 时真实 API 返回 HTTP 400/code 20015 | 请求省略供应商不接受的可选字段，响应仍强制校验 1024 维；真实中文索引和 12 次 query embedding 均成功 |
+| 零分候选 mutation | 临时把 `total > 0` 改为 `>= 0` | `returnsAnEmptyResultInsteadOfLeakingZeroScoreCandidates` 按预期失败；恢复条件后通过 |
+
+版本化报告为 `benchmark/reports/m3-t3-baseline.json`，生产代码 commit 为 `46f0ae7`。单视频工程种子共 12 道检索题，其中 11 道 answerable 进入检索指标，1 道 unanswerable 不进入 Recall 分母：
+
+| 分组 | 可评分题 | Recall@3 | Hit@1 | MRR@3 |
+| --- | ---: | ---: | ---: | ---: |
+| 总体 | 11 | 100.00% | 81.82% | 90.91% |
+| 精确 | 4 | 100.00% | 75.00% | 87.50% |
+| 模糊 | 3 | 100.00% | 100.00% | 100.00% |
+| OCR/关键帧 | 4 | 100.00% | 75.00% | 87.50% |
+
+分组沿用冻结 schema，不增加第二套标注字段：包含 OCR/keyframe 的题归入 OCR；多 expected hit 或证据窗超过 60 秒归入模糊；其余归入精确。该结果只有一条 7 分钟中文教学视频、11 道可评分题且仅一名复核者，只是工程基线，不能外推为发布集质量或正式达到产品 `Recall@3` 门槛。
+
+| T3 命令 | 结果 |
+| --- | --- |
+| `server\mvnw.cmd clean test` | 通过；298 tests，0 failures，0 errors，1 skipped；ArchUnit 与 JaCoCo 80% 门通过 |
+| T3 定向 MySQL/Qdrant 集成测试（V1-V13 专用数据库） | 通过；真实 Qdrant 1 test，索引/owner/审计/复用/内存回退 4 tests |
+| `server\mvnw.cmd -Dtest=RetrievalBenchmarkLocalIT test -Pintegration` | 通过；真实 SiliconFlow BGE-M3、真实 Qdrant、12 道本地种子，生成版本化脱敏报告 |
+
+本机既有 `videopilot` 数据库仍存在历史 Flyway checksum 漂移，未执行 repair。T3 使用一次性 `videopilot_t3_validation` 从 V1-V13 全量迁移；验证完成后删除临时数据库和授权，并查询 `information_schema` 确认该库数量为 0。当前 server 容器仍是提交前镜像，未把验证库或本地 benchmark 数据带入运行容器。

@@ -48,12 +48,12 @@
 
 ## T3：交付三路混合检索、EvidenceHit 与基线 Runner
 
-- [ ] 用一个 `RetrievalApplicationService` 完成 owner-scoped 查询、semantic/keyword/OCR 三路候选、每通道分数归一化、Chunk 去重和 `0.60/0.25/0.15` 加权 TopK；公式与阈值有版本并进入 Trace。
-- [ ] 关键词和 OCR 先采用 MySQL 上的有界候选检索与 Java 确定性计分，不为 MVP 引入 Elasticsearch、全文检索集群、分词服务或第二套索引存储。
-- [ ] 返回项目统一名称 `EvidenceHit`，包含 Chunk/Segment、合法时间窗、证据通道、原始/归一化/加权分数、检索/Embedding/Chunk 版本和降级状态；不得返回向量或未授权文本。
-- [ ] Qdrant 不可用时使用 T2 的有界内存语义排序并保留关键词/OCR；Embedding 不可用时只使用关键词/OCR。所有路径使用相同融合与排序代码并显式返回 degraded channels。
-- [ ] 提供 owner-scoped 检索 REST API，限制 query 长度、TopK 和候选数量；空 query、无 Context、未完成索引、跨 owner 和无命中使用稳定错误/空结果语义。
-- [ ] 在 `benchmark` 提供调用生产检索代码的最小 Runner，读取 T0 种子集并报告总量、`Recall@3`、`Hit@1`、`MRR@3`、精确/模糊/OCR 分组、配置版本和 commit；不复制一份排序算法。
+- [x] 用一个 `RetrievalApplicationService` 完成 owner-scoped 查询、semantic/keyword/OCR 三路候选、每通道分数归一化、Chunk 去重和 `0.60/0.25/0.15` 加权 TopK；公式与阈值有版本并进入 Trace。
+- [x] 关键词和 OCR 先采用 MySQL 上的有界候选检索与 Java 确定性计分，不为 MVP 引入 Elasticsearch、全文检索集群、分词服务或第二套索引存储。
+- [x] 返回项目统一名称 `EvidenceHit`，包含 Chunk/Segment、合法时间窗、证据通道、原始/归一化/加权分数、检索/Embedding/Chunk 版本和降级状态；不得返回向量或未授权文本。
+- [x] Qdrant 不可用时使用 T2 的有界内存语义排序并保留关键词/OCR；Embedding 不可用时只使用关键词/OCR。所有路径使用相同融合与排序代码并显式返回 degraded channels。
+- [x] 提供 owner-scoped 检索 REST API，限制 query 长度、TopK 和候选数量；空 query、无 Context、未完成索引、跨 owner 和无命中使用稳定错误/空结果语义。
+- [x] 在 `benchmark` 提供调用生产检索代码的最小 Runner，读取 T0 种子集并报告总量、`Recall@3`、`Hit@1`、`MRR@3`、精确/模糊/OCR 分组、配置版本和 commit；不复制一份排序算法。
 - **验收标准**：同一输入和版本排序稳定；三路分数可解释；Qdrant/Embedding 降级仍能返回关键词/OCR 命中；跨 owner 无泄露；基线报告可复现且不含完整转录。
 - **验证**：计分/排序纯规则测试、MySQL/Qdrant/降级集成测试、REST owner 合同测试、种子 Runner；`server\mvnw.cmd test` 和相关 `verify -Pintegration`。
 - **预计改动区域**：retrieval application/domain/web、benchmark runner/report、配置与对应测试。
@@ -61,9 +61,9 @@
 
 ### Checkpoint B：可度量混合检索
 
-- [ ] 正常、Qdrant 不可用、Embedding 不可用三种路径均使用同一 `EvidenceHit` 合同并准确标记降级。
-- [ ] 种子集生成首份版本化检索报告；只报告工程基线和样本限制，不把小样本达标包装成产品结论。
-- [ ] `Recall@3 >= 80%` 未达到时记录逐题失败和后续假设，不通过临时提高 TopK 或改标注让报告通过。
+- [x] 正常、Qdrant 不可用、Embedding 不可用三种路径均使用同一 `EvidenceHit` 合同并准确标记降级。
+- [x] 种子集生成首份版本化检索报告；只报告工程基线和样本限制，不把小样本达标包装成产品结论。
+- [x] `Recall@3 >= 80%` 未达到时记录逐题失败和后续假设，不通过临时提高 TopK 或改标注让报告通过。
 
 ## T4：交付结构化证据问答、受限对齐与确定性硬门
 
