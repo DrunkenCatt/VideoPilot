@@ -299,3 +299,25 @@ T1 集成验证使用本机 Compose 的宿主机端口：MySQL `13306`、Redis `
 | `server\mvnw.cmd -q -Pintegration "-Dtest=DatabaseMigrationIT,VideoIndexPersistenceAdapterIT" test`（显式 Compose 宿主机端口，server 容器停止） | 通过；Flyway 12 个迁移校验、索引发布/复用、owner 隔离和 checkpoint 完成通过 |
 | `server\mvnw.cmd verify -Pintegration` | 已执行但未全绿：运行中的旧 server 容器消费测试 Job，造成恢复/Outbox 污染；宿主机还缺少 `ffmpeg`，既有媒体集成测试无法生成 fixture。T1 相关定向集成测试已在停止 server 后独立通过 |
 | `docker compose up -d --build server` | 通过；使用当前 T1 jar 重建并恢复 server，健康检查为 `healthy` |
+
+## 15. T2 自动化证据
+
+T2 沿用 T1 的一个 `VideoIndexApplicationService` 和一个聚合 `VideoIndexStore`，只增加现有 `EmbeddingPort` 的 SiliconFlow BGE-M3 Adapter 与一个窄 `VectorIndexPort`/Qdrant Adapter。没有引入通用 RAG、VectorStore、Provider Registry 或每表 Repository。MySQL 保存每个 Chunk 的版本化向量事实，Qdrant 只作为可删除、可重建的查询副本。
+
+| 检查 | RED | GREEN |
+| --- | --- | --- |
+| BGE-M3 边界 | Adapter 不存在 | fixture 验证请求模型/维度/usage；batch、字符、Token、响应大小、超时、并发、维度与 HTTP 错误均有界并归一化 |
+| 调用审计与重投 | T1 在 Chunk 后直接完成 INDEXING | 调用前写 `model_call`；向量与成功审计同事务；重复执行调用增量为 0；UNKNOWN 保持 INDEXING 且不重发 |
+| Qdrant 发布与查询 | 无向量 collection | 版本化 collection、schema 校验、稳定 UUID point、批量 upsert 和 owner/media/context filter fixture 通过 |
+| 重建与降级 | Qdrant 是单点且无向量真源 | 真实 Qdrant collection 删除后由同一持久化向量重建；连接失败发布 `VECTOR_STORE_DEGRADED`；Embedding 明确失败发布 `SEMANTIC_DEGRADED` |
+
+本机既有 `videopilot` 数据库存在 T2 之前的 Flyway V3 checksum 漂移。验证未执行 `flyway repair`，而是在专用 `videopilot_t2_validation` 数据库从 V1 到 V13 全量迁移，避免修改既有 schema history。Qdrant 使用本机 Compose 容器的真实 HTTP 边界；为保持 MVP 依赖最少，没有为一个已有 Compose 服务额外引入 Testcontainers 依赖。
+
+| T2 命令 | 结果 |
+| --- | --- |
+| `server\mvnw.cmd clean test` | 通过；287 tests，0 failures，0 errors，1 skipped；包含 BGE/Qdrant fixture、应用编排、ArchUnit，JaCoCo 行覆盖率门恢复到不少于 80% |
+| T2 定向 MySQL/Qdrant 集成测试（Compose 宿主机端口，专用数据库） | 通过；V1-V13 全量迁移、成功/降级/UNKNOWN 审计、重投零增量、owner 隔离、真实 Qdrant 删除重建均通过 |
+| BGE 维度条件 mutation | 临时反转维度条件后 `SiliconFlowEmbeddingAdapterTest` 按预期失败；恢复生产条件后测试通过 |
+| `server\mvnw.cmd verify -Pintegration` | T2 相关边界已定向执行；全套仍受宿主机缺少 FFmpeg 和既有 `videopilot` Flyway checksum 漂移阻塞，不通过跳过测试或 repair 掩盖 |
+
+验证结束后已删除本轮创建的 `videopilot_t2_validation` 临时数据库及对应临时授权，并恢复原有 server 容器到 `healthy`；该容器仍运行提交前的 T1 镜像，未用 checksum repair 强行部署 T2。

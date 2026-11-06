@@ -7,13 +7,17 @@ import com.videopilot.identity.domain.OwnerId;
 import com.videopilot.retrieval.domain.VideoChunk;
 import com.videopilot.retrieval.port.VideoIndexStore;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.annotation.Transactional;
 
 public class VideoIndexPersistenceAdapter implements VideoIndexStore {
 
     private static final TypeReference<List<String>> STRINGS = new TypeReference<>() { };
+    private static final TypeReference<List<Float>> FLOATS = new TypeReference<>() { };
     private final JdbcClient jdbc;
     private final ObjectMapper json;
 
@@ -24,7 +28,7 @@ public class VideoIndexPersistenceAdapter implements VideoIndexStore {
 
     @Override
     @Transactional
-    public PublishResult publish(OwnerId ownerId, IndexPublication publication) {
+    public PublishResult publishChunks(OwnerId ownerId, IndexPublication publication) {
         String owner = ownerId.value().toString();
         String existingStatus = jdbc.sql("""
                 SELECT status FROM video_index
@@ -36,7 +40,7 @@ public class VideoIndexPersistenceAdapter implements VideoIndexStore {
                 .query(String.class)
                 .optional()
                 .orElse(null);
-        if ("READY".equals(existingStatus)) return PublishResult.REUSED;
+        if (existingStatus != null && !"BUILDING".equals(existingStatus)) return PublishResult.REUSED;
 
         jdbc.sql("""
                 INSERT INTO video_index (
@@ -67,56 +71,20 @@ public class VideoIndexPersistenceAdapter implements VideoIndexStore {
                 .update();
 
         for (VideoChunk chunk : publication.chunks()) insertChunk(publication.indexId(), chunk);
-        jdbc.sql("""
-                UPDATE video_index
-                SET status = 'SUPERSEDED', version = version + 1
-                WHERE owner_id = :owner AND context_id = :contextId
-                  AND status = 'READY' AND index_id <> :indexId
-                """)
-                .param("owner", owner)
-                .param("contextId", publication.contextId().toString())
-                .param("indexId", publication.indexId().toString())
-                .update();
         int published = jdbc.sql("""
                 UPDATE video_index
-                SET status = 'READY', chunk_count = :chunkCount, published_at = :publishedAt,
-                    version = version + 1
+                SET status = 'CHUNKED', chunk_count = :chunkCount, version = version + 1
                 WHERE index_id = :indexId AND owner_id = :owner AND status = 'BUILDING'
                 """)
                 .param("chunkCount", publication.chunks().size())
-                .param("publishedAt", publication.createdAt())
                 .param("indexId", publication.indexId().toString())
                 .param("owner", owner)
                 .update();
-        if (published == 1) {
-            jdbc.sql("""
-                    UPDATE job_stage_attempt
-                    SET status = 'COMPLETED', checkpoint_schema_version = 1,
-                        checkpoint_payload = JSON_OBJECT(
-                            'indexId', :indexId,
-                            'chunkCount', :chunkCount,
-                            'schemaVersion', :schemaVersion
-                        ),
-                        artifact_ref = :artifactRef, artifact_digest = :artifactDigest,
-                        completed_at = :completedAt
-                    WHERE job_id = :jobId AND stage = 'INDEXING'
-                      AND input_fingerprint = :fingerprint AND status = 'STARTED'
-                    """)
-                    .param("indexId", publication.indexId().toString())
-                    .param("chunkCount", publication.chunks().size())
-                    .param("schemaVersion", publication.schemaVersion())
-                    .param("artifactRef", "mysql:video-index/" + publication.indexId())
-                    .param("artifactDigest", publication.sourceDigest())
-                    .param("completedAt", publication.createdAt())
-                    .param("jobId", publication.sourceJobId().toString())
-                    .param("fingerprint", publication.inputFingerprint())
-                    .update();
-        }
         if (published == 1) return PublishResult.CREATED;
-        return "READY".equals(jdbc.sql("SELECT status FROM video_index WHERE index_id = :indexId")
+        return !"BUILDING".equals(jdbc.sql("SELECT status FROM video_index WHERE index_id = :indexId")
                 .param("indexId", publication.indexId().toString()).query(String.class).single())
                 ? PublishResult.REUSED
-                : fail("index publication did not reach READY");
+                : fail("chunk publication did not reach CHUNKED");
     }
 
     @Override
@@ -125,7 +93,7 @@ public class VideoIndexPersistenceAdapter implements VideoIndexStore {
                 SELECT chunk.* FROM video_chunk chunk
                 INNER JOIN video_index index_version ON index_version.index_id = chunk.index_id
                 WHERE index_version.owner_id = :owner AND index_version.index_id = :indexId
-                  AND index_version.status = 'READY'
+                  AND index_version.status IN ('CHUNKED', 'READY', 'VECTOR_STORE_DEGRADED', 'SEMANTIC_DEGRADED')
                 ORDER BY chunk.ordinal
                 """)
                 .param("owner", ownerId.value().toString())
@@ -140,6 +108,183 @@ public class VideoIndexPersistenceAdapter implements VideoIndexStore {
                         row.getString("ocr_text"), row.getString("input_fingerprint"),
                         row.getString("chunk_version")))
                 .list();
+    }
+
+    @Override
+    public Map<UUID, List<Float>> findEmbeddings(OwnerId ownerId, UUID indexId, String embeddingVersion) {
+        return jdbc.sql("""
+                SELECT embedding.chunk_id, embedding.vector_json
+                FROM video_chunk_embedding embedding
+                INNER JOIN video_index index_version ON index_version.index_id = embedding.index_id
+                WHERE index_version.owner_id = :owner AND embedding.index_id = :indexId
+                  AND embedding.embedding_version = :embeddingVersion
+                """)
+                .param("owner", ownerId.value().toString())
+                .param("indexId", indexId.toString())
+                .param("embeddingVersion", embeddingVersion)
+                .query((row, ignored) -> Map.entry(
+                        UUID.fromString(row.getString("chunk_id")), readFloats(row.getString("vector_json"))))
+                .list().stream().collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    @Override
+    public Optional<ModelCallState> findEmbeddingCall(UUID jobId, String inputFingerprint) {
+        return jdbc.sql("""
+                SELECT model_call_id, status, error_category, attempt FROM model_call
+                WHERE job_id = :jobId AND operation_type = 'EMBEDDING'
+                  AND input_fingerprint = :fingerprint
+                ORDER BY attempt DESC LIMIT 1
+                """)
+                .param("jobId", jobId.toString())
+                .param("fingerprint", inputFingerprint)
+                .query((row, ignored) -> new ModelCallState(
+                        row.getString("model_call_id"), row.getString("status"),
+                        row.getString("error_category"), row.getInt("attempt")))
+                .optional();
+    }
+
+    @Override
+    @Transactional
+    public void startEmbeddingCall(EmbeddingCallStart call) {
+        int inserted = jdbc.sql("""
+                INSERT INTO model_call (
+                    model_call_id, job_id, request_id, operation_type, provider, model_name,
+                    model_version, embedding_version, input_fingerprint, status, attempt,
+                    price_status, started_at
+                ) VALUES (
+                    :callId, :jobId, :requestId, 'EMBEDDING', :provider, :model,
+                    :model, :embeddingVersion, :fingerprint, 'STARTED', :attempt,
+                    'UNAVAILABLE', :startedAt
+                )
+                """)
+                .param("callId", call.modelCallId().toString()).param("jobId", call.jobId().toString())
+                .param("requestId", call.requestId()).param("provider", call.provider())
+                .param("model", call.model()).param("embeddingVersion", call.embeddingVersion())
+                .param("fingerprint", call.inputFingerprint()).param("attempt", call.attempt())
+                .param("startedAt", call.startedAt()).update();
+        if (inserted != 1) throw new IllegalStateException("embedding call was not started");
+    }
+
+    @Override
+    @Transactional
+    public void markEmbeddingCallUnknown(String modelCallId, java.time.Instant completedAt) {
+        int updated = jdbc.sql("""
+                UPDATE model_call SET status = 'UNKNOWN_OUTCOME', error_category = 'UNKNOWN_OUTCOME',
+                    error_code = 'STALE_STARTED', error_summary = 'Embedding outcome is unknown after redelivery',
+                    completed_at = :completedAt, updated_at = :completedAt
+                WHERE model_call_id = :callId AND status = 'STARTED'
+                """)
+                .param("completedAt", completedAt).param("callId", modelCallId).update();
+        if (updated != 1) throw new IllegalStateException("started embedding call could not become unknown");
+    }
+
+    @Override
+    @Transactional
+    public void completeEmbedding(OwnerId ownerId, EmbeddingCompletion completion) {
+        int updated = jdbc.sql("""
+                UPDATE model_call call_record
+                INNER JOIN analysis_job job ON job.job_id = call_record.job_id
+                SET call_record.status = 'SUCCEEDED', call_record.input_units = :inputTokens,
+                    call_record.output_artifact_ref = :artifactRef, call_record.latency_ms = :latency,
+                    call_record.completed_at = :completedAt, call_record.updated_at = :completedAt
+                WHERE call_record.model_call_id = :callId AND call_record.status = 'STARTED'
+                  AND job.owner_id = :owner
+                """)
+                .param("inputTokens", completion.inputTokens())
+                .param("artifactRef", "mysql:video-index/" + completion.indexId() + "/embeddings")
+                .param("latency", completion.latencyMs()).param("completedAt", completion.completedAt())
+                .param("callId", completion.modelCallId().toString())
+                .param("owner", ownerId.value().toString()).update();
+        if (updated != 1) throw new IllegalStateException("embedding completion lost its model call");
+        for (EmbeddedChunk chunk : completion.chunks()) {
+            jdbc.sql("""
+                    INSERT INTO video_chunk_embedding (
+                        chunk_id, index_id, embedding_version, input_fingerprint,
+                        dimension, vector_json, vector_digest, created_at
+                    ) SELECT chunk.chunk_id, chunk.index_id, :embeddingVersion, :fingerprint,
+                             :dimension, CAST(:vector AS JSON), :digest, :createdAt
+                    FROM video_chunk chunk
+                    INNER JOIN video_index index_version ON index_version.index_id = chunk.index_id
+                    WHERE chunk.chunk_id = :chunkId AND chunk.index_id = :indexId
+                      AND index_version.owner_id = :owner
+                    ON DUPLICATE KEY UPDATE video_chunk_embedding.chunk_id = video_chunk_embedding.chunk_id
+                    """)
+                    .param("embeddingVersion", completion.embeddingVersion())
+                    .param("fingerprint", chunk.inputFingerprint()).param("dimension", chunk.vector().size())
+                    .param("vector", write(chunk.vector())).param("digest", chunk.vectorDigest())
+                    .param("createdAt", completion.completedAt()).param("chunkId", chunk.chunkId().toString())
+                    .param("indexId", completion.indexId().toString())
+                    .param("owner", ownerId.value().toString()).update();
+        }
+    }
+
+    @Override
+    @Transactional
+    public void failEmbedding(EmbeddingFailure failure) {
+        int updated = jdbc.sql("""
+                UPDATE model_call SET status = :status, error_category = :category,
+                    error_code = :code, error_summary = 'Embedding did not complete',
+                    latency_ms = :latency, completed_at = :completedAt, updated_at = :completedAt
+                WHERE model_call_id = :callId AND status = 'STARTED'
+                """)
+                .param("status", failure.status()).param("category", failure.errorCategory())
+                .param("code", failure.errorCode()).param("latency", failure.latencyMs())
+                .param("completedAt", failure.completedAt()).param("callId", failure.modelCallId().toString())
+                .update();
+        if (updated != 1) throw new IllegalStateException("embedding failure lost its model call");
+    }
+
+    @Override
+    @Transactional
+    public void completeIndex(OwnerId ownerId, IndexCompletion completion) {
+        String owner = ownerId.value().toString();
+        int updated = jdbc.sql("""
+                UPDATE video_index
+                SET status = :status, embedding_version = :embeddingVersion,
+                    vector_collection = :collection, degraded_reason = :reason,
+                    published_at = :completedAt, version = version + 1
+                WHERE index_id = :indexId AND owner_id = :owner AND status = 'CHUNKED'
+                """)
+                .param("status", completion.status()).param("embeddingVersion", completion.embeddingVersion())
+                .param("collection", completion.vectorCollection()).param("reason", completion.degradedReason())
+                .param("completedAt", completion.completedAt()).param("indexId", completion.indexId().toString())
+                .param("owner", owner).update();
+        if (updated == 0) {
+            String current = jdbc.sql("SELECT status FROM video_index WHERE index_id = :indexId AND owner_id = :owner")
+                    .param("indexId", completion.indexId().toString()).param("owner", owner)
+                    .query(String.class).optional().orElse("");
+            if (List.of("READY", "VECTOR_STORE_DEGRADED", "SEMANTIC_DEGRADED").contains(current)) return;
+            throw new IllegalStateException("index completion lost its publication state");
+        }
+        jdbc.sql("""
+                UPDATE video_index SET status = 'SUPERSEDED', version = version + 1
+                WHERE owner_id = :owner
+                  AND context_id = (SELECT current.context_id FROM (SELECT context_id FROM video_index
+                      WHERE index_id = :indexId) current)
+                  AND index_id <> :indexId
+                  AND status IN ('READY', 'VECTOR_STORE_DEGRADED', 'SEMANTIC_DEGRADED')
+                """)
+                .param("owner", owner).param("indexId", completion.indexId().toString()).update();
+        int checkpoint = jdbc.sql("""
+                UPDATE job_stage_attempt
+                SET status = 'COMPLETED', checkpoint_schema_version = 2,
+                    checkpoint_payload = JSON_OBJECT(
+                        'indexId', :indexId, 'chunkCount', :chunkCount,
+                        'schemaVersion', :schemaVersion, 'embeddingVersion', :embeddingVersion,
+                        'indexStatus', :status, 'vectorCollection', :collection
+                    ), artifact_ref = :artifactRef, artifact_digest = :artifactDigest,
+                    completed_at = :completedAt
+                WHERE job_id = :jobId AND stage = 'INDEXING'
+                  AND input_fingerprint = :fingerprint AND status = 'STARTED'
+                """)
+                .param("indexId", completion.indexId().toString()).param("chunkCount", completion.chunkCount())
+                .param("schemaVersion", completion.schemaVersion())
+                .param("embeddingVersion", completion.embeddingVersion()).param("status", completion.status())
+                .param("collection", completion.vectorCollection()).param("artifactRef", "mysql:video-index/" + completion.indexId())
+                .param("artifactDigest", completion.sourceDigest()).param("completedAt", completion.completedAt())
+                .param("jobId", completion.jobId().toString()).param("fingerprint", completion.stageInputFingerprint())
+                .update();
+        if (checkpoint != 1) throw new IllegalStateException("index completion lost its stage checkpoint");
     }
 
     private void insertChunk(UUID indexId, VideoChunk chunk) {
@@ -183,6 +328,14 @@ public class VideoIndexPersistenceAdapter implements VideoIndexStore {
 
     private List<UUID> readIds(String value) {
         return readStrings(value).stream().map(UUID::fromString).toList();
+    }
+
+    private List<Float> readFloats(String value) {
+        try {
+            return List.copyOf(json.readValue(value, FLOATS));
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("stored embedding JSON is invalid", exception);
+        }
     }
 
     private PublishResult fail(String message) {

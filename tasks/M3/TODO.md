@@ -35,12 +35,12 @@
 
 ## T2：接通 BGE-M3、Qdrant 与可重建降级索引
 
-- [ ] 实现现有 `EmbeddingPort` 的 BGE-M3 Adapter，限制 batch、输入字符/Token、响应大小、向量维度、超时和并发；供应商类型在 Adapter 内完成校验与错误归一化。
-- [ ] 调用前写 `model_call`，完成后记录 provider/model/embedding version、状态、输入 Token、耗时、成本或不可得事实；UNKNOWN 与明确可重试错误沿用 ADR-0005，不在线程内无界重试。
-- [ ] 实现一个窄 Qdrant Adapter 完成版本化 collection 建立、批量 upsert、owner/media/context payload 过滤和查询；不建立通用 VectorStore/Repository 层级。
-- [ ] 只有 Embedding 结果、索引发布事实和 Checkpoint 原子收敛后才完成 INDEXING；同指纹 MQ 重投/重启不重复调用 BGE-M3，Qdrant upsert 使用稳定 point ID 保持幂等。
-- [ ] 保存重建与有界内存余弦排序所需的向量事实或受控对象引用；Qdrant collection 删除后可从 MySQL 真源重建，不重新调用已有同指纹 Embedding。
-- [ ] Qdrant 不可用时标记 `VECTOR_STORE_DEGRADED` 并允许已有向量内存排序；Embedding 不可用且重试耗尽时标记 `SEMANTIC_DEGRADED`，为 T3 保留关键词/OCR 路径。
+- [x] 实现现有 `EmbeddingPort` 的 BGE-M3 Adapter，限制 batch、输入字符/Token、响应大小、向量维度、超时和并发；供应商类型在 Adapter 内完成校验与错误归一化。
+- [x] 调用前写 `model_call`，完成后记录 provider/model/embedding version、状态、输入 Token、耗时、成本或不可得事实；UNKNOWN 与明确可重试错误沿用 ADR-0005，不在线程内无界重试。
+- [x] 实现一个窄 Qdrant Adapter 完成版本化 collection 建立、批量 upsert、owner/media/context payload 过滤和查询；不建立通用 VectorStore/Repository 层级。
+- [x] 只有 Embedding 结果、索引发布事实和 Checkpoint 原子收敛后才完成 INDEXING；同指纹 MQ 重投/重启不重复调用 BGE-M3，Qdrant upsert 使用稳定 point ID 保持幂等。
+- [x] 保存重建与有界内存余弦排序所需的向量事实或受控对象引用；Qdrant collection 删除后可从 MySQL 真源重建，不重新调用已有同指纹 Embedding。
+- [x] Qdrant 不可用时标记 `VECTOR_STORE_DEGRADED` 并允许已有向量内存排序；Embedding 不可用且重试耗尽时标记 `SEMANTIC_DEGRADED`，为 T3 保留关键词/OCR 路径。
 - **验收标准**：正常索引可查询；重复/乱序执行 BGE 调用增量为 0；Qdrant 删除可重建；Qdrant 或 Embedding 故障不会伪装成完整语义检索，也不会删除 Chunk。
 - **验证**：BGE fixture/边界测试、Qdrant Testcontainer 集成、调用审计/UNKNOWN/重投测试、collection 删除重建和不可用降级测试；`server\mvnw.cmd test` 与相关 `verify -Pintegration`。
 - **预计改动区域**：Embedding/Qdrant Adapter 和配置、retrieval application/persistence、model call 审计扩展、集成测试。

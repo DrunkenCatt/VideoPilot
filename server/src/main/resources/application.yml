@@ -39,6 +39,27 @@ management:
       enabled: false
 
 videopilot:
+  retrieval:
+    embedding:
+      base-url: ${SILICONFLOW_EMBEDDING_BASE_URL:https://api.siliconflow.cn/v1}
+      api-key: ${SILICONFLOW_API_KEY:}
+      provider: SiliconFlow
+      model: ${SILICONFLOW_EMBEDDING_MODEL:BAAI/bge-m3}
+      version: ${EMBEDDING_VERSION:siliconflow-bge-m3-1024-v1}
+      timeout: ${SILICONFLOW_EMBEDDING_TIMEOUT:30s}
+      dimensions: ${EMBEDDING_DIMENSIONS:1024}
+      max-batch-size: ${EMBEDDING_MAX_BATCH_SIZE:4}
+      max-text-characters: ${EMBEDDING_MAX_TEXT_CHARACTERS:6000}
+      max-input-tokens-per-text: ${EMBEDDING_MAX_INPUT_TOKENS_PER_TEXT:8192}
+      max-total-characters: ${EMBEDDING_MAX_TOTAL_CHARACTERS:100000}
+      max-response-bytes: ${EMBEDDING_MAX_RESPONSE_BYTES:8388608}
+      max-concurrency: ${EMBEDDING_MAX_CONCURRENCY:1}
+      max-attempts: ${EMBEDDING_MAX_ATTEMPTS:3}
+    qdrant:
+      base-url: ${QDRANT_BASE_URL:http://localhost:6333}
+      collection: ${QDRANT_COLLECTION:videopilot_chunks_m3_bge_m3_1024_v1}
+      timeout: ${QDRANT_TIMEOUT:5s}
+      max-response-bytes: ${QDRANT_MAX_RESPONSE_BYTES:1048576}
   context:
     ocr:
       enabled: ${OCR_ENABLED:false}

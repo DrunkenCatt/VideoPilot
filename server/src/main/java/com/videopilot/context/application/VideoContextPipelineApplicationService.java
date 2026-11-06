@@ -75,7 +75,14 @@ public class VideoContextPipelineApplicationService implements AnalysisJobPipeli
         }
 
         if (job.status() == JobStatus.INDEXING) {
-            indexing.index(owner, job.jobId());
+            var outcome = indexing.index(owner, job.jobId());
+            if (outcome == VideoIndexApplicationService.IndexOutcome.RETRY_PENDING) {
+                return Outcome.retry();
+            }
+            if (outcome == VideoIndexApplicationService.IndexOutcome.REVIEW_REQUIRED) {
+                return failed(JobErrorCategory.NON_RETRYABLE, "EMBEDDING_OUTCOME_UNKNOWN",
+                        "Embedding outcome requires review before another provider call");
+            }
             transitionReadyFromIndexing(job, requestId);
             return Outcome.completed();
         }

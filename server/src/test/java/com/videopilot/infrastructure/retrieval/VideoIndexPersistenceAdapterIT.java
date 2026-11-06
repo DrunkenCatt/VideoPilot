@@ -5,7 +5,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.videopilot.identity.application.OwnerContext;
 import com.videopilot.identity.domain.OwnerId;
 import com.videopilot.infrastructure.retrieval.persistence.VideoIndexPersistenceAdapter;
+import com.videopilot.context.port.VideoContextStore;
 import com.videopilot.retrieval.application.VideoIndexApplicationService;
+import com.videopilot.retrieval.application.VideoChunkBuilder;
+import com.videopilot.retrieval.port.EmbeddingPort;
+import com.videopilot.retrieval.port.EmbeddingException;
+import com.videopilot.retrieval.port.VectorIndexPort;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Clock;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,6 +40,12 @@ class VideoIndexPersistenceAdapterIT {
     @Autowired
     private VideoIndexPersistenceAdapter indexes;
 
+    @Autowired
+    private VideoContextStore contexts;
+
+    @Autowired
+    private ObjectMapper json;
+
     @Test
     @Transactional
     void publishesIdempotentlyAndKeepsChunkReadsOwnerScoped() {
@@ -44,8 +58,10 @@ class VideoIndexPersistenceAdapterIT {
                 ) VALUES (:jobId, 'INDEXING', :fingerprint, 1, 'STARTED')
                 """).param("jobId", JOB_ID.toString()).param("fingerprint", fingerprint).update();
 
-        assertThat(service.index(owner, JOB_ID)).isEqualTo(VideoIndexApplicationService.IndexOutcome.CREATED);
-        assertThat(service.index(owner, JOB_ID)).isEqualTo(VideoIndexApplicationService.IndexOutcome.REUSED);
+        assertThat(service.index(owner, JOB_ID))
+                .isEqualTo(VideoIndexApplicationService.IndexOutcome.SEMANTIC_DEGRADED);
+        assertThat(service.index(owner, JOB_ID))
+                .isEqualTo(VideoIndexApplicationService.IndexOutcome.SEMANTIC_DEGRADED);
 
         UUID indexId = UUID.fromString(jdbc.sql("SELECT index_id FROM video_index WHERE context_id = :contextId")
                 .param("contextId", CONTEXT_ID.toString()).query(String.class).single());
@@ -53,8 +69,86 @@ class VideoIndexPersistenceAdapterIT {
         assertThat(indexes.findChunks(new OwnerId(UUID.randomUUID()), indexId)).isEmpty();
         assertThat(jdbc.sql("SELECT COUNT(*) FROM video_index WHERE context_id = :contextId")
                 .param("contextId", CONTEXT_ID.toString()).query(Integer.class).single()).isOne();
+        assertThat(jdbc.sql("SELECT status FROM video_index WHERE context_id = :contextId")
+                .param("contextId", CONTEXT_ID.toString()).query(String.class).single())
+                .isEqualTo("SEMANTIC_DEGRADED");
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM model_call WHERE job_id = :jobId AND operation_type = 'EMBEDDING'")
+                .param("jobId", JOB_ID.toString()).query(Integer.class).single()).isOne();
         assertThat(jdbc.sql("SELECT status FROM job_stage_attempt WHERE job_id = :jobId AND stage = 'INDEXING'")
                 .param("jobId", JOB_ID.toString()).query(String.class).single()).isEqualTo("COMPLETED");
+    }
+
+    @Test
+    @Transactional
+    void persistsEmbeddingFactsAndDoesNotRepeatACompletedProviderCall() {
+        seedContext();
+        OwnerContext owner = new OwnerContext(new OwnerId(OWNER_ID));
+        EmbeddingPort embedding = request -> new EmbeddingPort.Result(
+                request.texts().stream().map(ignored -> List.of(0.1f, 0.2f, 0.3f)).toList(), 12);
+        VideoIndexApplicationService semantic = semanticService(embedding);
+        String fingerprint = semantic.inputFingerprint(owner, JOB_ID);
+        jdbc.sql("""
+                INSERT INTO job_stage_attempt (
+                    job_id, stage, input_fingerprint, checkpoint_schema_version, status
+                ) VALUES (:jobId, 'INDEXING', :fingerprint, 1, 'STARTED')
+                """).param("jobId", JOB_ID.toString()).param("fingerprint", fingerprint).update();
+
+        assertThat(semantic.index(owner, JOB_ID)).isEqualTo(VideoIndexApplicationService.IndexOutcome.CREATED);
+        assertThat(semantic.index(owner, JOB_ID)).isEqualTo(VideoIndexApplicationService.IndexOutcome.REUSED);
+
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM model_call WHERE job_id = :jobId AND operation_type = 'EMBEDDING'")
+                .param("jobId", JOB_ID.toString()).query(Integer.class).single()).isOne();
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM video_chunk_embedding")
+                .query(Integer.class).single()).isEqualTo(2);
+        assertThat(jdbc.sql("SELECT status FROM video_index WHERE context_id = :contextId")
+                .param("contextId", CONTEXT_ID.toString()).query(String.class).single()).isEqualTo("READY");
+        assertThat(jdbc.sql("SELECT price_status FROM model_call WHERE job_id = :jobId")
+                .param("jobId", JOB_ID.toString()).query(String.class).single()).isEqualTo("UNAVAILABLE");
+    }
+
+    @Test
+    @Transactional
+    void preservesUnknownOutcomeWithoutRepeatingTheProviderCall() {
+        seedContext();
+        OwnerContext owner = new OwnerContext(new OwnerId(OWNER_ID));
+        EmbeddingPort uncertain = request -> {
+            throw new EmbeddingException(EmbeddingException.Reason.UNKNOWN_OUTCOME, "TIMEOUT");
+        };
+        VideoIndexApplicationService semantic = semanticService(uncertain);
+        String fingerprint = semantic.inputFingerprint(owner, JOB_ID);
+        jdbc.sql("""
+                INSERT INTO job_stage_attempt (
+                    job_id, stage, input_fingerprint, checkpoint_schema_version, status
+                ) VALUES (:jobId, 'INDEXING', :fingerprint, 1, 'STARTED')
+                """).param("jobId", JOB_ID.toString()).param("fingerprint", fingerprint).update();
+
+        assertThat(semantic.index(owner, JOB_ID))
+                .isEqualTo(VideoIndexApplicationService.IndexOutcome.REVIEW_REQUIRED);
+        assertThat(semantic.index(owner, JOB_ID))
+                .isEqualTo(VideoIndexApplicationService.IndexOutcome.REVIEW_REQUIRED);
+
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM model_call WHERE job_id = :jobId AND operation_type = 'EMBEDDING'")
+                .param("jobId", JOB_ID.toString()).query(Integer.class).single()).isOne();
+        assertThat(jdbc.sql("SELECT status FROM model_call WHERE job_id = :jobId AND operation_type = 'EMBEDDING'")
+                .param("jobId", JOB_ID.toString()).query(String.class).single()).isEqualTo("UNKNOWN_OUTCOME");
+        assertThat(jdbc.sql("SELECT status FROM job_stage_attempt WHERE job_id = :jobId AND stage = 'INDEXING'")
+                .param("jobId", JOB_ID.toString()).query(String.class).single()).isEqualTo("STARTED");
+    }
+
+    private VideoIndexApplicationService semanticService(EmbeddingPort embedding) {
+        VectorIndexPort vectors = new VectorIndexPort() {
+            @Override
+            public void publish(Publication publication) { }
+
+            @Override
+            public List<ScoredPoint> query(Query query) {
+                return List.of();
+            }
+        };
+        return new VideoIndexApplicationService(
+                contexts, indexes, new VideoChunkBuilder(json), embedding, vectors,
+                "SiliconFlow", "BAAI/bge-m3", "embedding-it-v1", "chunks_it_v1",
+                3, 4, 6_000, 3, Clock.systemUTC()::instant, UUID::randomUUID);
     }
 
     private void seedContext() {
