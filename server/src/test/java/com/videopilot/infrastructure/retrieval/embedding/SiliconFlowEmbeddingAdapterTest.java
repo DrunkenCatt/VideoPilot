@@ -39,7 +39,7 @@ class SiliconFlowEmbeddingAdapterTest {
             assertThat(exchange.getRequestHeaders().getFirst("Authorization")).isEqualTo("Bearer secret");
             assertThat(exchange.getRequestHeaders().getFirst("X-Trace-Id")).isEqualTo(FINGERPRINT);
             assertThat(request.path("model").asText()).isEqualTo("BAAI/bge-m3");
-            assertThat(request.path("dimensions").asInt()).isEqualTo(3);
+            assertThat(request.path("dimensions").isMissingNode()).isTrue();
             assertThat(request.path("input")).hasSize(2);
             respond(exchange, 200, """
                     {"data":[

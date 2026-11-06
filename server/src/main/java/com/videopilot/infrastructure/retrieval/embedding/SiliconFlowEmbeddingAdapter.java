@@ -73,7 +73,7 @@ public final class SiliconFlowEmbeddingAdapter implements EmbeddingPort {
         validate(request);
         if (!capacity.tryAcquire()) throw failure(EmbeddingException.Reason.RETRYABLE, "CAPACITY");
         try {
-            byte[] body = json.writeValueAsBytes(new ProviderRequest(model, request.texts(), "float", dimensions));
+            byte[] body = json.writeValueAsBytes(new ProviderRequest(model, request.texts(), "float"));
             HttpRequest httpRequest = HttpRequest.newBuilder(endpoint)
                     .timeout(timeout)
                     .header("Authorization", "Bearer " + apiKey)
@@ -185,5 +185,5 @@ public final class SiliconFlowEmbeddingAdapter implements EmbeddingPort {
         return value;
     }
 
-    private record ProviderRequest(String model, List<String> input, String encoding_format, int dimensions) { }
+    private record ProviderRequest(String model, List<String> input, String encoding_format) { }
 }
