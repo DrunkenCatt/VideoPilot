@@ -64,7 +64,7 @@ public final class VideoContextAligner {
                     .toList());
             String digest = sha256(ordinal + "|" + windowStart + "|" + end + "|" + asr + "|" + ocrJson
                     + "|" + keyframeJson + "|" + segmentTranscripts.stream().map(Transcript::sourceRef).toList());
-            result.add(new VideoSegment(stableId(digest), ordinal, windowStart, end,
+            result.add(new VideoSegment(stableId(input.contextId() + "|" + digest), ordinal, windowStart, end,
                     asr.isBlank() ? Optional.empty() : Optional.of(asr), ocrJson, keyframeJson, digest));
         }
         return List.copyOf(result);
@@ -111,11 +111,13 @@ public final class VideoContextAligner {
     }
 
     public record Input(
+            UUID contextId,
             long durationMs,
             List<Transcript> transcripts,
             List<OcrObservation> ocr,
             List<Keyframe> keyframes) {
         public Input {
+            Objects.requireNonNull(contextId, "contextId");
             transcripts = List.copyOf(transcripts);
             ocr = List.copyOf(ocr);
             keyframes = List.copyOf(keyframes);

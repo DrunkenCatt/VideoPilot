@@ -138,7 +138,7 @@ public class VideoContextPipelineApplicationService implements AnalysisJobPipeli
                 return failed(JobErrorCategory.NON_RETRYABLE, "ASR_EMPTY", "Speech recognition produced no transcript");
             }
             var segments = aligner.align(new VideoContextAligner.Input(
-                    context.durationMs(), transcripts, ocr(owner, job), keyframes(owner, job)));
+                    context.contextId(), context.durationMs(), transcripts, ocr(owner, job), keyframes(owner, job)));
             String digest = sha256(segments.stream().map(segment -> segment.contentDigest()).reduce("", String::concat));
             String checkpoint = json.writeValueAsString(Map.of(
                     "contextId", context.contextId(), "segmentCount", segments.size(), "contentDigest", digest,

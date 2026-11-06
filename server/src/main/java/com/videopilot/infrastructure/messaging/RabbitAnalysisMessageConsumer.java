@@ -18,11 +18,14 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 final class RabbitAnalysisMessageConsumer {
 
     private static final String CONTRACT_ERROR = "MESSAGE_CONTRACT_INVALID";
     private static final String CONTRACT_SUMMARY = "Message rejected by contract validation";
+    private static final Logger LOGGER = LoggerFactory.getLogger(RabbitAnalysisMessageConsumer.class);
 
     private final ObjectMapper objectMapper;
     private final AnalysisJobExecutionHandler handler;
@@ -71,6 +74,8 @@ final class RabbitAnalysisMessageConsumer {
         try {
             result = handler.handle(toDispatchMessage(envelope));
         } catch (RuntimeException exception) {
+            LOGGER.error("Analysis message execution failed for job {} and message {}",
+                    envelope.jobId(), envelope.messageId(), exception);
             result = Result.RETRY;
         }
         if (result == Result.ACK) {

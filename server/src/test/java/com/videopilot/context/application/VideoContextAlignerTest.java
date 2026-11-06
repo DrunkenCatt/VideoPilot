@@ -4,15 +4,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class VideoContextAlignerTest {
 
+    private static final UUID CONTEXT_ID = UUID.fromString("10000000-0000-0000-0000-000000000001");
     private final VideoContextAligner aligner = new VideoContextAligner(new ObjectMapper(), 60_000);
 
     @Test
     void coversTheTrustedDurationAndClampsObservationsIntoOrderedWindows() {
         var result = aligner.align(new VideoContextAligner.Input(
+                CONTEXT_ID,
                 125_000,
                 List.of(
                         new VideoContextAligner.Transcript(-500, 61_000, " opening ", "asr/0.json"),
@@ -42,11 +45,25 @@ class VideoContextAlignerTest {
     @Test
     void producesStableSegmentsForTheSameInputs() {
         var input = new VideoContextAligner.Input(
+                CONTEXT_ID,
                 1_000,
                 List.of(new VideoContextAligner.Transcript(0, 1_000, "lesson", "asr.json")),
                 List.of(),
                 List.of());
 
         assertThat(aligner.align(input)).isEqualTo(aligner.align(input));
+    }
+
+    @Test
+    void scopesStableSegmentIdsToTheirContext() {
+        var transcripts = List.of(new VideoContextAligner.Transcript(0, 1_000, "lesson", "asr.json"));
+        var first = aligner.align(new VideoContextAligner.Input(
+                CONTEXT_ID, 1_000, transcripts, List.of(), List.of()));
+        var second = aligner.align(new VideoContextAligner.Input(
+                UUID.fromString("10000000-0000-0000-0000-000000000002"),
+                1_000, transcripts, List.of(), List.of()));
+
+        assertThat(first.getFirst().contentDigest()).isEqualTo(second.getFirst().contentDigest());
+        assertThat(first.getFirst().segmentId()).isNotEqualTo(second.getFirst().segmentId());
     }
 }
