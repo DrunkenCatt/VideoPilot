@@ -16,6 +16,8 @@ public interface VideoIndexStore {
 
     Map<UUID, List<Float>> findEmbeddings(OwnerId ownerId, UUID indexId, String embeddingVersion);
 
+    Optional<RetrievalSnapshot> findRetrievalSnapshot(OwnerId ownerId, UUID jobId, int candidateLimit);
+
     Optional<ModelCallState> findEmbeddingCall(UUID jobId, String inputFingerprint);
 
     void startEmbeddingCall(EmbeddingCallStart call);
@@ -25,6 +27,13 @@ public interface VideoIndexStore {
     void completeEmbedding(OwnerId ownerId, EmbeddingCompletion completion);
 
     void failEmbedding(EmbeddingFailure failure);
+
+    int nextRetrievalEmbeddingAttempt(
+            UUID jobId, String operationType, String embeddingVersion, String inputFingerprint);
+
+    void startRetrievalEmbeddingCall(RetrievalEmbeddingCallStart call);
+
+    void completeRetrievalEmbeddingCall(RetrievalEmbeddingCompletion completion);
 
     void completeIndex(OwnerId ownerId, IndexCompletion completion);
 
@@ -108,6 +117,24 @@ public interface VideoIndexStore {
             long latencyMs,
             Instant completedAt) { }
 
+    record RetrievalEmbeddingCallStart(
+            UUID modelCallId,
+            UUID jobId,
+            String requestId,
+            String operationType,
+            String provider,
+            String model,
+            String embeddingVersion,
+            String inputFingerprint,
+            int attempt,
+            Instant startedAt) { }
+
+    record RetrievalEmbeddingCompletion(
+            UUID modelCallId,
+            long inputTokens,
+            long latencyMs,
+            Instant completedAt) { }
+
     record IndexCompletion(
             UUID indexId,
             UUID jobId,
@@ -120,4 +147,29 @@ public interface VideoIndexStore {
             String degradedReason,
             int chunkCount,
             Instant completedAt) { }
+
+    record RetrievalSnapshot(
+            UUID indexId,
+            UUID jobId,
+            UUID contextId,
+            UUID mediaId,
+            String status,
+            String ocrState,
+            String embeddingVersion,
+            String vectorCollection,
+            String chunkVersion,
+            List<VideoChunk> chunks,
+            Map<UUID, List<Float>> embeddings) {
+        public RetrievalSnapshot {
+            chunks = List.copyOf(chunks);
+            embeddings = Map.copyOf(embeddings);
+            if (candidateLimitExceeded(chunks)) {
+                throw new IllegalArgumentException("retrieval snapshot exceeds its bounded candidate set");
+            }
+        }
+
+        private static boolean candidateLimitExceeded(List<VideoChunk> chunks) {
+            return chunks.size() > 200;
+        }
+    }
 }

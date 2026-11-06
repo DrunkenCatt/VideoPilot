@@ -7,6 +7,7 @@ import com.videopilot.infrastructure.error.ErrorCode;
 import com.videopilot.infrastructure.error.VideoPilotException;
 import com.videopilot.infrastructure.trace.TraceContext;
 import com.videopilot.media.application.MediaUploadException;
+import com.videopilot.retrieval.application.RetrievalException;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -70,6 +71,17 @@ public final class GlobalExceptionHandler {
             case DEPENDENCY_UNAVAILABLE -> ErrorCode.DEPENDENCY_UNAVAILABLE;
         };
         LOGGER.warn("Video context request failed code={}", errorCode);
+        return response(errorCode, statusFor(errorCode));
+    }
+
+    @ExceptionHandler(RetrievalException.class)
+    ResponseEntity<ApiErrorResponse> handleRetrievalFailure(RetrievalException exception) {
+        ErrorCode errorCode = switch (exception.reason()) {
+            case INVALID_REQUEST -> ErrorCode.INVALID_REQUEST;
+            case NOT_FOUND -> ErrorCode.RESOURCE_NOT_FOUND;
+            case NOT_READY -> ErrorCode.CONFLICT;
+        };
+        LOGGER.warn("Retrieval request failed code={}", errorCode);
         return response(errorCode, statusFor(errorCode));
     }
 

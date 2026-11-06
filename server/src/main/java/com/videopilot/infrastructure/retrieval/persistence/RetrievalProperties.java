@@ -8,6 +8,8 @@ public class RetrievalProperties {
 
     private final Embedding embedding = new Embedding();
     private final Qdrant qdrant = new Qdrant();
+    private int candidateLimit = 50;
+    private int maxQueryCharacters = 1_000;
 
     public Embedding getEmbedding() {
         return embedding;
@@ -16,6 +18,11 @@ public class RetrievalProperties {
     public Qdrant getQdrant() {
         return qdrant;
     }
+
+    public int getCandidateLimit() { return candidateLimit; }
+    public void setCandidateLimit(int candidateLimit) { this.candidateLimit = candidateLimit; }
+    public int getMaxQueryCharacters() { return maxQueryCharacters; }
+    public void setMaxQueryCharacters(int maxQueryCharacters) { this.maxQueryCharacters = maxQueryCharacters; }
 
     public static class Embedding {
         private String baseUrl = "https://api.siliconflow.cn/v1";

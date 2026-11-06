@@ -51,7 +51,8 @@ class M3ContractTest {
                 120_000,
                 "Peak finding compares neighboring values.",
                 List.of(EvidenceChannel.ASR),
-                new M3ApiContracts.ScoreBreakdown(0.9, 1.0, 0.6, 0.15, 0.0, 0.0, 0.75));
+                new M3ApiContracts.ScoreBreakdown(0.9, 1.0, 0.6, 0.6, 0.6, 0.15,
+                        0.0, 0.0, 0.0, 0.75));
         RetrievalResponse response = new RetrievalResponse(
                 "How does one-dimensional peak finding work?",
                 "hybrid-v1",

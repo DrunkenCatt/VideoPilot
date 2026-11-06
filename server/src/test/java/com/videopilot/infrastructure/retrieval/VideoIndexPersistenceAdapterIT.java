@@ -1,6 +1,7 @@
 package com.videopilot.infrastructure.retrieval;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.videopilot.identity.application.OwnerContext;
 import com.videopilot.identity.domain.OwnerId;
@@ -8,9 +9,12 @@ import com.videopilot.infrastructure.retrieval.persistence.VideoIndexPersistence
 import com.videopilot.context.port.VideoContextStore;
 import com.videopilot.retrieval.application.VideoIndexApplicationService;
 import com.videopilot.retrieval.application.VideoChunkBuilder;
+import com.videopilot.retrieval.application.RetrievalApplicationService;
+import com.videopilot.retrieval.application.RetrievalException;
 import com.videopilot.retrieval.port.EmbeddingPort;
 import com.videopilot.retrieval.port.EmbeddingException;
 import com.videopilot.retrieval.port.VectorIndexPort;
+import com.videopilot.retrieval.port.VectorIndexException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Clock;
 import java.util.List;
@@ -29,6 +33,7 @@ class VideoIndexPersistenceAdapterIT {
     private static final UUID OWNER_ID = UUID.fromString("81000000-0000-0000-0000-000000000001");
     private static final UUID MEDIA_ID = UUID.fromString("82000000-0000-0000-0000-000000000001");
     private static final UUID JOB_ID = UUID.fromString("83000000-0000-0000-0000-000000000001");
+    private static final UUID REUSED_JOB_ID = UUID.fromString("83000000-0000-0000-0000-000000000002");
     private static final UUID CONTEXT_ID = UUID.fromString("84000000-0000-0000-0000-000000000001");
 
     @Autowired
@@ -133,6 +138,62 @@ class VideoIndexPersistenceAdapterIT {
                 .param("jobId", JOB_ID.toString()).query(String.class).single()).isEqualTo("UNKNOWN_OUTCOME");
         assertThat(jdbc.sql("SELECT status FROM job_stage_attempt WHERE job_id = :jobId AND stage = 'INDEXING'")
                 .param("jobId", JOB_ID.toString()).query(String.class).single()).isEqualTo("STARTED");
+    }
+
+    @Test
+    @Transactional
+    void retrievesOwnerScopedChunksWithAuditedInMemorySemanticFallback() {
+        seedContext();
+        OwnerContext owner = new OwnerContext(new OwnerId(OWNER_ID));
+        EmbeddingPort embedding = request -> new EmbeddingPort.Result(
+                request.texts().stream().map(ignored -> List.of(0.1f, 0.2f, 0.3f)).toList(), 7);
+        VideoIndexApplicationService semantic = semanticService(embedding);
+        String fingerprint = semantic.inputFingerprint(owner, JOB_ID);
+        jdbc.sql("""
+                INSERT INTO job_stage_attempt (
+                    job_id, stage, input_fingerprint, checkpoint_schema_version, status
+                ) VALUES (:jobId, 'INDEXING', :fingerprint, 1, 'STARTED')
+                """).param("jobId", JOB_ID.toString()).param("fingerprint", fingerprint).update();
+        assertThat(semantic.index(owner, JOB_ID)).isEqualTo(VideoIndexApplicationService.IndexOutcome.CREATED);
+
+        jdbc.sql("""
+                INSERT INTO analysis_job (
+                    job_id, owner_id, media_id, analysis_key, idempotency_key, request_fingerprint,
+                    goal, mode, pipeline_version, status, current_stage, version, event_sequence
+                ) VALUES (
+                    :jobId, :ownerId, :mediaId, 'm3-reused-index-it', 'm3-reused-index-it', REPEAT('d', 64),
+                    'Reuse lesson index', 'STANDARD', 'm3-evidence-qa-v1', 'READY', 'READY', 7, 7
+                )
+                """).param("jobId", REUSED_JOB_ID.toString()).param("ownerId", OWNER_ID.toString())
+                .param("mediaId", MEDIA_ID.toString()).update();
+        assertThat(indexes.findRetrievalSnapshot(new OwnerId(OWNER_ID), REUSED_JOB_ID, 50)).isPresent();
+
+        VectorIndexPort unavailable = new VectorIndexPort() {
+            @Override
+            public void publish(Publication publication) { }
+
+            @Override
+            public List<ScoredPoint> query(Query query) {
+                throw new VectorIndexException("CONNECTION");
+            }
+        };
+        RetrievalApplicationService retrieval = new RetrievalApplicationService(
+                indexes, embedding, unavailable, "SiliconFlow", "BAAI/bge-m3", "embedding-it-v1",
+                "chunks_it_v1", 3, 50, 1_000, Clock.systemUTC()::instant, UUID::randomUUID);
+
+        var result = retrieval.retrieve(owner, JOB_ID, "Redis String", 3);
+
+        assertThat(result.hits()).hasSize(2);
+        assertThat(result.degradedChannels()).containsExactly(
+                com.videopilot.retrieval.domain.EvidenceHit.DegradedChannel.VECTOR_STORE);
+        assertThat(jdbc.sql("""
+                SELECT status FROM model_call
+                WHERE job_id = :jobId AND operation_type = 'RETRIEVAL_EMBEDDING'
+                """).param("jobId", JOB_ID.toString()).query(String.class).single()).isEqualTo("SUCCEEDED");
+        assertThatThrownBy(() -> retrieval.retrieve(
+                new OwnerContext(new OwnerId(UUID.randomUUID())), JOB_ID, "Redis", 3))
+                .isInstanceOf(RetrievalException.class)
+                .extracting("reason").isEqualTo(RetrievalException.Reason.NOT_FOUND);
     }
 
     private VideoIndexApplicationService semanticService(EmbeddingPort embedding) {

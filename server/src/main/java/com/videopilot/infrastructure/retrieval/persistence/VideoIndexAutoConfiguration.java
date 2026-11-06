@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.videopilot.context.port.VideoContextStore;
 import com.videopilot.retrieval.application.VideoChunkBuilder;
 import com.videopilot.retrieval.application.VideoIndexApplicationService;
+import com.videopilot.retrieval.application.RetrievalApplicationService;
 import com.videopilot.infrastructure.retrieval.embedding.SiliconFlowEmbeddingAdapter;
 import com.videopilot.infrastructure.retrieval.vector.QdrantVectorIndexAdapter;
 import com.videopilot.retrieval.port.EmbeddingException;
@@ -70,5 +71,18 @@ public class VideoIndexAutoConfiguration {
                 properties.getQdrant().getCollection(), embedding.getDimensions(),
                 embedding.getMaxBatchSize(), embedding.getMaxTextCharacters(), embedding.getMaxAttempts(),
                 Clock.systemUTC()::instant, UUID::randomUUID);
+    }
+
+    @Bean
+    RetrievalApplicationService retrievalApplicationService(
+            VideoIndexPersistenceAdapter indexes,
+            EmbeddingPort embeddings,
+            VectorIndexPort vectors,
+            RetrievalProperties properties) {
+        RetrievalProperties.Embedding embedding = properties.getEmbedding();
+        return new RetrievalApplicationService(
+                indexes, embeddings, vectors, embedding.getProvider(), embedding.getModel(), embedding.getVersion(),
+                properties.getQdrant().getCollection(), embedding.getDimensions(), properties.getCandidateLimit(),
+                properties.getMaxQueryCharacters(), Clock.systemUTC()::instant, UUID::randomUUID);
     }
 }

@@ -40,6 +40,8 @@ management:
 
 videopilot:
   retrieval:
+    candidate-limit: ${RETRIEVAL_CANDIDATE_LIMIT:50}
+    max-query-characters: ${RETRIEVAL_MAX_QUERY_CHARACTERS:1000}
     embedding:
       base-url: ${SILICONFLOW_EMBEDDING_BASE_URL:https://api.siliconflow.cn/v1}
       api-key: ${SILICONFLOW_API_KEY:}

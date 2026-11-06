@@ -70,10 +70,13 @@ public final class M3ApiContracts {
     public record ScoreBreakdown(
             double semanticRaw,
             double semanticNormalized,
+            double semanticWeighted,
             double keywordRaw,
             double keywordNormalized,
+            double keywordWeighted,
             double visualRaw,
             double visualNormalized,
+            double visualWeighted,
             double total) {
     }
 

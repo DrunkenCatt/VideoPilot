@@ -128,6 +128,68 @@ public class VideoIndexPersistenceAdapter implements VideoIndexStore {
     }
 
     @Override
+    public Optional<RetrievalSnapshot> findRetrievalSnapshot(OwnerId ownerId, UUID jobId, int candidateLimit) {
+        if (candidateLimit < 1 || candidateLimit > 200) {
+            throw new IllegalArgumentException("candidate limit must be between 1 and 200");
+        }
+        String owner = ownerId.value().toString();
+        Optional<IndexRow> index = jdbc.sql("""
+                SELECT index_version.index_id, index_version.context_id, index_version.media_id,
+                       index_version.status, context.ocr_state, index_version.embedding_version,
+                       index_version.vector_collection, index_version.chunk_version
+                FROM analysis_job requested
+                INNER JOIN video_context context
+                    ON context.media_id = requested.media_id
+                   AND context.pipeline_version = requested.pipeline_version
+                   AND (context.source_job_id = requested.job_id OR context.status = 'READY')
+                INNER JOIN video_index index_version
+                    ON index_version.context_id = context.context_id
+                   AND index_version.owner_id = requested.owner_id
+                WHERE requested.job_id = :jobId AND requested.owner_id = :owner
+                  AND index_version.status <> 'SUPERSEDED'
+                ORDER BY (index_version.source_job_id = requested.job_id) DESC,
+                         (context.source_job_id = requested.job_id) DESC,
+                         index_version.published_at DESC,
+                         index_version.created_at DESC
+                LIMIT 1
+                """)
+                .param("jobId", jobId.toString()).param("owner", owner)
+                .query((row, ignored) -> new IndexRow(
+                        UUID.fromString(row.getString("index_id")),
+                        UUID.fromString(row.getString("context_id")),
+                        UUID.fromString(row.getString("media_id")),
+                        row.getString("status"), row.getString("ocr_state"),
+                        row.getString("embedding_version"), row.getString("vector_collection"),
+                        row.getString("chunk_version")))
+                .optional();
+        if (index.isEmpty()) return Optional.empty();
+        IndexRow row = index.get();
+        List<VideoChunk> chunks = jdbc.sql("""
+                SELECT chunk.* FROM video_chunk chunk
+                INNER JOIN video_index index_version ON index_version.index_id = chunk.index_id
+                WHERE index_version.owner_id = :owner AND chunk.index_id = :indexId
+                ORDER BY chunk.ordinal LIMIT :candidateLimit
+                """)
+                .param("owner", owner).param("indexId", row.indexId().toString())
+                .param("candidateLimit", candidateLimit)
+                .query((result, ignored) -> new VideoChunk(
+                        UUID.fromString(result.getString("chunk_id")),
+                        UUID.fromString(result.getString("context_id")),
+                        UUID.fromString(result.getString("media_id")),
+                        result.getInt("ordinal"), result.getLong("start_ms"), result.getLong("end_ms"),
+                        readIds(result.getString("segment_ids")), result.getString("summary"),
+                        readStrings(result.getString("keywords")), result.getString("asr_text"),
+                        result.getString("ocr_text"), result.getString("input_fingerprint"),
+                        result.getString("chunk_version")))
+                .list();
+        Map<UUID, List<Float>> storedEmbeddings = row.embeddingVersion() == null
+                ? Map.of() : findEmbeddings(ownerId, row.indexId(), row.embeddingVersion());
+        return Optional.of(new RetrievalSnapshot(
+                row.indexId(), jobId, row.contextId(), row.mediaId(), row.status(), row.ocrState(),
+                row.embeddingVersion(), row.vectorCollection(), row.chunkVersion(), chunks, storedEmbeddings));
+    }
+
+    @Override
     public Optional<ModelCallState> findEmbeddingCall(UUID jobId, String inputFingerprint) {
         return jdbc.sql("""
                 SELECT model_call_id, status, error_category, attempt FROM model_call
@@ -232,6 +294,58 @@ public class VideoIndexPersistenceAdapter implements VideoIndexStore {
                 .param("completedAt", failure.completedAt()).param("callId", failure.modelCallId().toString())
                 .update();
         if (updated != 1) throw new IllegalStateException("embedding failure lost its model call");
+    }
+
+    @Override
+    public int nextRetrievalEmbeddingAttempt(
+            UUID jobId, String operationType, String embeddingVersion, String inputFingerprint) {
+        Integer latest = jdbc.sql("""
+                SELECT MAX(attempt) FROM model_call
+                WHERE job_id = :jobId AND operation_type = :operationType
+                  AND embedding_version = :embeddingVersion AND input_fingerprint = :fingerprint
+                """)
+                .param("jobId", jobId.toString()).param("operationType", operationType)
+                .param("embeddingVersion", embeddingVersion).param("fingerprint", inputFingerprint)
+                .query(Integer.class).optional().orElse(0);
+        return latest == null ? 1 : latest + 1;
+    }
+
+    @Override
+    @Transactional
+    public void startRetrievalEmbeddingCall(RetrievalEmbeddingCallStart call) {
+        int inserted = jdbc.sql("""
+                INSERT INTO model_call (
+                    model_call_id, job_id, request_id, operation_type, provider, model_name,
+                    model_version, embedding_version, input_fingerprint, status, attempt,
+                    price_status, started_at
+                ) VALUES (
+                    :callId, :jobId, :requestId, :operationType, :provider, :model,
+                    :model, :embeddingVersion, :fingerprint, 'STARTED', :attempt,
+                    'UNAVAILABLE', :startedAt
+                )
+                """)
+                .param("callId", call.modelCallId().toString()).param("jobId", call.jobId().toString())
+                .param("requestId", call.requestId()).param("operationType", call.operationType())
+                .param("provider", call.provider()).param("model", call.model())
+                .param("embeddingVersion", call.embeddingVersion())
+                .param("fingerprint", call.inputFingerprint()).param("attempt", call.attempt())
+                .param("startedAt", call.startedAt()).update();
+        if (inserted != 1) throw new IllegalStateException("retrieval embedding call was not started");
+    }
+
+    @Override
+    @Transactional
+    public void completeRetrievalEmbeddingCall(RetrievalEmbeddingCompletion completion) {
+        int updated = jdbc.sql("""
+                UPDATE model_call
+                SET status = 'SUCCEEDED', input_units = :inputTokens, latency_ms = :latency,
+                    completed_at = :completedAt, updated_at = :completedAt
+                WHERE model_call_id = :callId AND status = 'STARTED'
+                """)
+                .param("inputTokens", completion.inputTokens()).param("latency", completion.latencyMs())
+                .param("completedAt", completion.completedAt())
+                .param("callId", completion.modelCallId().toString()).update();
+        if (updated != 1) throw new IllegalStateException("retrieval embedding completion lost its model call");
     }
 
     @Override
@@ -341,4 +455,14 @@ public class VideoIndexPersistenceAdapter implements VideoIndexStore {
     private PublishResult fail(String message) {
         throw new IllegalStateException(message);
     }
+
+    private record IndexRow(
+            UUID indexId,
+            UUID contextId,
+            UUID mediaId,
+            String status,
+            String ocrState,
+            String embeddingVersion,
+            String vectorCollection,
+            String chunkVersion) { }
 }
