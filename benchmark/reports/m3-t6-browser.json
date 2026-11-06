@@ -1,0 +1,46 @@
+{
+  "candidateCommit": "59752db",
+  "jobId": "9c7cce98-e6b3-4ac7-afca-df5067e8a8f8",
+  "normalAnswer": {
+    "restoredAfterRefresh": true,
+    "claimCount": 1,
+    "citationCount": 2
+  },
+  "refusal": {
+    "restoredAfterRefresh": true,
+    "messageDistinctFromDependencyFailure": true
+  },
+  "qdrantOutage": {
+    "serviceStoppedDuringRequest": true,
+    "uiStatus": "DEGRADED_COMPLETED",
+    "degradedChannels": ["VECTOR_STORE"],
+    "answerStatus": "REFUSED",
+    "refusalReason": "NO_SUFFICIENT_EVIDENCE",
+    "modelCallStatus": "SUCCEEDED",
+    "qdrantRestoredHealthy": true
+  },
+  "citationSeek": {
+    "keyboardEnter": true,
+    "playerFocused": true,
+    "activeSegment": "00:00-01:00"
+  },
+  "responsive": [
+    {"viewportWidth": 320, "clientWidth": 305, "scrollWidth": 305},
+    {"viewportWidth": 375, "clientWidth": 360, "scrollWidth": 360},
+    {"viewportWidth": 768, "clientWidth": 753, "scrollWidth": 753}
+  ],
+  "accessibility": {
+    "answerRegionNamed": true,
+    "citationUsesNativeButton": true,
+    "dynamicStatusesExposed": true
+  },
+  "network": {
+    "questionPersistedAsSequenceQ03": true,
+    "modelInputTokens": 941,
+    "modelOutputTokens": 63,
+    "modelLatencyMs": 1236,
+    "unexpectedFailureObserved": false
+  },
+  "consoleWarningOrErrorCount": 0,
+  "createdAt": "2026-11-06T23:03:00+08:00"
+}

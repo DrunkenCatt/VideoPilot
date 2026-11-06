@@ -463,3 +463,20 @@ T6 首个独立切片复核现有真实中文教学视频 Job，而不是用 fix
 回答共 6 题，期望状态命中 2 题；唯一发布的 2 条 Claim 各有 Citation，2/2 引用可定位，引用定位率 100%。这如实暴露了当前固定 Prompt/30 秒 provider timeout 下的回答覆盖不足，不把安全拒答当作回答质量达标。M3 退出门要求引用可靠、不可回答题拒答和真实链路成立，并未冻结 answerable 命中率；该结果作为后续 M5 challenge set 与 Prompt 候选的基线，不在 M3 临时放宽证据门。
 
 本次首次运行因 Job 仍是 benchmark 的 `INDEXING` fixture 状态而在 Answer claim 返回 `NOT_READY`，补齐 READY 测试事实后继续；第二次运行真实出现 DeepSeek timeout，Runner 起初中止，改为把依赖失败记录为逐题 outcome；引用窗最初未计入冻结的相邻 Segment 对齐规则，按验收合同加入一段邻域后 2/2 已发布引用通过。最终 `RetrievalBenchmarkLocalIT` 通过（1 test，约 1 分 50 秒），JaCoCo 门通过。真实浏览器随后复查主 Job 的正常回答、拒答和 Console，均未受 benchmark 运行影响。
+
+## 22. T6.4 真实浏览器与 Qdrant 降级
+
+候选 commit `59752db` 在真实浏览器和 Compose 服务上执行，机器可读摘要为 `benchmark/reports/m3-t6-browser.json`。先停止 Qdrant，再从页面提交“Redis String 类型有什么特点？”。页面显示“降级完成 / 向量库不可用”，请求仍完成并持久化 Q03；结果为明确拒答而不是依赖错误，数据库记录 `degraded_channels=["VECTOR_STORE"]`。对应 DeepSeek 调用成功，941 input / 63 output tokens、1,236 ms、价格不可得。随后恢复 Qdrant，Qdrant 与 server 均回到 `healthy`。
+
+| 浏览器场景 | 实际结果 |
+| --- | --- |
+| 正常回答 | 刷新后恢复 1 条 Claim 与 2 条 ASR/OCR 引用 |
+| 明确拒答 | 刷新后恢复；文案与依赖失败区分 |
+| Qdrant 故障 | 内存向量回退完成，页面明确显示 `VECTOR_STORE` 降级；结果安全拒答 |
+| 引用 seek / 键盘 | ASR 引用由原生 button 接受 Enter；播放器获得焦点并定位 `00:00-01:00` |
+| 窄屏 | 320/375/768px 的 `scrollWidth == clientWidth`，无横向溢出 |
+| 可访问树 | 问答区域有名称；引用是命名 button；降级与拒答均暴露为 status |
+| 网络/持久化 | 页面提交产生 Q03，Answer 与模型调用审计均落库；未观察到意外失败 |
+| Console | 最终 warning/error 为 0 |
+
+桌面截图确认现有三栏工作区中的视频、时间线和证据问答同时可见；320px 截图确认媒体卡片按单列铺满可用宽度。此次没有改前端代码，只验收候选构建的真实运行行为。
