@@ -31,6 +31,13 @@ videopilot:
       secret-key: ${MINIO_SECRET_KEY:videopilot_local}
   messaging:
     enabled: ${MESSAGING_ENABLED:true}
+    exchange: ${RABBITMQ_ANALYSIS_EXCHANGE:videopilot.integration.analysis.exchange}
+    queue: ${RABBITMQ_ANALYSIS_QUEUE:videopilot.integration.analysis.queue}
+    routing-key: ${RABBITMQ_ANALYSIS_ROUTING_KEY:analysis.integration.execute}
+    retry-exchange: ${RABBITMQ_ANALYSIS_RETRY_EXCHANGE:videopilot.integration.analysis.retry.exchange}
+    retry-queue: ${RABBITMQ_ANALYSIS_RETRY_QUEUE:videopilot.integration.analysis.retry.queue}
+    dead-letter-exchange: ${RABBITMQ_ANALYSIS_DLX:videopilot.integration.analysis.dlx}
+    dead-letter-queue: ${RABBITMQ_ANALYSIS_DLQ:videopilot.integration.analysis.dead-letter.queue}
     relay:
       initial-delay: ${OUTBOX_RELAY_INITIAL_DELAY:1h}
   health:

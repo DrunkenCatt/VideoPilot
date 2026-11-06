@@ -486,3 +486,26 @@ T6 首个独立切片复核现有真实中文教学视频 Job，而不是用 fix
 新增 `docs/M3_RUNBOOK.md`，覆盖真实启动、M3 最小验收、固定版本、Embedding/LLM 资源上限、MySQL/Qdrant 真源边界、collection 重建限制、降级语义、诊断和基线命令。README 与供应商目录只声明本轮已经验证的能力，并明确 M3 没有公开 Repair/Replay UI、动态 Agent、多供应商或公网部署。
 
 Compose 现在显式传递 Embedding timeout/总字符/响应/并发/尝试、检索候选/query、Qdrant timeout/响应、LLM base URL 和 Answer 上限；`.env.example` 提供对应无秘密默认值。`docker compose config --quiet` 通过，展开配置包含新增键；文档与配置改动未出现 suppression 或 test skip 标记。真实浏览器重新加载 M3 工作区后，历史 Qdrant 降级事实仍可读，恢复后的主链路未显示依赖失败，Console warning/error 为 0。
+
+## 24. T6.6 最终质量门与 M3 技术退出
+
+最终环境为 Windows 11 + JDK 21.0.12.1 + Node.js 22 + Docker Desktop。完整集成门在 `videopilot-server` 镜像内运行，以获得 FFmpeg、Tesseract `chi_sim+eng` 和 Linux 容器网络；数据库使用一次性 `videopilot_t6_verify`，从空库执行 V1-V14。SiliconFlow Key 只从被 Git 忽略的本地 `.env` 注入进程，命令输出和报告均未记录凭据。
+
+| 命令/检查 | 实际结果 | 耗时 |
+| --- | --- | ---: |
+| `server\mvnw.cmd test` | 通过；318 tests，0 failures，0 errors，1 skipped；6 个 ArchUnit 测试与 JaCoCo 80% 门通过 | 71.2 s |
+| 容器内 `mvn verify -Pintegration -Dbenchmark.commit=7388dcf` | 最终通过；快速层 318 tests，集成层 59 tests，0 failures/errors；真实 MySQL/Redis/RabbitMQ/MinIO/Qdrant、FFmpeg/Tesseract 和 18 道种子均执行 | 469.8 s |
+| 定向隔离回归 | `AnalysisMessageConsumerIT,OutboxRelayIT,VideoIndexPersistenceAdapterIT` 合并 13 tests 全通过 | 167.5 s |
+| `client\npm.cmd run check` | 通过；14 files、88 tests；statements 87.34%、branches 80.41%、functions 87.24%、lines 92.57%；typecheck、lint、build 通过 | 26.5 s |
+| `npm audit --audit-level=high --registry=https://registry.npmjs.org` | 通过 High/Critical 门；报告 11 个仅影响开发工具链的 moderate，未用 `--force` 修改依赖 | 9.3 s |
+| Gitleaks v8.29.1 | 通过；扫描 82 commits、约 2.29 MB，`no leaks found` | 4.8 s |
+| `scripts\security-check.ps1` | 未完成；前置 318 tests、ArchUnit、JaCoCo 均通过，OWASP Dependency-Check 在无 NVD API Key 的首次 CVE 同步中连续失败 20 次后终止；没有关闭更新或降低 `failBuildOnCVSS=7` | 外部阻塞 |
+| `docker compose config --quiet` | 通过；M3 新增配置可展开 | < 1 s |
+| 最终真实浏览器 | 正常回答、拒答、`VECTOR_STORE` 降级、刷新恢复、Enter 引用 seek、320px 无横向溢出；Console warning/error 0 | 通过 |
+| timeout 分类 mutation | 临时把 `UNKNOWN_OUTCOME` 反转为 `NON_RETRYABLE` 后 1/3 测试按预期失败；恢复后 3/3 与 JaCoCo 门通过 | 21.1 s（恢复后） |
+
+完整集成门第一次运行在 505.3 秒后暴露两项测试隔离问题：集成 profile 与 Compose 后端共用 Rabbit 队列，以及索引 IT 隐式依赖空 API Key并统计全库 Embedding。修正为独立集成队列、显式空 Key 和 Context-scoped 计数后，相关 10 tests 通过。随后发现专用 T6 consumer 队列需要显式保留原 routing key，三组相关 IT 合并 13 tests 通过。另一次完整运行因容器内误用宿主机 `localhost:19000` 作为 MinIO 预签名/健康地址，在 492.9 秒后产生 3 个连接 error 和 1 个 readiness failure；改用 `http://minio:9000` 后最终完整命令通过。所有失败均保留为环境/隔离修正证据，没有删除断言、降低超时或放宽质量阈值。
+
+全量基线最终仍为检索 `Recall@3=100%`、`Hit@1=81.82%`、`MRR@3=90.91%`；回答期望状态命中 2/6，已发布的 2 条 Citation 均可定位。回答覆盖不足是已知质量债，不阻断 M3 的证据安全退出门，也没有通过降低证据阈值掩盖。后端本轮最终切片没有新增生产 Java 分支；全局 JaCoCo 门通过，前端变更行由完整覆盖率门覆盖。`git diff --check` 通过，未发现新增 suppression、跳过测试或降低 Floor 的改动。
+
+T6 独立提交为 `ae7cf3b`、`3ddec0d`、`59752db`、`c8dda68`、`7388dcf`，最终质量门与退出记录由本节所在提交收口。M3 的五项产品技术退出条件已经满足，但统一安全入口尚未完成 OWASP 依赖扫描；补齐 NVD 数据同步并通过 `failBuildOnCVSS=7` 后，仍需项目负责人审阅本节的回答覆盖和安全结果并明确确认进入下一里程碑。

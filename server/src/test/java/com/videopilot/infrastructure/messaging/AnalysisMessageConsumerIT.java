@@ -36,6 +36,7 @@ import org.springframework.test.context.TestPropertySource;
 @TestPropertySource(properties = {
         "videopilot.messaging.exchange=videopilot.t6.analysis.exchange",
         "videopilot.messaging.queue=videopilot.t6.analysis.queue",
+        "videopilot.messaging.routing-key=analysis.execute",
         "videopilot.messaging.retry-exchange=videopilot.t6.analysis.retry.exchange",
         "videopilot.messaging.retry-queue=videopilot.t6.analysis.retry.queue",
         "videopilot.messaging.dead-letter-exchange=videopilot.t6.analysis.dlx",

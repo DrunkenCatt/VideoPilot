@@ -1,6 +1,6 @@
 # M3 任务清单：混合检索与有证据问答
 
-> 状态：待负责人确认后开始。任务按依赖顺序执行，每项先写失败测试或可执行验收场景，再写生产代码。目标是最小可演示 RAG 闭环，并控制在一个检索 application service、一个回答 application service 和必要的外部 Adapter 内。
+> 状态：T0-T6 产品验收与五项技术条件已完成；OWASP 依赖扫描受 NVD 首次同步阻塞，完成该扫描并经项目负责人确认后才能进入下一里程碑。任务按依赖顺序执行，每项先写失败测试或可执行验收场景，再写生产代码。目标是最小可演示 RAG 闭环，并控制在一个检索 application service、一个回答 application service 和必要的外部 Adapter 内。
 
 ## T0：冻结 M3 验收合同与人工种子集
 
@@ -93,12 +93,12 @@
 
 ## T6：完成真实端到端验收、文档与 M3 退出
 
-- [ ] 在 Compose 环境用 T0 真实教学视频跑通上传、Context、Chunk、Embedding、Qdrant、混合检索、问答、引用发布和时间戳跳转，记录阶段耗时、调用数、Token、成本/不可得事实及版本 Trace。
-- [ ] 执行故障/对抗矩阵：Qdrant 不可用与 collection 删除、Embedding 不可用、Embedding 完成后重投、DeepSeek 超时/坏 JSON、伪造/跨视频/越界引用、无证据题、重复提问和双 owner 越权。
-- [ ] 运行 T0 全部种子题并提交聚合基线报告和逐题脱敏摘要；报告 `Recall@3`、`Hit@1`、`MRR@3`、分组结果、引用定位率、拒答结果、数据量和限制。
-- [ ] 真实浏览器验证正常回答、拒答、Qdrant 降级、引用 seek、刷新恢复、窄屏、键盘、可访问树、网络请求与零 Console error/warning，并把证据记录到 `tasks/M3/ACCEPTANCE.md`。
-- [ ] 更新 README、Compose/环境示例、供应商目录和 `docs/M3_RUNBOOK.md`，写清 BGE-M3、DeepSeek、Qdrant schema/重建、版本、资源上限、降级和排障；只记录实际验证能力。
-- [ ] 记录实际执行命令、耗时、环境、失败/未执行项和对应 commit；复核变更行覆盖率不少于 80%、ArchUnit、秘密/依赖扫描及无 suppression/Floor 违规。
+- [x] 在 Compose 环境用 T0 真实教学视频跑通上传、Context、Chunk、Embedding、Qdrant、混合检索、问答、引用发布和时间戳跳转，记录阶段耗时、调用数、Token、成本/不可得事实及版本 Trace。
+- [x] 执行故障/对抗矩阵：Qdrant 不可用与 collection 删除、Embedding 不可用、Embedding 完成后重投、DeepSeek 超时/坏 JSON、伪造/跨视频/越界引用、无证据题、重复提问和双 owner 越权。
+- [x] 运行 T0 全部种子题并提交聚合基线报告和逐题脱敏摘要；报告 `Recall@3`、`Hit@1`、`MRR@3`、分组结果、引用定位率、拒答结果、数据量和限制。
+- [x] 真实浏览器验证正常回答、拒答、Qdrant 降级、引用 seek、刷新恢复、窄屏、键盘、可访问树、网络请求与零 Console error/warning，并把证据记录到 `tasks/M3/ACCEPTANCE.md`。
+- [x] 更新 README、Compose/环境示例、供应商目录和 `docs/M3_RUNBOOK.md`，写清 BGE-M3、DeepSeek、Qdrant schema/重建、版本、资源上限、降级和排障；只记录实际验证能力。
+- [ ] 记录实际执行命令、耗时、环境、失败/未执行项和对应 commit；覆盖率、ArchUnit、Gitleaks、npm audit 与 suppression/Floor 复核已完成，OWASP Dependency-Check 因 NVD 首次同步连续失败 20 次而未完成。
 - **验收标准**：Roadmap M3 退出门均有可复现证据；每条事实 Claim 有可点击证据；伪造引用被硬门拦截；Qdrant 不可用仍可降级完成；至少 1 条真实教学视频有人工种子标注与检索报告；负责人确认后才能进入 M4/M5。
 - **验证**：`server\mvnw.cmd test`；`server\mvnw.cmd verify -Pintegration`；`client\npm.cmd run check`；`client\npm.cmd audit --audit-level=high`；`docker compose config --quiet`；`powershell -ExecutionPolicy Bypass -File .\scripts\security-check.ps1`；`git diff --check`；Compose + 真实浏览器验收。
 - **预计改动区域**：验收/故障测试、benchmark report、README/config/runbook、`tasks/M3/ACCEPTANCE.md` 与本文件。
@@ -106,9 +106,9 @@
 
 ## M3 退出门
 
-- [ ] 一条真实教学视频生成版本化 5 分钟 `VideoChunk`、BGE-M3 Embedding 和可重建 Qdrant 索引。
-- [ ] 混合检索在正常、Qdrant 不可用和 Embedding 不可用路径均有明确结果/降级事实，并生成首份人工种子基线。
-- [ ] 每条发布的事实 `AnswerClaim` 至少绑定一个可在声明时间窗原文中确定性定位的 `CitedEvidence`。
-- [ ] 伪造、越界、跨视频和错绑引用被 Java 硬门拦截；无足够证据时系统明确拒答。
-- [ ] 浏览器可完成提问、按 Claim 阅读证据、点击时间戳定位、识别拒答/降级并在刷新后恢复。
-- [ ] 本次实际质量门结果和未执行项已记录，项目负责人确认可进入下一里程碑。
+- [x] 一条真实教学视频生成版本化 5 分钟 `VideoChunk`、BGE-M3 Embedding 和可重建 Qdrant 索引。
+- [x] 混合检索在正常、Qdrant 不可用和 Embedding 不可用路径均有明确结果/降级事实，并生成首份人工种子基线。
+- [x] 每条发布的事实 `AnswerClaim` 至少绑定一个可在声明时间窗原文中确定性定位的 `CitedEvidence`。
+- [x] 伪造、越界、跨视频和错绑引用被 Java 硬门拦截；无足够证据时系统明确拒答。
+- [x] 浏览器可完成提问、按 Claim 阅读证据、点击时间戳定位、识别拒答/降级并在刷新后恢复。
+- [ ] 本次实际质量门结果和未执行项已记录；等待项目负责人审阅本轮结果并明确确认可进入下一里程碑。

@@ -9,7 +9,7 @@ M1 的上传/Job 基线手册见 [docs/M1_RUNBOOK.md](docs/M1_RUNBOOK.md)；M2 �
 
 ## 当前阶段
 
-- 状态：M3 已完成真实视频、故障矩阵、18 道种子和浏览器验收，正在执行最终质量门；通过并由项目负责人确认后进入下一里程碑
+- 状态：M3 T0-T6 产品验收与五项技术条件已完成；OWASP 依赖扫描受 NVD 首次同步阻塞，完成该扫描并经项目负责人确认后进入下一里程碑
 - 当前可验证：M2 全部能力，以及版本化 5 分钟 `VideoChunk`、SiliconFlow BGE-M3、可重建 Qdrant 索引、semantic/keyword/OCR 混合检索、SiliconFlow DeepSeek 候选回答、Java 确定性证据门、明确拒答和引用 seek
 - 当前不包含：动态 Agent Loop、自动 Query Rewrite/Cross Encoder、多供应商路由、公开的索引修复/Replay UI、完整学习管理系统或公网部署
 - 第一目标：可靠的视频解析与有证据问答 MVP

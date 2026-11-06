@@ -24,10 +24,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest
 @ActiveProfiles("integration")
+@TestPropertySource(properties = "videopilot.retrieval.embedding.api-key=")
 class VideoIndexPersistenceAdapterIT {
 
     private static final UUID OWNER_ID = UUID.fromString("81000000-0000-0000-0000-000000000001");
@@ -103,7 +105,12 @@ class VideoIndexPersistenceAdapterIT {
 
         assertThat(jdbc.sql("SELECT COUNT(*) FROM model_call WHERE job_id = :jobId AND operation_type = 'EMBEDDING'")
                 .param("jobId", JOB_ID.toString()).query(Integer.class).single()).isOne();
-        assertThat(jdbc.sql("SELECT COUNT(*) FROM video_chunk_embedding")
+        assertThat(jdbc.sql("""
+                SELECT COUNT(*) FROM video_chunk_embedding embedding
+                JOIN video_chunk chunk ON chunk.chunk_id = embedding.chunk_id
+                JOIN video_index videoIndex ON videoIndex.index_id = chunk.index_id
+                WHERE videoIndex.context_id = :contextId
+                """).param("contextId", CONTEXT_ID.toString())
                 .query(Integer.class).single()).isEqualTo(2);
         assertThat(jdbc.sql("SELECT status FROM video_index WHERE context_id = :contextId")
                 .param("contextId", CONTEXT_ID.toString()).query(String.class).single()).isEqualTo("READY");

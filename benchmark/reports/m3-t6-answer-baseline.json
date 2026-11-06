@@ -6,8 +6,8 @@
   "citationLocalizationRate" : 1.0,
   "localizationRule" : "A citation is localized when its persisted window is valid and overlaps a reviewed requiredCitation window or its one-segment alignment neighborhood.",
   "limitations" : "Single 7-minute Chinese tutorial, dev split, one reviewer; no semantic fact-coverage score is inferred.",
-  "commit" : "3ddec0d",
-  "createdAt" : "2026-11-06T14:56:28.041250600Z",
+  "commit" : "7388dcf",
+  "createdAt" : "2026-11-06T16:00:14.603779790Z",
   "cases" : [ {
     "caseId" : "m3-p08-a01",
     "expectedAnswerability" : "answerable",
