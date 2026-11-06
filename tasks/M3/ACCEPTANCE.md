@@ -480,3 +480,9 @@ T6 首个独立切片复核现有真实中文教学视频 Job，而不是用 fix
 | Console | 最终 warning/error 为 0 |
 
 桌面截图确认现有三栏工作区中的视频、时间线和证据问答同时可见；320px 截图确认媒体卡片按单列铺满可用宽度。此次没有改前端代码，只验收候选构建的真实运行行为。
+
+## 23. T6.5 运行文档与配置
+
+新增 `docs/M3_RUNBOOK.md`，覆盖真实启动、M3 最小验收、固定版本、Embedding/LLM 资源上限、MySQL/Qdrant 真源边界、collection 重建限制、降级语义、诊断和基线命令。README 与供应商目录只声明本轮已经验证的能力，并明确 M3 没有公开 Repair/Replay UI、动态 Agent、多供应商或公网部署。
+
+Compose 现在显式传递 Embedding timeout/总字符/响应/并发/尝试、检索候选/query、Qdrant timeout/响应、LLM base URL 和 Answer 上限；`.env.example` 提供对应无秘密默认值。`docker compose config --quiet` 通过，展开配置包含新增键；文档与配置改动未出现 suppression 或 test skip 标记。真实浏览器重新加载 M3 工作区后，历史 Qdrant 降级事实仍可读，恢复后的主链路未显示依赖失败，Console warning/error 为 0。

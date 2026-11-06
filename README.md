@@ -5,13 +5,13 @@
 项目从零构建；`C:\Users\zzm\Desktop\com\DoVideoAI` 仅作为只读设计参考。先用 Java 模块化单体和固定云端模型供应商跑通教学视频解析闭环，再建设真正由工具观察驱动的 Agent Loop、用户反馈改进闭环和可复现评测体系。
 
 项目总体规划、架构边界、验收指标和逐级里程碑见 [docs/PROJECT_ROADMAP.md](docs/PROJECT_ROADMAP.md)，Redis 与参考项目的对比、当前边界及 M2-M8 演进设计见 [docs/REDIS_ARCHITECTURE.md](docs/REDIS_ARCHITECTURE.md)。
-M1 的上传/Job 基线手册见 [docs/M1_RUNBOOK.md](docs/M1_RUNBOOK.md)；M2 的真实解析、恢复、降级与播放器验收步骤见 [docs/M2_RUNBOOK.md](docs/M2_RUNBOOK.md)。
+M1 的上传/Job 基线手册见 [docs/M1_RUNBOOK.md](docs/M1_RUNBOOK.md)；M2 的真实解析、恢复、降级与播放器验收步骤见 [docs/M2_RUNBOOK.md](docs/M2_RUNBOOK.md)；M3 的 Chunk、BGE-M3/Qdrant、混合检索和有证据问答操作见 [docs/M3_RUNBOOK.md](docs/M3_RUNBOOK.md)。
 
 ## 当前阶段
 
-- 状态：M2 已于 2026-11-05 经项目负责人确认工程验收；下一阶段为 M3 混合检索与有证据问答
-- 当前可验证：本地视频上传、可靠异步 Job、FFmpeg 派生、TeleSpeechASR/Tesseract 分片 Checkpoint、ASR/OCR/关键帧统一时间轴、owner-scoped 播放器，以及重启/MQ 重投/Redis 丢失恢复
-- 当前不包含：VideoChunk、Embedding/Qdrant 索引、混合检索、证据问答、动态 Agent Loop 或公网部署
+- 状态：M3 已完成真实视频、故障矩阵、18 道种子和浏览器验收，正在执行最终质量门；通过并由项目负责人确认后进入下一里程碑
+- 当前可验证：M2 全部能力，以及版本化 5 分钟 `VideoChunk`、SiliconFlow BGE-M3、可重建 Qdrant 索引、semantic/keyword/OCR 混合检索、SiliconFlow DeepSeek 候选回答、Java 确定性证据门、明确拒答和引用 seek
+- 当前不包含：动态 Agent Loop、自动 Query Rewrite/Cross Encoder、多供应商路由、公开的索引修复/Replay UI、完整学习管理系统或公网部署
 - 第一目标：可靠的视频解析与有证据问答 MVP
 - 第二目标：可持久化、可预算、可评测的 Agent Loop
 - 第三目标：把经过复核的用户反馈转化为 Agent 候选版本，并通过评测完成晋级或回滚

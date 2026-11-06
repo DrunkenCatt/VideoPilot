@@ -20,7 +20,18 @@ MVP 固定下列四个能力实现，但业务代码只依赖项目 Port。供�
 
 每次模型或 Agent 执行必须记录 `promptVersion`、`modelVersion`、`embeddingVersion`、`retrievalFormulaVersion` 和 `agentPolicyVersion`。这些字段用于回答“这次结果由哪套配置产生”，是回放、离线比较和回滚的前提；缺任一版本时不得生成可晋级的评测记录。
 
-本文件实现 ADR-0005 与 ADR-0007 已接受的边界。M2 已接入 ASR/OCR 的调用审计与有限恢复；LLM、Embedding 和 Agent 预算仍属于后续里程碑。
+本文件实现 ADR-0005 与 ADR-0007 已接受的边界。M2 已接入 ASR/OCR 的调用审计与有限恢复；M3 已接入固定 SiliconFlow BGE-M3 和 DeepSeek、调用审计、Token/延迟以及成本不可得事实。动态 Agent 预算仍属于后续里程碑。
+
+## M3 Embedding、Qdrant 与 LLM 合同补充
+
+- Embedding endpoint 为 SiliconFlow OpenAI-compatible `POST /v1/embeddings`，固定 `BAAI/bge-m3`；请求不发送供应商不接受的可选 `dimensions` 字段，但响应必须严格为 1024 维。
+- 单批最多 4 条、单条最多 6,000 字符/8,192 估算 Token、单次总字符 100,000、响应 8 MiB、并发 1、最多 3 次有界阶段尝试。调用前写 `model_call`；UNKNOWN 不在线程内冒险重发。
+- Qdrant collection 为 `videopilot_chunks_m3_bge_m3_1024_v1`，cosine 1024 维；point ID 使用稳定 Chunk UUID，payload 仅含 index/owner/media/context 与时间窗。MySQL 的 Chunk、向量事实和索引发布记录才是真源。
+- 检索固定 `hybrid-0.60-0.25-0.15-v1`。Qdrant 不可用时从 MySQL 向量执行有界内存 cosine；query Embedding 不可用时保留 keyword/OCR，并显式返回降级通道。
+- LLM 固定 SiliconFlow `deepseek-ai/DeepSeek-V4-Flash`、JSON mode、30 秒、最多 1,200 output tokens、20,000 Prompt 字符、64 KiB 响应、并发 1。候选 JSON 必须再经过 Java 引用硬门；timeout 为 UNKNOWN，不自动重发。
+- SiliconFlow 响应未提供可核验价格时，`priceStatus=UNAVAILABLE` 且成本保持空值，不能写成 0 USD。
+
+实际启动、故障判断、collection 重建边界和基线命令见 `docs/M3_RUNBOOK.md`。
 
 ## M2 ASR 合同补充
 
