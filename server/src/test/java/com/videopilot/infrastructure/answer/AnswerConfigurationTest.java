@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.videopilot.answer.port.AnswerStore;
 import com.videopilot.answer.port.LanguageModelException;
 import com.videopilot.answer.port.LanguageModelPort;
+import com.videopilot.infrastructure.web.AnswerController;
 import com.videopilot.retrieval.application.RetrievalApplicationService;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
@@ -41,9 +42,11 @@ class AnswerConfigurationTest {
                 .isInstanceOf(SiliconFlowLanguageModelAdapter.class);
         assertThat(configuration.answerPersistenceAdapter(mock(JdbcClient.class), json))
                 .isInstanceOf(AnswerStore.class);
-        assertThat(configuration.answerApplicationService(
+        var service = configuration.answerApplicationService(
                 mock(RetrievalApplicationService.class), mock(LanguageModelPort.class),
-                mock(AnswerPersistenceAdapter.class), json, properties)).isNotNull();
+                mock(AnswerPersistenceAdapter.class), json, properties);
+        assertThat(service).isNotNull();
+        assertThat(configuration.answerController(service)).isInstanceOf(AnswerController.class);
         assertThat(properties.getBaseUrl()).isEqualTo("http://localhost:9999/v1");
         assertThat(properties.getApiKey()).isEqualTo("secret");
         assertThat(properties.getProvider()).isEqualTo("SiliconFlow");
