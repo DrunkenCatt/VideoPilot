@@ -94,8 +94,8 @@ public final class M4ApiContracts {
     public record ReliabilitySummary(
             Instant windowStart,
             Instant windowEnd,
-            long pendingOutbox,
-            long queueBacklog,
+            Long pendingOutbox,
+            Long queueBacklog,
             List<CountByCode> failureCounts,
             List<StageDuration> stageDurations,
             List<ProviderCalls> providerCalls,

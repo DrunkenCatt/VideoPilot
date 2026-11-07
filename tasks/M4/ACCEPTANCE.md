@@ -275,3 +275,49 @@ T3 在现有 Job、`model_call`、Adapter 和工作池上增加一个版本化�
 ## 21. T3 退出结论
 
 T3 的 deadline、调用数、输入/输出计量、已知成本和 unknown 语义均由 Java 硬门与 MySQL 持久化事实裁决；任一超限会在所属 Job 或 Answer 聚合停止后续高成本调用。供应商、子进程、消息消费与 Web/SSE/health 使用独立有界资源，容量失败稳定且可重试。自动化、隔离 MySQL、真实浏览器和代码审查均通过，没有降低质量门。Checkpoint B 全部通过，T3 可以独立提交并进入 T4。
+
+## 22. T4 实现与审查结论
+
+T4 复用现有工作台，增加一个 owner-scoped、24 小时固定窗口的只读聚合 API，没有增加 Admin SPA、指标存储表或通用 metrics 框架：
+
+- MySQL 直接聚合当前未发布 Outbox、窗口内失败分类、已完成阶段 P50/P95，以及供应商调用/失败/计量/成本；每类明细最多 20 项。
+- RabbitMQ 只读取 main/retry/dead-letter 三个队列的管理计数；管理边界不可用时 `queueBacklog=null` 并标记 `RABBITMQ`，不伪造为 0。
+- MySQL 与 RabbitMQ 独立降级；一个源失败时保留另一个源的事实和生成/窗口时间。未知价格使该供应商聚合成本为 `null`，页面明确显示“价格未知”。
+- Controller 只调用 application service；JDBC 和 RabbitAdmin 均位于 infrastructure adapter。响应不含 ownerId、Prompt、模型原始响应、对象 key、内部异常或凭据。
+- Job 状态、自动恢复和 Replay 结果继续使用 T1/T2 的同一 Job 投影和持久化事件；T4 不复制为第二套运维状态合同。
+
+真实 MySQL 首次定向测试先捕获测试夹具复用全局唯一对象键，修正独立夹具后又捕获 MySQL 8.4 将 `row_number` 解析为关键字；最终使用 `rank_position` 并在真实数据库验证百分位 SQL。完整门还捕获关闭数据源时 Controller 先于 Service 装配的问题，最终与既有 `videopilot.analysis.enabled` 生命周期保持一致。最终审查未发现阻断项。
+
+## 23. T4 RED/GREEN 与自动化证据
+
+### RED
+
+最初的 `ReliabilityOperationsServiceTest` 在聚合 port/service 尚不存在时测试编译失败；真实 MySQL 定向门捕获对象键夹具冲突和百分位 SQL 关键字问题；首次完整 `clean test` 捕获最小上下文装配回归，第二次完整门 357 项功能测试全绿但 JaCoCo 只有 79%，均按退出门停止修复。没有降低阈值、排除生产类、删除断言或增加 lint suppression。
+
+### GREEN
+
+| 命令 | 环境与结果 |
+| --- | --- |
+| `server\mvnw.cmd -q -Dtest=ReliabilityOperationsServiceTest,ReliabilityOperationsControllerTest,RabbitQueueDepthProbeTest,M4ContractTest test` | 聚合规则、部分降级、owner/敏感字段边界、Rabbit 队列计数和冻结合同通过 |
+| `server\mvnw.cmd -q test-compile failsafe:integration-test failsafe:verify -Dit.test=JdbcReliabilityOperationsStoreIT` | 隔离 MySQL 8.4 数据库 `videopilot_m4_t3`、Flyway V16；owner/窗口隔离、Outbox、失败分类、阶段 P50/P95、调用计量和未知成本通过 |
+| `server\mvnw.cmd clean test` | Windows/JDK 21；360 项通过、0 失败、1 项既有 FFmpeg 环境条件跳过；JaCoCo 80% 门通过，1 分 24 秒 |
+| `client\npm.cmd run check` | typecheck、零 warning lint、99 项 Vitest、覆盖率与生产构建全部通过；Statements 86.49%、Branches 80.75%、Functions 87.15%、Lines 91.60% |
+
+覆盖率补测只验证配置装配、Rabbit 管理缺失不伪造零、非法 owner 和非正窗口；没有修改 JaCoCo 配置。T4 没有改变迁移、恢复状态机或供应商执行主路径，因此未重复执行可能产生真实模型费用的完整 `verify -Pintegration`；T5 必须在最终候选执行完整 Docker 门。
+
+## 24. T4 真实浏览器验收
+
+2026-11-07 使用重新构建的 Compose server、真实 V16 浏览器数据库与 Vite `http://localhost:5173/` 验收。只执行只读摘要和刷新，没有触发 Recovery、Replay 或模型调用。
+
+| 检查 | 观察 | 结果 |
+| --- | --- | --- |
+| 真实聚合 | 当前账号显示 Outbox 0、Rabbit 三队列积压 523、3 类失败、9 次 SiliconFlow 调用/1 次失败 | 通过 |
+| 成本语义 | 供应商输入 6962、输出 334；存在未知价格时明确显示“价格未知”，未显示 0 成本 | 通过 |
+| 只读刷新 | 点击刷新后生成/窗口截止时间从 `20:16:02` 更新为 `20:16:30`，无恢复、Replay 或写操作控件 | 通过 |
+| 桌面布局 | 1280x800 视口实际 `innerWidth=1067`、document `scrollWidth=1054`，无横向溢出 | 通过 |
+| 手机布局 | 390x844 视口实际 `innerWidth=325`、document `scrollWidth=312`；面板、刷新和未知价格均可见 | 通过 |
+| Console | 桌面刷新与手机验收最终 error/warn 均为 0 | 通过 |
+
+## 25. T4 退出结论
+
+T4 的积压、失败分类、阶段耗时和供应商调用/计量/成本均来自 owner-scoped 的 MySQL/RabbitMQ 事实；单源失败保留其他指标并显式降级，敏感字段不进入响应。定向真实 MySQL、前后端完整门、配置回归、真实浏览器桌面/手机/刷新和代码审查均通过，没有降低质量门。T4 可以独立提交并进入 T5。

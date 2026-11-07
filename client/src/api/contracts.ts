@@ -278,8 +278,8 @@ export type DegradedOperationsSource = 'MYSQL' | 'RABBITMQ'
 export interface ReliabilitySummary {
   windowStart: string
   windowEnd: string
-  pendingOutbox: number
-  queueBacklog: number
+  pendingOutbox: number | null
+  queueBacklog: number | null
   failureCounts: CountByCode[]
   stageDurations: StageDuration[]
   providerCalls: ProviderCalls[]

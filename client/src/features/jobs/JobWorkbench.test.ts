@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { AnalysisJob, JobEvent, MediaAsset, PageResponse, Session } from '../../api/contracts'
+import type { AnalysisJob, JobEvent, MediaAsset, PageResponse, ReliabilitySummary, Session } from '../../api/contracts'
 import JobWorkbench from './JobWorkbench.vue'
 
 const session: Session = {
@@ -49,6 +49,12 @@ const emptyPage: PageResponse<AnalysisJob> = {
   pagination: { page: 1, pageSize: 20, totalItems: 0, totalPages: 0 },
 }
 
+const reliabilitySummary: ReliabilitySummary = {
+  windowStart: '2026-11-06T12:00:00Z', windowEnd: '2026-11-07T12:00:00Z',
+  pendingOutbox: 0, queueBacklog: 0, failureCounts: [], stageDurations: [], providerCalls: [],
+  degradedSources: [], generatedAt: '2026-11-07T12:00:01Z',
+}
+
 function jsonResponse(status: number, body?: unknown): Response {
   return new Response(body === undefined ? null : JSON.stringify(body), {
     status,
@@ -65,7 +71,7 @@ function terminalStream(event: JobEvent): Response {
 
 function mountWorkbench(mediaGet = vi.fn().mockResolvedValue(readyMedia)) {
   return mount(JobWorkbench, {
-    props: { session, mediaApi: { get: mediaGet } },
+    props: { session, mediaApi: { get: mediaGet }, operationsApi: { get: vi.fn().mockResolvedValue(reliabilitySummary) } },
     global: {
       stubs: {
         MediaUploadPanel: { template: '<div data-test="upload-stub" />' },

@@ -453,6 +453,26 @@ button:disabled { cursor: wait; opacity: 0.65; }
 .job-facts dt { margin-bottom: 0.35rem; color: var(--muted); font-size: 0.72rem; }
 .job-facts dd { margin: 0; overflow-wrap: anywhere; font-size: 0.85rem; }
 
+.operations-panel { margin-bottom: 2.5rem; padding: 1.25rem; border: 1px solid var(--ink); background: linear-gradient(135deg, #f7f1df, #fffdf7 62%); box-shadow: 0.45rem 0.45rem 0 var(--paper-deep); }
+.operations-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1.5rem; }
+.operations-heading h2 { margin: 0; font-family: 'Noto Serif SC', 'Songti SC', serif; font-size: 1.6rem; }
+.operations-heading p:last-child { margin: 0.45rem 0 0; color: var(--muted); font-size: 0.78rem; }
+.operations-heading button { min-height: 2.4rem; padding: 0.45rem 0.8rem; border: 1px solid var(--ink); color: var(--ink); background: transparent; cursor: pointer; }
+.operations-totals { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; margin-top: 1.25rem; background: var(--ink); border: 1px solid var(--ink); }
+.operations-totals article { display: grid; gap: 0.45rem; padding: 0.9rem; background: #fffdf7; }
+.operations-totals span, .operations-freshness { color: var(--muted); font-family: 'IBM Plex Mono', 'Cascadia Mono', monospace; font-size: 0.62rem; }
+.operations-totals strong { font-family: 'Noto Serif SC', 'Songti SC', serif; font-size: 1.55rem; }
+.operations-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1.25rem; }
+.operations-columns > section { min-width: 0; border-top: 1px solid var(--ink); }
+.operations-columns h3 { margin: 0; padding: 0.75rem 0; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.operations-list { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0; margin: 0; }
+.operations-list dt, .operations-list dd { margin: 0; padding: 0.55rem 0; border-top: 1px solid var(--line); font-size: 0.72rem; }
+.operations-list dd { text-align: right; }
+.provider-row { display: grid; grid-template-columns: 1fr auto; gap: 0.35rem 1rem; padding: 0.7rem 0; border-top: 1px solid var(--line); font-size: 0.75rem; }
+.provider-row small { grid-column: 1 / -1; color: var(--muted); }
+.operations-warning, .operations-empty { margin: 1rem 0 0; padding: 0.75rem; background: #f4ead2; color: #704b12; font-size: 0.75rem; }
+.operations-freshness { margin: 1.25rem 0 0; text-align: right; }
+
 .job-failure { margin: 0 0 2rem; padding: 1rem; border-left: 4px solid var(--danger); background: #f7e8df; }
 .job-failure p { margin: 0.4rem 0; }
 .job-failure small { color: var(--muted); font-family: 'IBM Plex Mono', 'Cascadia Mono', monospace; }
@@ -589,6 +609,9 @@ footer { min-height: 4.5rem; border-top: 1px solid var(--line); }
   .login-panel, .readiness { padding: 1.5rem; box-shadow: 0.45rem 0.45rem 0 var(--paper-deep); }
 
   .jobs-heading, .jobs-layout { grid-template-columns: 1fr; }
+  .operations-heading { display: grid; }
+  .operations-heading button { justify-self: start; }
+  .operations-totals, .operations-columns { grid-template-columns: 1fr; }
   .jobs-heading { gap: 1.5rem; align-items: start; }
   .jobs-heading h1 { font-size: clamp(2.7rem, 15vw, 4.5rem); }
   .jobs-layout { gap: 3rem; }

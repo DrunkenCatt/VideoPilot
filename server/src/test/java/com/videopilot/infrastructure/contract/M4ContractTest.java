@@ -60,8 +60,8 @@ class M4ContractTest {
         M4ApiContracts.ReliabilitySummary summary = new M4ApiContracts.ReliabilitySummary(
                 Instant.parse("2026-11-07T09:00:00Z"),
                 Instant.parse("2026-11-07T10:00:00Z"),
-                4,
-                1,
+                4L,
+                1L,
                 List.of(new M4ApiContracts.CountByCode("RETRYABLE", 2)),
                 List.of(new M4ApiContracts.StageDuration("INDEXING", 1_200, 2_400)),
                 List.of(new M4ApiContracts.ProviderCalls("SILICONFLOW", 5, 1, 1_000, 200, null, "CNY")),

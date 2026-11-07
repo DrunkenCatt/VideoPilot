@@ -1,22 +1,26 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-import type { AnalysisJob, JobEvent, MediaAsset, Session } from '../../api/contracts'
+import type { AnalysisJob, JobEvent, MediaAsset, ReliabilitySummary, Session } from '../../api/contracts'
 import { ApiClientError } from '../../api/session'
 import { createJobsApi } from '../../api/jobs'
+import { createOperationsApi, type OperationsApi } from '../../api/operations'
 import { createMediaApi, type MediaApi } from '../../api/media'
 import MediaUploadPanel from '../media/MediaUploadPanel.vue'
 import MediaLibrary from '../media/MediaLibrary.vue'
 import JobDetail from './JobDetail.vue'
+import ReliabilityPanel from './ReliabilityPanel.vue'
 import { statusLabel } from './jobPresentation'
 
 const props = defineProps<{
   session: Session
   mediaApi?: Pick<MediaApi, 'get'>
+  operationsApi?: Pick<OperationsApi, 'get'>
 }>()
 const emit = defineEmits<{ unauthenticated: [] }>()
 const api = createJobsApi()
 const mediaApi = props.mediaApi ?? createMediaApi()
+const operationsApi = props.operationsApi ?? createOperationsApi()
 
 const jobs = ref<AnalysisJob[]>([])
 const selected = ref<AnalysisJob | null>(null)
@@ -31,6 +35,9 @@ const submitting = ref(false)
 const canceling = ref(false)
 const replaying = ref(false)
 const errorMessage = ref('')
+const reliabilitySummary = ref<ReliabilitySummary | null>(null)
+const reliabilityLoading = ref(true)
+const reliabilityError = ref('')
 let idempotencyKey: string | null = null
 let eventController: globalThis.AbortController | null = null
 let mediaRevision = 0
@@ -207,7 +214,21 @@ async function replay(reason: string) {
   }
 }
 
+async function loadReliability() {
+  reliabilityLoading.value = true
+  reliabilityError.value = ''
+  try {
+    reliabilitySummary.value = await operationsApi.get()
+  } catch (error) {
+    reliabilityError.value = '可靠性摘要暂时不可用；任务主流程不受影响。'
+    if (error instanceof ApiClientError && error.code === 'AUTHENTICATION_REQUIRED') emit('unauthenticated')
+  } finally {
+    reliabilityLoading.value = false
+  }
+}
+
 onMounted(async () => {
+  void loadReliability()
   try {
     const page = await api.list()
     jobs.value = page.data
@@ -244,6 +265,13 @@ onBeforeUnmount(() => eventController?.abort())
     >
       {{ errorMessage }}
     </p>
+
+    <ReliabilityPanel
+      :summary="reliabilitySummary"
+      :loading="reliabilityLoading"
+      :error="reliabilityError"
+      @refresh="loadReliability"
+    />
 
     <MediaUploadPanel
       :session="session"
