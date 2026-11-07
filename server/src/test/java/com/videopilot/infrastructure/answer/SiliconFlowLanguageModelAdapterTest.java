@@ -101,6 +101,23 @@ class SiliconFlowLanguageModelAdapterTest {
                 });
     }
 
+    @Test
+    void classifiesProvider429WithRetryAfterAsStableRetryableFailure() throws Exception {
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/v1/chat/completions", exchange -> {
+            exchange.getResponseHeaders().add("Retry-After", "2");
+            respond(exchange, 429, "{}");
+        });
+        server.start();
+
+        assertThatThrownBy(() -> adapter(4096).generate(
+                new LanguageModelPort.Request("prompt", "a".repeat(64))))
+                .isInstanceOfSatisfying(LanguageModelException.class, exception -> {
+                    assertThat(exception.reason()).isEqualTo(LanguageModelException.Reason.RETRYABLE);
+                    assertThat(exception.code()).isEqualTo("HTTP_429");
+                });
+    }
+
     private SiliconFlowLanguageModelAdapter adapter(int maxResponseBytes) {
         return adapter(maxResponseBytes, Duration.ofSeconds(2));
     }

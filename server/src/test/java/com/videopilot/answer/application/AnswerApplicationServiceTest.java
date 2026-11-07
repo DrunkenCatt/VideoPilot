@@ -9,6 +9,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.videopilot.analysis.application.ExecutionBudgetPolicy;
+import com.videopilot.analysis.application.ExecutionLimits;
+import com.videopilot.analysis.port.ExecutionBudgetStore;
 import com.videopilot.answer.port.AnswerStore;
 import com.videopilot.answer.port.LanguageModelPort;
 import com.videopilot.answer.port.LanguageModelException;
@@ -17,6 +20,9 @@ import com.videopilot.identity.domain.OwnerId;
 import com.videopilot.retrieval.application.RetrievalApplicationService;
 import com.videopilot.retrieval.domain.EvidenceHit;
 import java.time.Instant;
+import java.time.Duration;
+import java.math.BigDecimal;
+import java.util.Map;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -173,6 +179,33 @@ class AnswerApplicationServiceTest {
         ArgumentCaptor<LanguageModelPort.Request> request = ArgumentCaptor.forClass(LanguageModelPort.Request.class);
         verify(model).generate(request.capture());
         assertThat(request.getValue().prompt()).hasSizeLessThan(20_000);
+    }
+
+    @Test
+    void recordsStableBudgetFailureWithoutCallingTheModelOrChangingTheJob() {
+        when(retrieval.retrieve(owner, jobId, "String 是什么？", 5)).thenReturn(result(List.of(hit(.85))));
+        when(store.loadEvidence(any(), any(), any(), any())).thenReturn(List.of(new AnswerEvidenceGate.EvidenceSource(
+                segmentId + "#ASR", chunkId, segmentId, 0, 0, 10_000,
+                "ASR", "Redis String 可以存储文本。", true)));
+        Instant now = Instant.parse("2026-11-07T01:00:00Z");
+        ExecutionBudgetPolicy exhausted = new ExecutionBudgetPolicy(ignored -> new ExecutionBudgetStore.Usage(
+                now, Map.of("ANSWER", 1L), 0, 0, BigDecimal.ZERO, true),
+                new ExecutionLimits("m4-limits-v1", Duration.ofHours(1), Map.of("ANSWER", 1),
+                        10, 10, BigDecimal.ONE), () -> now);
+        service = new AnswerApplicationService(
+                retrieval, model, store, new ObjectMapper(), "SiliconFlow", "model", "prompt",
+                .20, () -> now, () -> answerId, exhausted);
+
+        assertThatThrownBy(() -> service.ask(owner, jobId, "String 是什么？", "intent-budget"))
+                .isInstanceOfSatisfying(AnswerException.class,
+                        exception -> assertThat(exception.reason())
+                                .isEqualTo(AnswerException.Reason.BUDGET_EXHAUSTED));
+
+        verify(model, never()).generate(any());
+        verify(store).fail(any(), org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.eq("FAILED"),
+                org.mockito.ArgumentMatchers.eq("BUDGET_EXHAUSTED"),
+                org.mockito.ArgumentMatchers.eq("m4-limits-v1:CALL_COUNT"), any());
     }
 
     private RetrievalApplicationService.RetrievalResult result(List<EvidenceHit> hits) {

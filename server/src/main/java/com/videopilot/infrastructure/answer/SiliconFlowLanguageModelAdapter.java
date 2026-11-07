@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 public final class SiliconFlowLanguageModelAdapter implements LanguageModelPort {
 
@@ -29,11 +30,20 @@ public final class SiliconFlowLanguageModelAdapter implements LanguageModelPort 
     private final int maxPromptCharacters;
     private final int maxResponseBytes;
     private final Semaphore capacity;
+    private final Duration capacityWait;
 
     public SiliconFlowLanguageModelAdapter(
             HttpClient client, ObjectMapper json, String baseUrl, String apiKey, String model,
             Duration timeout, int maxOutputTokens, int maxPromptCharacters,
             int maxResponseBytes, int maxConcurrency) {
+        this(client, json, baseUrl, apiKey, model, timeout, maxOutputTokens, maxPromptCharacters,
+                maxResponseBytes, maxConcurrency, Duration.ofMillis(250));
+    }
+
+    public SiliconFlowLanguageModelAdapter(
+            HttpClient client, ObjectMapper json, String baseUrl, String apiKey, String model,
+            Duration timeout, int maxOutputTokens, int maxPromptCharacters,
+            int maxResponseBytes, int maxConcurrency, Duration capacityWait) {
         this.client = Objects.requireNonNull(client, "client");
         this.json = Objects.requireNonNull(json, "json");
         this.endpoint = endpoint(baseUrl);
@@ -41,20 +51,24 @@ public final class SiliconFlowLanguageModelAdapter implements LanguageModelPort 
         this.model = required(model, "model");
         this.timeout = Objects.requireNonNull(timeout, "timeout");
         if (timeout.isNegative() || timeout.isZero() || maxOutputTokens < 1 || maxPromptCharacters < 1
-                || maxResponseBytes < 1 || maxConcurrency < 1) {
+                || maxResponseBytes < 1 || maxConcurrency < 1 || capacityWait == null
+                || capacityWait.isZero() || capacityWait.isNegative()) {
             throw new IllegalArgumentException("language model limits are invalid");
         }
         this.maxOutputTokens = maxOutputTokens;
         this.maxPromptCharacters = maxPromptCharacters;
         this.maxResponseBytes = maxResponseBytes;
         this.capacity = new Semaphore(maxConcurrency);
+        this.capacityWait = capacityWait;
     }
 
     @Override
     public Response generate(Request request) {
         validate(request);
-        if (!capacity.tryAcquire()) throw failure(LanguageModelException.Reason.RETRYABLE, "CAPACITY");
+        boolean acquired = false;
         try {
+            acquired = capacity.tryAcquire(capacityWait.toMillis(), TimeUnit.MILLISECONDS);
+            if (!acquired) throw failure(LanguageModelException.Reason.RETRYABLE, "CAPACITY");
             byte[] body = json.writeValueAsBytes(new ProviderRequest(
                     model,
                     List.of(new Message("system", "Return only one valid JSON object."),
@@ -85,7 +99,7 @@ public final class SiliconFlowLanguageModelAdapter implements LanguageModelPort 
         } catch (IOException exception) {
             throw new LanguageModelException(LanguageModelException.Reason.UNKNOWN_OUTCOME, "CONNECTION", exception);
         } finally {
-            capacity.release();
+            if (acquired) capacity.release();
         }
     }
 

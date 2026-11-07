@@ -22,6 +22,7 @@ public final class AnswerException extends RuntimeException {
         NOT_READY,
         IDEMPOTENCY_KEY_REUSED,
         IN_PROGRESS,
+        BUDGET_EXHAUSTED,
         DEPENDENCY_UNAVAILABLE
     }
 }

@@ -175,6 +175,33 @@ class AsrExecutionApplicationServiceTest {
         assertThat(failure.getValue().workItem().errorCode()).isEqualTo("OUTPUT_PERSISTENCE");
     }
 
+    @Test
+    void recordsBoundedExecutorSaturationAsRetryableCapacityFailure() throws Exception {
+        VideoContextStore store = mock(VideoContextStore.class);
+        DerivedMediaStore objects = mock(DerivedMediaStore.class);
+        var source = audioArtifact();
+        var pending = asrItem(ContextWorkItemStatus.PENDING, 0, 0);
+        when(store.findCompletedArtifacts(OWNER.ownerId(), MEDIA_ID, "AUDIO_SLICE")).thenReturn(List.of(source));
+        when(store.createOrReuseWorkItem(eq(OWNER.ownerId()), any())).thenReturn(pending);
+        when(store.claim(any(), any(), anyLong(), any(), any(), any())).thenReturn(true);
+        doAnswer(invocation -> {
+            Files.write(invocation.getArgument(1), new byte[] {1});
+            return null;
+        }).when(objects).copyTo(any(), any());
+
+        var saturated = Executors.newSingleThreadExecutor();
+        saturated.shutdownNow();
+        assertThat(service(store, objects, mock(SpeechRecognitionPort.class), saturated)
+                .transcribe(OWNER, JOB_ID, MEDIA_ID))
+                .isEqualTo(AsrExecutionApplicationService.AsrOutcome.RETRY_PENDING);
+
+        ArgumentCaptor<VideoContextStore.AsrFailure> failure =
+                ArgumentCaptor.forClass(VideoContextStore.AsrFailure.class);
+        verify(store).failAsr(eq(OWNER.ownerId()), failure.capture());
+        assertThat(failure.getValue().workItem().errorCode()).isEqualTo("CAPACITY");
+        assertThat(failure.getValue().workItem().retryable()).isTrue();
+    }
+
     private AsrExecutionApplicationService service(
             VideoContextStore store,
             DerivedMediaStore objects,

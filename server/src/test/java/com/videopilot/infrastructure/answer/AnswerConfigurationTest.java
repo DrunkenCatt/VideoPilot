@@ -13,6 +13,7 @@ import com.videopilot.retrieval.application.RetrievalApplicationService;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 import org.springframework.aop.framework.ProxyFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 class AnswerConfigurationTest {
@@ -45,7 +46,7 @@ class AnswerConfigurationTest {
                 .isInstanceOf(AnswerStore.class);
         var service = configuration.answerApplicationService(
                 mock(RetrievalApplicationService.class), mock(LanguageModelPort.class),
-                mock(AnswerPersistenceAdapter.class), json, properties);
+                mock(AnswerPersistenceAdapter.class), json, properties, mock(ObjectProvider.class));
         assertThat(service).isNotNull();
         assertThat(configuration.answerController(service)).isInstanceOf(AnswerController.class);
         assertThat(properties.getBaseUrl()).isEqualTo("http://localhost:9999/v1");

@@ -1,5 +1,6 @@
 package com.videopilot.retrieval.application;
 
+import com.videopilot.analysis.application.ExecutionBudgetPolicy;
 import com.videopilot.identity.application.OwnerContext;
 import com.videopilot.retrieval.domain.EvidenceHit;
 import com.videopilot.retrieval.domain.VideoChunk;
@@ -49,6 +50,7 @@ public final class RetrievalApplicationService {
     private final int maxQueryLength;
     private final Supplier<Instant> now;
     private final Supplier<UUID> ids;
+    private final ExecutionBudgetPolicy budget;
 
     public RetrievalApplicationService(
             VideoIndexStore store,
@@ -63,6 +65,24 @@ public final class RetrievalApplicationService {
             int maxQueryLength,
             Supplier<Instant> now,
             Supplier<UUID> ids) {
+        this(store, embeddings, vectors, embeddingProvider, embeddingModel, embeddingVersion,
+                vectorCollection, embeddingDimensions, candidateLimit, maxQueryLength, now, ids, null);
+    }
+
+    public RetrievalApplicationService(
+            VideoIndexStore store,
+            EmbeddingPort embeddings,
+            VectorIndexPort vectors,
+            String embeddingProvider,
+            String embeddingModel,
+            String embeddingVersion,
+            String vectorCollection,
+            int embeddingDimensions,
+            int candidateLimit,
+            int maxQueryLength,
+            Supplier<Instant> now,
+            Supplier<UUID> ids,
+            ExecutionBudgetPolicy budget) {
         this.store = store;
         this.embeddings = embeddings;
         this.vectors = vectors;
@@ -78,6 +98,7 @@ public final class RetrievalApplicationService {
         this.maxQueryLength = maxQueryLength;
         this.now = now;
         this.ids = ids;
+        this.budget = budget;
     }
 
     public RetrievalResult retrieve(OwnerContext owner, UUID jobId, String query, int topK) {
@@ -127,6 +148,7 @@ public final class RetrievalApplicationService {
             return Map.of();
         }
         String fingerprint = sha256(snapshot.indexId() + "|" + embeddingVersion + "|" + query);
+        if (budget != null) budget.beforeCall(snapshot.jobId(), "EMBEDDING", 0);
         int attempt = store.nextRetrievalEmbeddingAttempt(
                 snapshot.jobId(), "RETRIEVAL_EMBEDDING", embeddingVersion, fingerprint);
         UUID callId = ids.get();
@@ -145,6 +167,7 @@ public final class RetrievalApplicationService {
             Instant completedAt = now.get();
             store.completeRetrievalEmbeddingCall(new VideoIndexStore.RetrievalEmbeddingCompletion(
                     callId, result.inputTokens(), latency(startedAt, completedAt), completedAt));
+            if (budget != null) budget.afterCall(snapshot.jobId());
         } catch (EmbeddingException exception) {
             Instant completedAt = now.get();
             store.failEmbedding(new VideoIndexStore.EmbeddingFailure(

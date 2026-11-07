@@ -2,6 +2,7 @@ package com.videopilot.infrastructure.context.persistence;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.videopilot.analysis.application.JobTransitionService;
+import com.videopilot.analysis.application.ExecutionBudgetPolicy;
 import com.videopilot.context.application.AsrExecutionApplicationService;
 import com.videopilot.context.application.ContextDerivationApplicationService;
 import com.videopilot.context.application.OcrExecutionApplicationService;
@@ -12,6 +13,7 @@ import com.videopilot.retrieval.application.VideoIndexApplicationService;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.context.annotation.Bean;
+import org.springframework.beans.factory.ObjectProvider;
 
 @AutoConfiguration(afterName = {
         "com.videopilot.infrastructure.context.asr.AsrAutoConfiguration",
@@ -34,9 +36,10 @@ public class VideoContextPipelineAutoConfiguration {
             VideoContextPersistenceAdapter store,
             JobTransitionService transitions,
             ObjectMapper json,
-            VideoIndexApplicationService indexing) {
+            VideoIndexApplicationService indexing,
+            ObjectProvider<ExecutionBudgetPolicy> budgets) {
         return new VideoContextPipelineApplicationService(
                 derivation, asr, ocr, contexts, store, transitions,
-                new VideoContextAligner(json, 60_000), json, indexing);
+                new VideoContextAligner(json, 60_000), json, indexing, budgets.getIfAvailable());
     }
 }

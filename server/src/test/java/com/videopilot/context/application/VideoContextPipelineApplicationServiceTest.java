@@ -8,6 +8,8 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.videopilot.analysis.application.AnalysisJobPipeline;
+import com.videopilot.analysis.application.ExecutionBudgetExceededException;
+import com.videopilot.analysis.domain.JobErrorCategory;
 import com.videopilot.analysis.application.JobTransitionCommand;
 import com.videopilot.analysis.application.JobTransitionService;
 import com.videopilot.analysis.domain.AnalysisJob;
@@ -121,6 +123,31 @@ class VideoContextPipelineApplicationServiceTest {
         assertThat(transitionsMade.getAllValues().getFirst().stageAttempt()).get()
                 .satisfies(stage -> assertThat(stage.stage()).isEqualTo(JobStage.INDEXING));
         verify(indexing).index(any(), any());
+    }
+
+    @Test
+    void mapsBudgetExhaustionToTheJobAggregateInsteadOfRetrying() {
+        VideoContextStore store = mock(VideoContextStore.class);
+        VideoIndexApplicationService indexing = mock(VideoIndexApplicationService.class);
+        when(indexing.index(any(), any())).thenThrow(new ExecutionBudgetExceededException(
+                ExecutionBudgetExceededException.Reason.CALL_COUNT, "m4-limits-v1"));
+        var pipeline = new VideoContextPipelineApplicationService(
+                mock(ContextDerivationApplicationService.class), mock(AsrExecutionApplicationService.class),
+                mock(OcrExecutionApplicationService.class), mock(VideoContextApplicationService.class),
+                store, mock(JobTransitionService.class), new VideoContextAligner(new ObjectMapper(), 60_000),
+                new ObjectMapper(), indexing);
+
+        AnalysisJobPipeline.Outcome outcome = pipeline.execute(new AnalysisJob(
+                JOB_ID, OWNER_ID.toString(), MEDIA_ID, JobStatus.INDEXING,
+                Optional.of(JobStage.INDEXING), 0, 5, 5, Optional.empty(), NOW, NOW, Optional.empty()),
+                "request-budget");
+
+        assertThat(outcome.state()).isEqualTo(AnalysisJobPipeline.State.FAILED);
+        assertThat(outcome.failure()).get().satisfies(failure -> {
+            assertThat(failure.category()).isEqualTo(JobErrorCategory.BUDGET_EXHAUSTED);
+            assertThat(failure.code()).isEqualTo("BUDGET_CALL_COUNT");
+            assertThat(failure.retryable()).isFalse();
+        });
     }
 
     private AnalysisJob job() {

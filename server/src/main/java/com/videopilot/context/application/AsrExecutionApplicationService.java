@@ -1,6 +1,7 @@
 package com.videopilot.context.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.videopilot.analysis.application.ExecutionBudgetPolicy;
 import com.videopilot.analysis.port.SpeechRecognitionException;
 import com.videopilot.analysis.port.SpeechRecognitionPort;
 import com.videopilot.context.domain.ContextInputFingerprint;
@@ -27,6 +28,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,6 +48,7 @@ public final class AsrExecutionApplicationService {
     private final int maxAttempts;
     private final Clock clock;
     private final Supplier<UUID> ids;
+    private final ExecutionBudgetPolicy budget;
 
     public AsrExecutionApplicationService(
             VideoContextStore store,
@@ -59,6 +62,23 @@ public final class AsrExecutionApplicationService {
             int maxAttempts,
             Clock clock,
             Supplier<UUID> ids) {
+        this(store, objects, speech, json, executor, temporaryRoot, provider, modelVersion,
+                maxAttempts, clock, ids, null);
+    }
+
+    public AsrExecutionApplicationService(
+            VideoContextStore store,
+            DerivedMediaStore objects,
+            SpeechRecognitionPort speech,
+            ObjectMapper json,
+            ExecutorService executor,
+            Path temporaryRoot,
+            String provider,
+            String modelVersion,
+            int maxAttempts,
+            Clock clock,
+            Supplier<UUID> ids,
+            ExecutionBudgetPolicy budget) {
         this.store = java.util.Objects.requireNonNull(store, "store");
         this.objects = java.util.Objects.requireNonNull(objects, "objects");
         this.speech = java.util.Objects.requireNonNull(speech, "speech");
@@ -71,6 +91,7 @@ public final class AsrExecutionApplicationService {
         this.maxAttempts = maxAttempts;
         this.clock = java.util.Objects.requireNonNull(clock, "clock");
         this.ids = java.util.Objects.requireNonNull(ids, "ids");
+        this.budget = budget;
     }
 
     public AsrOutcome transcribe(OwnerContext owner, UUID jobId, UUID mediaId) {
@@ -113,6 +134,9 @@ public final class AsrExecutionApplicationService {
 
     private AsrOutcome executeOne(
             OwnerContext owner, VideoContextStore.CompletedWorkArtifact source, ContextWorkItem initial) {
+        if (budget != null) {
+            budget.beforeCall(initial.createdByJobId(), "ASR", initial.endMs() - initial.startMs());
+        }
         Instant startedAt = clock.instant();
         UUID claimId = ids.get();
         if (!store.claim(owner.ownerId(), initial.workItemId(), initial.version(), claimId,
@@ -153,6 +177,7 @@ public final class AsrExecutionApplicationService {
             store.completeAsr(owner.ownerId(), new VideoContextStore.AsrCompletion(
                     work, callId.toString(), result.providerTraceId().orElse(null), result.billedDurationMs(),
                     latency(startedAt, completedAt), completedAt));
+            if (budget != null) budget.afterCall(initial.createdByJobId());
             return AsrOutcome.COMPLETED;
         } catch (SpeechRecognitionException exception) {
             return recordFailure(owner, initial, claimId, callId, attempt, startedAt, exception);
@@ -187,6 +212,8 @@ public final class AsrExecutionApplicationService {
     private SpeechRecognitionPort.Result await(SpeechRecognitionPort.Request request) {
         try {
             return executor.submit(() -> speech.transcribe(request)).get();
+        } catch (RejectedExecutionException exception) {
+            throw new SpeechRecognitionException(SpeechRecognitionException.Reason.RETRYABLE, "CAPACITY", exception);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new SpeechRecognitionException(

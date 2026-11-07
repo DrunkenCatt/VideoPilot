@@ -2,6 +2,8 @@ package com.videopilot.answer.application;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.videopilot.analysis.application.ExecutionBudgetExceededException;
+import com.videopilot.analysis.application.ExecutionBudgetPolicy;
 import com.videopilot.answer.port.AnswerStore;
 import com.videopilot.answer.port.LanguageModelException;
 import com.videopilot.answer.port.LanguageModelPort;
@@ -9,6 +11,7 @@ import com.videopilot.identity.application.OwnerContext;
 import com.videopilot.retrieval.application.RetrievalApplicationService;
 import com.videopilot.retrieval.application.RetrievalException;
 import com.videopilot.retrieval.domain.EvidenceHit;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -42,6 +45,7 @@ public final class AnswerApplicationService {
     private final Supplier<Instant> now;
     private final Supplier<UUID> ids;
     private final AnswerEvidenceGate gate = new AnswerEvidenceGate(8, 600, 4, 300);
+    private final ExecutionBudgetPolicy budget;
 
     public AnswerApplicationService(
             RetrievalApplicationService retrieval,
@@ -54,6 +58,22 @@ public final class AnswerApplicationService {
             double minimumEvidenceScore,
             Supplier<Instant> now,
             Supplier<UUID> ids) {
+        this(retrieval, model, store, json, provider, modelVersion, promptVersion,
+                minimumEvidenceScore, now, ids, null);
+    }
+
+    public AnswerApplicationService(
+            RetrievalApplicationService retrieval,
+            LanguageModelPort model,
+            AnswerStore store,
+            ObjectMapper json,
+            String provider,
+            String modelVersion,
+            String promptVersion,
+            double minimumEvidenceScore,
+            Supplier<Instant> now,
+            Supplier<UUID> ids,
+            ExecutionBudgetPolicy budget) {
         this.retrieval = retrieval;
         this.model = model;
         this.store = store;
@@ -67,6 +87,7 @@ public final class AnswerApplicationService {
         this.minimumEvidenceScore = minimumEvidenceScore;
         this.now = now;
         this.ids = ids;
+        this.budget = budget;
     }
 
     public AnswerStore.StoredAnswer ask(
@@ -92,6 +113,10 @@ public final class AnswerApplicationService {
         RetrievalApplicationService.RetrievalResult result;
         try {
             result = retrieval.retrieve(owner, jobId, normalizedQuestion, TOP_K);
+        } catch (ExecutionBudgetExceededException exception) {
+            store.fail(answerId, null, "FAILED", "BUDGET_EXHAUSTED",
+                    exception.limitVersion() + ':' + exception.reason().name(), now.get());
+            throw new AnswerException(AnswerException.Reason.BUDGET_EXHAUSTED, exception);
         } catch (RetrievalException exception) {
             store.fail(answerId, null, "FAILED", "RETRIEVAL", exception.reason().name(), now.get());
             throw switch (exception.reason()) {
@@ -131,6 +156,13 @@ public final class AnswerApplicationService {
                         exposedIds.contains(source.evidenceId())))
                 .toList();
         String prompt = prompt(normalizedQuestion, exposed);
+        try {
+            if (budget != null) budget.beforeCall(jobId, "ANSWER", 0);
+        } catch (ExecutionBudgetExceededException exception) {
+            store.fail(answerId, null, "FAILED", "BUDGET_EXHAUSTED",
+                    exception.limitVersion() + ':' + exception.reason().name(), now.get());
+            throw new AnswerException(AnswerException.Reason.BUDGET_EXHAUSTED, exception);
+        }
         UUID callId = ids.get();
         String callFingerprint = sha256(fingerprint + "|" + answerId);
         Instant started = now.get();
@@ -146,6 +178,15 @@ public final class AnswerApplicationService {
                     ? "UNKNOWN_OUTCOME" : "FAILED";
             store.fail(answerId, callId, status, exception.reason().name(), exception.code(), completed);
             throw new AnswerException(AnswerException.Reason.DEPENDENCY_UNAVAILABLE, exception);
+        }
+
+        try {
+            if (budget != null) budget.afterCall(
+                    jobId, response.usage().inputTokens(), response.usage().outputTokens(), BigDecimal.ZERO);
+        } catch (ExecutionBudgetExceededException exception) {
+            store.fail(answerId, callId, "FAILED", "BUDGET_EXHAUSTED",
+                    exception.limitVersion() + ':' + exception.reason().name(), now.get());
+            throw new AnswerException(AnswerException.Reason.BUDGET_EXHAUSTED, exception);
         }
 
         AnswerEvidenceGate.ValidationResult validation;
@@ -185,6 +226,12 @@ public final class AnswerApplicationService {
         return switch (answer.status()) {
             case "ANSWERED", "REFUSED" -> answer;
             case "PROCESSING" -> throw new AnswerException(AnswerException.Reason.IN_PROGRESS);
+            case "FAILED" -> {
+                if (answer.refusalReason() != null && answer.refusalReason().startsWith("BUDGET_EXHAUSTED:")) {
+                    throw new AnswerException(AnswerException.Reason.BUDGET_EXHAUSTED);
+                }
+                throw new AnswerException(AnswerException.Reason.DEPENDENCY_UNAVAILABLE);
+            }
             default -> throw new AnswerException(AnswerException.Reason.DEPENDENCY_UNAVAILABLE);
         };
     }

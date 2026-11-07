@@ -1,5 +1,6 @@
 package com.videopilot.retrieval.application;
 
+import com.videopilot.analysis.application.ExecutionBudgetPolicy;
 import com.videopilot.context.domain.VideoContext;
 import com.videopilot.context.domain.VideoContextStatus;
 import com.videopilot.context.domain.VideoSegment;
@@ -42,6 +43,7 @@ public final class VideoIndexApplicationService {
     private final int maxEmbeddingAttempts;
     private final Supplier<Instant> now;
     private final Supplier<UUID> ids;
+    private final ExecutionBudgetPolicy budget;
 
     public VideoIndexApplicationService(
             VideoContextStore contexts,
@@ -59,6 +61,28 @@ public final class VideoIndexApplicationService {
             int maxEmbeddingAttempts,
             Supplier<Instant> now,
             Supplier<UUID> ids) {
+        this(contexts, indexes, chunks, embeddings, vectors, embeddingProvider, embeddingModel,
+                embeddingVersion, vectorCollection, embeddingDimensions, embeddingBatchSize,
+                embeddingTextCharacters, maxEmbeddingAttempts, now, ids, null);
+    }
+
+    public VideoIndexApplicationService(
+            VideoContextStore contexts,
+            VideoIndexStore indexes,
+            VideoChunkBuilder chunks,
+            EmbeddingPort embeddings,
+            VectorIndexPort vectors,
+            String embeddingProvider,
+            String embeddingModel,
+            String embeddingVersion,
+            String vectorCollection,
+            int embeddingDimensions,
+            int embeddingBatchSize,
+            int embeddingTextCharacters,
+            int maxEmbeddingAttempts,
+            Supplier<Instant> now,
+            Supplier<UUID> ids,
+            ExecutionBudgetPolicy budget) {
         this.contexts = contexts;
         this.indexes = indexes;
         this.chunks = chunks;
@@ -78,6 +102,7 @@ public final class VideoIndexApplicationService {
         this.maxEmbeddingAttempts = maxEmbeddingAttempts;
         this.now = now;
         this.ids = ids;
+        this.budget = budget;
     }
 
     public IndexOutcome index(OwnerContext owner, UUID jobId) {
@@ -135,6 +160,7 @@ public final class VideoIndexApplicationService {
         if (attempt > maxEmbeddingAttempts) {
             return completeDegraded(owner, publication, "SEMANTIC_DEGRADED", "EMBEDDING_RETRIES_EXHAUSTED", null);
         }
+        if (budget != null) budget.beforeCall(publication.sourceJobId(), "EMBEDDING", 0);
         UUID callId = ids.get();
         Instant startedAt = now.get();
         indexes.startEmbeddingCall(new VideoIndexStore.EmbeddingCallStart(
@@ -157,6 +183,7 @@ public final class VideoIndexApplicationService {
             indexes.completeEmbedding(owner.ownerId(), new VideoIndexStore.EmbeddingCompletion(
                     callId, publication.indexId(), embeddingVersion, completed, result.inputTokens(),
                     latency(startedAt, completedAt), completedAt));
+            if (budget != null) budget.afterCall(publication.sourceJobId());
             return null;
         } catch (EmbeddingException exception) {
             Instant completedAt = now.get();

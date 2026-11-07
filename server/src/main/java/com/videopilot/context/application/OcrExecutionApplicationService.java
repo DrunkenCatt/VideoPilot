@@ -1,6 +1,7 @@
 package com.videopilot.context.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.videopilot.analysis.application.ExecutionBudgetPolicy;
 import com.videopilot.analysis.port.OcrException;
 import com.videopilot.analysis.port.OcrPort;
 import com.videopilot.context.domain.ContextInputFingerprint;
@@ -26,6 +27,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,6 +47,7 @@ public final class OcrExecutionApplicationService {
     private final int maxAttempts;
     private final Clock clock;
     private final Supplier<UUID> ids;
+    private final ExecutionBudgetPolicy budget;
 
     public OcrExecutionApplicationService(
             VideoContextStore store,
@@ -58,6 +61,23 @@ public final class OcrExecutionApplicationService {
             int maxAttempts,
             Clock clock,
             Supplier<UUID> ids) {
+        this(store, objects, ocr, json, executor, temporaryRoot, provider, language,
+                maxAttempts, clock, ids, null);
+    }
+
+    public OcrExecutionApplicationService(
+            VideoContextStore store,
+            DerivedMediaStore objects,
+            OcrPort ocr,
+            ObjectMapper json,
+            ExecutorService executor,
+            Path temporaryRoot,
+            String provider,
+            String language,
+            int maxAttempts,
+            Clock clock,
+            Supplier<UUID> ids,
+            ExecutionBudgetPolicy budget) {
         this.store = java.util.Objects.requireNonNull(store, "store");
         this.objects = java.util.Objects.requireNonNull(objects, "objects");
         this.ocr = java.util.Objects.requireNonNull(ocr, "ocr");
@@ -71,6 +91,7 @@ public final class OcrExecutionApplicationService {
         this.maxAttempts = maxAttempts;
         this.clock = java.util.Objects.requireNonNull(clock, "clock");
         this.ids = java.util.Objects.requireNonNull(ids, "ids");
+        this.budget = budget;
     }
 
     public OcrOutcome recognize(OwnerContext owner, UUID jobId, UUID mediaId) {
@@ -130,6 +151,7 @@ public final class OcrExecutionApplicationService {
 
     private FrameOutcome executeOne(
             OwnerContext owner, FrameSource source, ContextWorkItem item) {
+        if (budget != null) budget.beforeCall(item.createdByJobId(), "OCR", 0);
         Instant startedAt = clock.instant();
         UUID claimId = ids.get();
         if (!store.claim(owner.ownerId(), item.workItemId(), item.version(), claimId,
@@ -168,6 +190,7 @@ public final class OcrExecutionApplicationService {
             store.completeOcr(owner.ownerId(), new VideoContextStore.OcrCompletion(
                     work, callId.toString(), result.processedPixels(), textCharacters,
                     latency(startedAt, completedAt), completedAt));
+            if (budget != null) budget.afterCall(item.createdByJobId());
             return FrameOutcome.COMPLETED;
         } catch (OcrException exception) {
             return recordFailure(owner, item, claimId, callId, attempt, startedAt, exception);
@@ -223,6 +246,8 @@ public final class OcrExecutionApplicationService {
     private OcrPort.Result await(OcrPort.Request request) {
         try {
             return executor.submit(() -> ocr.recognize(request)).get();
+        } catch (RejectedExecutionException exception) {
+            throw new OcrException(OcrException.Reason.RETRYABLE, "CAPACITY", exception);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new OcrException(OcrException.Reason.CANCELED, "INTERRUPTED", exception);

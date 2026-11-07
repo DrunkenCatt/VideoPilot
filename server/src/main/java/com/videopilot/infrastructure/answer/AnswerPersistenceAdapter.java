@@ -203,8 +203,14 @@ public class AnswerPersistenceAdapter implements AnswerStore {
                     """).param("status", callStatus).param("category", category).param("code", code)
                     .param("completedAt", completedAt).param("callId", modelCallId.toString()).update();
         }
-        jdbc.sql("UPDATE answer_record SET status = :status WHERE answer_id = :answerId AND status = 'PROCESSING'")
-                .param("status", callStatus).param("answerId", answerId.toString()).update();
+        jdbc.sql("""
+                UPDATE answer_record SET status = :status,
+                    refusal_reason = CASE WHEN :category = 'BUDGET_EXHAUSTED'
+                        THEN CONCAT(:category, ':', :code) ELSE :category END
+                WHERE answer_id = :answerId AND status = 'PROCESSING'
+                """).param("status", callStatus).param("category", category)
+                .param("code", code)
+                .param("answerId", answerId.toString()).update();
     }
 
     @Override

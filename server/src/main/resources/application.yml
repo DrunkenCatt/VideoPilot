@@ -159,6 +159,17 @@ videopilot:
       initial-delay: ${OUTBOX_RELAY_INITIAL_DELAY:2s}
   analysis:
     pipeline-version: ${ANALYSIS_PIPELINE_VERSION:m3-evidence-qa-v1}
+    limits:
+      version: ${EXECUTION_LIMIT_VERSION:m4-limits-v1}
+      job-deadline: ${ANALYSIS_JOB_DEADLINE:6h}
+      provider-wait: ${PROVIDER_CAPACITY_WAIT:250ms}
+      max-asr-calls: ${BUDGET_MAX_ASR_CALLS:240}
+      max-ocr-calls: ${BUDGET_MAX_OCR_CALLS:2000}
+      max-embedding-calls: ${BUDGET_MAX_EMBEDDING_CALLS:1000}
+      max-answer-calls: ${BUDGET_MAX_ANSWER_CALLS:20}
+      max-input-units: ${BUDGET_MAX_INPUT_UNITS:1000000}
+      max-output-units: ${BUDGET_MAX_OUTPUT_UNITS:100000}
+      max-known-cost: ${BUDGET_MAX_KNOWN_COST:10.00}
     recovery:
       max-retries: ${ANALYSIS_RECOVERY_MAX_RETRIES:3}
       retry-delay: ${ANALYSIS_RECOVERY_RETRY_DELAY:10s}

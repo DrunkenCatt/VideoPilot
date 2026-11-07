@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 public final class SiliconFlowEmbeddingAdapter implements EmbeddingPort {
 
@@ -32,6 +33,7 @@ public final class SiliconFlowEmbeddingAdapter implements EmbeddingPort {
     private final int maxTotalCharacters;
     private final int maxResponseBytes;
     private final Semaphore capacity;
+    private final Duration capacityWait;
 
     public SiliconFlowEmbeddingAdapter(
             HttpClient client,
@@ -47,6 +49,26 @@ public final class SiliconFlowEmbeddingAdapter implements EmbeddingPort {
             int maxTotalCharacters,
             int maxResponseBytes,
             int maxConcurrency) {
+        this(client, json, baseUrl, apiKey, model, timeout, dimensions, maxBatchSize,
+                maxTextCharacters, maxInputTokensPerText, maxTotalCharacters, maxResponseBytes,
+                maxConcurrency, Duration.ofMillis(250));
+    }
+
+    public SiliconFlowEmbeddingAdapter(
+            HttpClient client,
+            ObjectMapper json,
+            String baseUrl,
+            String apiKey,
+            String model,
+            Duration timeout,
+            int dimensions,
+            int maxBatchSize,
+            int maxTextCharacters,
+            int maxInputTokensPerText,
+            int maxTotalCharacters,
+            int maxResponseBytes,
+            int maxConcurrency,
+            Duration capacityWait) {
         this.client = Objects.requireNonNull(client, "client");
         this.json = Objects.requireNonNull(json, "json");
         this.endpoint = endpoint(baseUrl);
@@ -56,7 +78,8 @@ public final class SiliconFlowEmbeddingAdapter implements EmbeddingPort {
         if (timeout.isZero() || timeout.isNegative() || dimensions < 1 || maxBatchSize < 1
                 || maxBatchSize > 32 || maxTextCharacters < 1 || maxInputTokensPerText < 1
                 || maxTotalCharacters < 1
-                || maxResponseBytes < 1 || maxConcurrency < 1) {
+                || maxResponseBytes < 1 || maxConcurrency < 1 || capacityWait == null
+                || capacityWait.isZero() || capacityWait.isNegative()) {
             throw new IllegalArgumentException("embedding limits are invalid");
         }
         this.dimensions = dimensions;
@@ -66,13 +89,16 @@ public final class SiliconFlowEmbeddingAdapter implements EmbeddingPort {
         this.maxTotalCharacters = maxTotalCharacters;
         this.maxResponseBytes = maxResponseBytes;
         this.capacity = new Semaphore(maxConcurrency);
+        this.capacityWait = capacityWait;
     }
 
     @Override
     public Result embed(Request request) {
         validate(request);
-        if (!capacity.tryAcquire()) throw failure(EmbeddingException.Reason.RETRYABLE, "CAPACITY");
+        boolean acquired = false;
         try {
+            acquired = capacity.tryAcquire(capacityWait.toMillis(), TimeUnit.MILLISECONDS);
+            if (!acquired) throw failure(EmbeddingException.Reason.RETRYABLE, "CAPACITY");
             byte[] body = json.writeValueAsBytes(new ProviderRequest(model, request.texts(), "float"));
             HttpRequest httpRequest = HttpRequest.newBuilder(endpoint)
                     .timeout(timeout)
@@ -99,7 +125,7 @@ public final class SiliconFlowEmbeddingAdapter implements EmbeddingPort {
         } catch (IOException exception) {
             throw new EmbeddingException(EmbeddingException.Reason.UNKNOWN_OUTCOME, "CONNECTION", exception);
         } finally {
-            capacity.release();
+            if (acquired) capacity.release();
         }
     }
 

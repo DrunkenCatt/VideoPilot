@@ -4,9 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.videopilot.analysis.application.ExecutionBudgetExceededException;
+import com.videopilot.analysis.application.ExecutionBudgetPolicy;
 import com.videopilot.identity.application.OwnerContext;
 import com.videopilot.identity.domain.OwnerId;
 import com.videopilot.retrieval.domain.EvidenceHit;
@@ -156,6 +159,22 @@ class RetrievalApplicationServiceTest {
 
         assertThat(result.hits()).isEmpty();
         assertThat(result.degradedChannels()).containsExactly(EvidenceHit.DegradedChannel.SEMANTIC);
+    }
+
+    @Test
+    void stopsBeforeQueryEmbeddingWhenTheDurableBudgetIsExhausted() {
+        ExecutionBudgetPolicy budget = mock(ExecutionBudgetPolicy.class);
+        org.mockito.Mockito.doThrow(new ExecutionBudgetExceededException(
+                ExecutionBudgetExceededException.Reason.CALL_COUNT, "m4-limits-v1"))
+                .when(budget).beforeCall(JOB_ID, "EMBEDDING", 0);
+        RetrievalApplicationService service = new RetrievalApplicationService(
+                store, embeddings, vectors, "SiliconFlow", "BAAI/bge-m3", "embedding-v1",
+                "collection", 2, 50, 1_000, Instant::now, UUID::randomUUID, budget);
+
+        assertThatThrownBy(() -> service.retrieve(OWNER, JOB_ID, "redis", 2))
+                .isInstanceOf(ExecutionBudgetExceededException.class);
+        verify(embeddings, never()).embed(any());
+        verify(store, never()).startRetrievalEmbeddingCall(any());
     }
 
     private RetrievalApplicationService service() {

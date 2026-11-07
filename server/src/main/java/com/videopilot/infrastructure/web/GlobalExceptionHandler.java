@@ -92,6 +92,7 @@ public final class GlobalExceptionHandler {
             case INVALID_REQUEST -> ErrorCode.INVALID_REQUEST;
             case NOT_FOUND -> ErrorCode.RESOURCE_NOT_FOUND;
             case NOT_READY, IN_PROGRESS -> ErrorCode.CONFLICT;
+            case BUDGET_EXHAUSTED -> ErrorCode.BUDGET_EXHAUSTED;
             case IDEMPOTENCY_KEY_REUSED -> ErrorCode.IDEMPOTENCY_KEY_REUSED;
             case DEPENDENCY_UNAVAILABLE -> ErrorCode.DEPENDENCY_UNAVAILABLE;
         };
@@ -151,6 +152,7 @@ public final class GlobalExceptionHandler {
             case IDEMPOTENCY_KEY_REUSED, UPLOAD_EXPIRED, MEDIA_NOT_READY,
                     JOB_NOT_CANCELABLE, CONFLICT -> HttpStatus.CONFLICT;
             case RATE_LIMITED -> HttpStatus.TOO_MANY_REQUESTS;
+            case BUDGET_EXHAUSTED -> HttpStatus.UNPROCESSABLE_ENTITY;
             case DEPENDENCY_UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE;
             case INTERNAL_ERROR -> HttpStatus.INTERNAL_SERVER_ERROR;
         };

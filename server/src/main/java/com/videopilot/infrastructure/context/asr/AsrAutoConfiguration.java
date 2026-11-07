@@ -1,6 +1,7 @@
 package com.videopilot.infrastructure.context.asr;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.videopilot.analysis.application.ExecutionBudgetPolicy;
 import com.videopilot.context.application.AsrExecutionApplicationService;
 import com.videopilot.infrastructure.context.persistence.VideoContextPersistenceAdapter;
 import com.videopilot.infrastructure.media.storage.MinioMediaObjectStore;
@@ -13,6 +14,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -52,11 +54,12 @@ public class AsrAutoConfiguration {
             SiliconFlowSpeechRecognitionAdapter speech,
             ObjectMapper json,
             @Qualifier("asrExecutor") ExecutorService executor,
-            AsrProperties properties) {
+            AsrProperties properties,
+            ObjectProvider<ExecutionBudgetPolicy> budgets) {
         return new AsrExecutionApplicationService(
                 store, objects, speech, json, executor, Path.of(properties.getTemporaryDirectory()),
                 properties.getProvider(), properties.getModelVersion(), properties.getMaxAttempts(),
-                Clock.systemUTC(), UUID::randomUUID);
+                Clock.systemUTC(), UUID::randomUUID, budgets.getIfAvailable());
     }
 
     private void validate(AsrProperties properties) {

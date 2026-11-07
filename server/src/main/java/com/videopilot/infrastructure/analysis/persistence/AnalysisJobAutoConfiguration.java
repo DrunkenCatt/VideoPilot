@@ -5,6 +5,7 @@ import com.videopilot.analysis.application.AnalysisJobApplicationService;
 import com.videopilot.analysis.application.AnalysisJobEventApplicationService;
 import com.videopilot.analysis.application.JobTransitionService;
 import com.videopilot.analysis.application.AnalysisJobReliabilityService;
+import com.videopilot.analysis.application.ExecutionBudgetPolicy;
 import com.videopilot.analysis.domain.JobStateMachine;
 import com.videopilot.analysis.port.ActiveAnalysisJobCache;
 import com.videopilot.infrastructure.analysis.cache.RedisActiveAnalysisJobCache;
@@ -17,12 +18,21 @@ import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.jdbc.core.simple.JdbcClient;
 
 @AutoConfiguration(after = MybatisPlusAutoConfiguration.class)
 @ConditionalOnBean(DataSource.class)
+@EnableConfigurationProperties(ExecutionLimitProperties.class)
 public class AnalysisJobAutoConfiguration {
+
+    @Bean
+    ExecutionBudgetPolicy executionBudgetPolicy(JdbcClient jdbc, ExecutionLimitProperties properties) {
+        return new ExecutionBudgetPolicy(
+                new JdbcExecutionBudgetStore(jdbc), properties.toLimits(), Clock.systemUTC()::instant);
+    }
 
     @Bean
     AnalysisJobPersistenceAdapter analysisJobPersistenceAdapter(AnalysisJobMapper mapper) {

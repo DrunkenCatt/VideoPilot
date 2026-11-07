@@ -5,6 +5,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.videopilot.answer.application.AnswerApplicationService;
+import com.videopilot.answer.application.AnswerException;
 import com.videopilot.answer.port.AnswerStore;
 import com.videopilot.identity.application.OwnerContext;
 import com.videopilot.identity.domain.OwnerId;
@@ -14,6 +15,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 
 class AnswerControllerTest {
 
@@ -45,6 +47,16 @@ class AnswerControllerTest {
         assertThat(page.data()).hasSize(1);
         assertThat(page.hasMore()).isTrue();
         assertThat(page.nextCursor()).isEqualTo(9);
+    }
+
+    @Test
+    void mapsSynchronousBudgetExhaustionToStableNonRetryableResponse() {
+        var response = new GlobalExceptionHandler().handleAnswerFailure(
+                new AnswerException(AnswerException.Reason.BUDGET_EXHAUSTED));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        assertThat(response.getBody().code()).isEqualTo("BUDGET_EXHAUSTED");
+        assertThat(response.getBody().retryable()).isFalse();
     }
 
     private AnswerStore.StoredAnswer answer(long sequence, String status, String reason, boolean withClaim) {

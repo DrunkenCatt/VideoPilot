@@ -1,6 +1,6 @@
 # M4 验收记录：任务可靠性发布门
 
-> 状态：T0-T2 已完成；T3-T5 尚未实现。本文按任务持续追加实际命令、环境、结果和未执行项，未验证能力不得提前标记通过。
+> 状态：T0-T3 已完成；T4-T5 尚未实现。本文按任务持续追加实际命令、环境、结果和未执行项，未验证能力不得提前标记通过。
 
 ## 1. M4 针对现有流程解决的问题
 
@@ -127,7 +127,7 @@ T0 未改变运行时代码或页面，浏览器验收用于冻结 M4 开始前�
 
 ## 9. 后续任务证据
 
-T3-T5 每完成一项在此追加候选 commit、RED/GREEN、定向/完整测试、真实浏览器、故障注入、未执行项和退出结论；上一个退出门未通过时不得开始下一项。
+T4-T5 每完成一项在此追加候选 commit、RED/GREEN、定向/完整测试、真实浏览器、故障注入、未执行项和退出结论；上一个退出门未通过时不得开始下一项。
 
 ## 10. T1 实现与审查结论
 
@@ -225,3 +225,53 @@ T2 没有修改 RabbitMQ 拓扑或供应商主路径，因此没有重复执行�
 ## 17. T2 退出结论
 
 T2 的 owner、CAS、幂等、同 Job 新 attempt、不可变历史、新 Outbox 和真实浏览器操作均通过。已完成阶段继续由既有输入指纹规则复用，自动化断言 Replay 不清除阶段历史；没有重新投递旧 messageId。Checkpoint B 的 Replay 子项通过，deadline/预算/资源隔离两项仍保持未完成并由 T3 验证。T2 可以独立提交并进入 T3。
+
+## 18. T3 实现与审查结论
+
+T3 在现有 Job、`model_call`、Adapter 和工作池上增加一个版本化限制值对象、一个确定性预算策略及一个 JDBC 聚合读取器，没有新增预算表、通用 bulkhead/ratelimiter 框架或第二套执行 Trace：
+
+- `m4-limits-v1` 冻结 6 小时 Job deadline、ASR/OCR/Embedding/Answer 调用上限、输入/输出计量、已知成本上限和供应商容量等待；非法 deadline、调用数、计量、成本或等待值在启动接线时失败。
+- 预算聚合直接读取 MySQL `analysis_job.created_at` 与 `model_call`；重启不会重置。`price_status=AVAILABLE` 才累计已知成本，缺价或缺成本保留 `unknownPrice=true`，不伪造成零价格。
+- ASR、OCR、索引 Embedding、查询 Embedding 和 LLM 在调用前检查，持久化结果后再次检查。Job 超限映射为 `BUDGET_EXHAUSTED/BUDGET_<reason>` 并交给统一迁移；同步问答只失败 `answer_record/model_call`，不修改 READY Job。
+- LLM 与 Embedding semaphore 从无界等待改为 250ms 有限等待并返回稳定可重试 `CAPACITY`；ASR/OCR 有界队列拒绝同样收敛为 `CAPACITY`。FFmpeg、Tesseract、Rabbit consumer、SSE 和 Web/health 继续使用彼此独立的既有有界资源。
+- 既有子进程超时/中断清理与 UNKNOWN 禁止自动重发规则未被复制或放宽；429 保持稳定可重试 `HTTP_429`。
+
+代码审查确认调用数按实际 `model_call` 尝试累计，Embedding 同时包含索引和查询调用；前置检查使用 `>= max` 阻止下一次调用，完成后计量使用 `> max` 允许精确边界。同步问答在模型返回后、发布答案前检查响应计量，超限候选不能发布。最终审查未发现阻断项。
+
+## 19. T3 RED/GREEN 与自动化证据
+
+### RED
+
+最初加入版本化限制接线后，`AnswerConfigurationTest` 和 `RetrievalConfigurationTest` 因缺少预算依赖而测试编译失败；改为从 Spring `ObjectProvider` 注入同一个策略，旧构造器只保留给已有纯单元测试。首次 MySQL 聚合测试还暴露 MySQL JDBC 不支持直接 `getObject(Instant.class)`，最终改为显式读取 `Timestamp.toInstant()`。没有删除断言、降低阈值或增加 suppression。
+
+### GREEN
+
+| 命令 | 环境与结果 |
+| --- | --- |
+| `server\mvnw.cmd -q -Dtest=ExecutionBudgetPolicyTest,ExecutionLimitPropertiesTest,AnswerApplicationServiceTest,RetrievalApplicationServiceTest,VideoContextPipelineApplicationServiceTest,SiliconFlowLanguageModelAdapterTest,AnswerControllerTest test` | deadline、调用数、输入/输出、成本、unknown、调用前停止、Job/Answer 真源、429 和稳定 HTTP 错误通过 |
+| `server\mvnw.cmd -q test-compile failsafe:integration-test failsafe:verify -Dit.test=JdbcExecutionBudgetStoreIT` | 隔离数据库 `videopilot_m4_t3`，Flyway V16；真实 MySQL 聚合调用数、计量、已知成本与 unknown 通过 |
+| `server\mvnw.cmd clean test` | Windows/JDK 21；351 项通过、0 失败、1 项既有 FFmpeg 环境条件跳过；JaCoCo 行覆盖率 80.0284%，80% 门通过 |
+| `client\npm.cmd run check` | typecheck、零 warning lint、96 项 Vitest、覆盖率与生产构建全部通过；Statements 86.77%、Branches 80.98%、Functions 86.89%、Lines 91.96% |
+
+定向集成门第一次重跑时，隔离库迁移校验已经成功，但本机进程继承了 `OCR_ENABLED=true` 而没有 Compose 内的 tessdata 路径，Spring 按启动校验失败；显式关闭与该 JDBC 场景无关的 ASR/OCR 后，同一测试和启动上下文通过。共享 `videopilot` 库还存在测试前已存在的 V3 checksum 漂移，因此没有对其执行 Flyway repair；使用从 V1 前进到 V16 的隔离库避免修改既有本地数据。
+
+首次干净 `clean test` 虽然 348 项测试全绿，但新增代码使行覆盖率只有 79.59%，质量门正确失败；补齐预算合法/非法边界和全部限制绑定测试后，第二次达到恰好 80.0000% 仍被 JaCoCo 的精度边界拒绝。最终增加无参后置聚合成功路径，351 项全绿且覆盖率明确升至 80.0284%。阈值、插件配置和生产代码均未为通过门而放宽。完整、可能产生真实模型费用的 `verify -Pintegration` 留在 T5 候选提交执行。
+
+## 20. T3 真实浏览器验收
+
+2026-11-07 使用重新打包的 Compose server、真实 V16 浏览器数据库与 Vite `http://localhost:5173/` 验收。测试 fixture 是已持久化的 `BUDGET_EXHAUSTED/BUDGET_CALL_COUNT` Job，没有发起付费模型调用。
+
+| 检查 | 观察 | 结果 |
+| --- | --- | --- |
+| 预算真源 | 详情显示“该任务无法自动恢复”、`BUDGET_CALL_COUNT` 和 `Execution stopped by limit version m4-limits-v1` | 通过 |
+| 操作边界 | 普通 FAILED 预算任务不显示 Manual Replay；没有绕过 T2 的状态前置条件 | 通过 |
+| 刷新持久化 | 浏览器 reload 后同一 hash 从服务端恢复相同 reason code、限制版本和状态 | 通过 |
+| 桌面布局 | `innerWidth=728`、document `scrollWidth=716`，无横向溢出 | 通过 |
+| 手机布局 | 375px 设备视口下页面 `innerWidth=312`、document `scrollWidth=300`，预算状态与版本可见，无横向溢出 | 通过 |
+| Console | 最终日志 2 条，error/warn 为 0 | 通过 |
+
+资源隔离由同一候选中的 Adapter 容量争抢/中断测试、有界 ASR/OCR 队列测试、既有 FFmpeg/Tesseract 清理测试、Rabbit prefetch/concurrency 配置测试，以及独立 Web/SSE/health 合同测试共同证明；浏览器同时验证实际 Job 查询在后台 worker 环境下保持响应。T5 仍会按冻结故障矩阵执行进程级饱和与恢复率重复样本。
+
+## 21. T3 退出结论
+
+T3 的 deadline、调用数、输入/输出计量、已知成本和 unknown 语义均由 Java 硬门与 MySQL 持久化事实裁决；任一超限会在所属 Job 或 Answer 聚合停止后续高成本调用。供应商、子进程、消息消费与 Web/SSE/health 使用独立有界资源，容量失败稳定且可重试。自动化、隔离 MySQL、真实浏览器和代码审查均通过，没有降低质量门。Checkpoint B 全部通过，T3 可以独立提交并进入 T4。

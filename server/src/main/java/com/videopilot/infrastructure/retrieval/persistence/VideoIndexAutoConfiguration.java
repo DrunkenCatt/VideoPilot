@@ -1,6 +1,8 @@
 package com.videopilot.infrastructure.retrieval.persistence;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.videopilot.analysis.application.ExecutionBudgetPolicy;
+import com.videopilot.infrastructure.analysis.persistence.ExecutionLimitProperties;
 import com.videopilot.context.port.VideoContextStore;
 import com.videopilot.retrieval.application.VideoChunkBuilder;
 import com.videopilot.retrieval.application.VideoIndexApplicationService;
@@ -15,6 +17,7 @@ import java.time.Clock;
 import java.util.UUID;
 import javax.sql.DataSource;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -31,7 +34,17 @@ public class VideoIndexAutoConfiguration {
     }
 
     @Bean
+    EmbeddingPort embeddingPort(
+            RetrievalProperties properties, ObjectMapper json, ExecutionLimitProperties limits) {
+        return embeddingPort(properties, json, limits.getProviderWait());
+    }
+
     EmbeddingPort embeddingPort(RetrievalProperties properties, ObjectMapper json) {
+        return embeddingPort(properties, json, java.time.Duration.ofMillis(250));
+    }
+
+    private EmbeddingPort embeddingPort(
+            RetrievalProperties properties, ObjectMapper json, java.time.Duration capacityWait) {
         RetrievalProperties.Embedding embedding = properties.getEmbedding();
         boolean configured = embedding.getApiKey() != null && !embedding.getApiKey().isBlank();
         if (!configured) {
@@ -45,7 +58,7 @@ public class VideoIndexAutoConfiguration {
                 embedding.getTimeout(), embedding.getDimensions(), embedding.getMaxBatchSize(),
                 embedding.getMaxTextCharacters(), embedding.getMaxInputTokensPerText(),
                 embedding.getMaxTotalCharacters(),
-                embedding.getMaxResponseBytes(), embedding.getMaxConcurrency());
+                embedding.getMaxResponseBytes(), embedding.getMaxConcurrency(), capacityWait);
     }
 
     @Bean
@@ -63,14 +76,15 @@ public class VideoIndexAutoConfiguration {
             EmbeddingPort embeddings,
             VectorIndexPort vectors,
             RetrievalProperties properties,
-            ObjectMapper json) {
+            ObjectMapper json,
+            ObjectProvider<ExecutionBudgetPolicy> budgets) {
         RetrievalProperties.Embedding embedding = properties.getEmbedding();
         return new VideoIndexApplicationService(
                 contexts, indexes, new VideoChunkBuilder(json), embeddings, vectors,
                 embedding.getProvider(), embedding.getModel(), embedding.getVersion(),
                 properties.getQdrant().getCollection(), embedding.getDimensions(),
                 embedding.getMaxBatchSize(), embedding.getMaxTextCharacters(), embedding.getMaxAttempts(),
-                Clock.systemUTC()::instant, UUID::randomUUID);
+                Clock.systemUTC()::instant, UUID::randomUUID, budgets.getIfAvailable());
     }
 
     @Bean
@@ -78,11 +92,13 @@ public class VideoIndexAutoConfiguration {
             VideoIndexPersistenceAdapter indexes,
             EmbeddingPort embeddings,
             VectorIndexPort vectors,
-            RetrievalProperties properties) {
+            RetrievalProperties properties,
+            ObjectProvider<ExecutionBudgetPolicy> budgets) {
         RetrievalProperties.Embedding embedding = properties.getEmbedding();
         return new RetrievalApplicationService(
                 indexes, embeddings, vectors, embedding.getProvider(), embedding.getModel(), embedding.getVersion(),
                 properties.getQdrant().getCollection(), embedding.getDimensions(), properties.getCandidateLimit(),
-                properties.getMaxQueryCharacters(), Clock.systemUTC()::instant, UUID::randomUUID);
+                properties.getMaxQueryCharacters(), Clock.systemUTC()::instant, UUID::randomUUID,
+                budgets.getIfAvailable());
     }
 }

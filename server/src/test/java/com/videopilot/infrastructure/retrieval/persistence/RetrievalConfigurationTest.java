@@ -9,6 +9,7 @@ import com.videopilot.context.port.VideoContextStore;
 import com.videopilot.retrieval.port.EmbeddingException;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 class RetrievalConfigurationTest {
@@ -64,7 +65,7 @@ class RetrievalConfigurationTest {
         assertThat(configuration.videoIndexApplicationService(
                 mock(VideoContextStore.class), mock(VideoIndexPersistenceAdapter.class),
                 configuration.embeddingPort(properties, json), configuration.vectorIndexPort(properties, json),
-                properties, json)).isNotNull();
+                properties, json, mock(ObjectProvider.class))).isNotNull();
     }
 
     @Test

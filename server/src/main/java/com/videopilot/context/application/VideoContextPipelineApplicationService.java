@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.videopilot.analysis.application.AnalysisJobPipeline;
+import com.videopilot.analysis.application.ExecutionBudgetExceededException;
+import com.videopilot.analysis.application.ExecutionBudgetPolicy;
 import com.videopilot.analysis.application.JobTransitionCommand;
 import com.videopilot.analysis.application.JobTransitionService;
 import com.videopilot.analysis.domain.AnalysisJob;
@@ -43,6 +45,7 @@ public class VideoContextPipelineApplicationService implements AnalysisJobPipeli
     private final VideoContextAligner aligner;
     private final ObjectMapper json;
     private final VideoIndexApplicationService indexing;
+    private final ExecutionBudgetPolicy budget;
 
     public VideoContextPipelineApplicationService(
             ContextDerivationApplicationService derivation,
@@ -54,6 +57,20 @@ public class VideoContextPipelineApplicationService implements AnalysisJobPipeli
             VideoContextAligner aligner,
             ObjectMapper json,
             VideoIndexApplicationService indexing) {
+        this(derivation, asr, ocr, contexts, store, transitions, aligner, json, indexing, null);
+    }
+
+    public VideoContextPipelineApplicationService(
+            ContextDerivationApplicationService derivation,
+            AsrExecutionApplicationService asr,
+            OcrExecutionApplicationService ocr,
+            VideoContextApplicationService contexts,
+            VideoContextStore store,
+            JobTransitionService transitions,
+            VideoContextAligner aligner,
+            ObjectMapper json,
+            VideoIndexApplicationService indexing,
+            ExecutionBudgetPolicy budget) {
         this.derivation = derivation;
         this.asr = asr;
         this.ocr = ocr;
@@ -63,6 +80,7 @@ public class VideoContextPipelineApplicationService implements AnalysisJobPipeli
         this.aligner = aligner;
         this.json = json;
         this.indexing = indexing;
+        this.budget = budget;
     }
 
     @Override
@@ -73,9 +91,19 @@ public class VideoContextPipelineApplicationService implements AnalysisJobPipeli
         } catch (IllegalArgumentException exception) {
             return failed(JobErrorCategory.NON_RETRYABLE, "INVALID_OWNER", "Job owner identity is invalid");
         }
+        try {
+            if (budget != null) budget.checkJob(job.jobId());
+        } catch (ExecutionBudgetExceededException exception) {
+            return budgetExceeded(exception);
+        }
 
         if (job.status() == JobStatus.INDEXING) {
-            var outcome = indexing.index(owner, job.jobId());
+            VideoIndexApplicationService.IndexOutcome outcome;
+            try {
+                outcome = indexing.index(owner, job.jobId());
+            } catch (ExecutionBudgetExceededException exception) {
+                return budgetExceeded(exception);
+            }
             if (outcome == VideoIndexApplicationService.IndexOutcome.RETRY_PENDING) {
                 return Outcome.retry();
             }
@@ -107,7 +135,12 @@ public class VideoContextPipelineApplicationService implements AnalysisJobPipeli
             return Outcome.retry();
         }
 
-        AsrExecutionApplicationService.AsrOutcome asrOutcome = asr.transcribe(owner, job.jobId(), job.mediaId());
+        AsrExecutionApplicationService.AsrOutcome asrOutcome;
+        try {
+            asrOutcome = asr.transcribe(owner, job.jobId(), job.mediaId());
+        } catch (ExecutionBudgetExceededException exception) {
+            return budgetExceeded(exception);
+        }
         if (asrOutcome == AsrExecutionApplicationService.AsrOutcome.FAILED) {
             return failed(JobErrorCategory.NON_RETRYABLE, "ASR_FAILED", "Speech recognition did not complete");
         }
@@ -120,7 +153,12 @@ public class VideoContextPipelineApplicationService implements AnalysisJobPipeli
             return Outcome.retry();
         }
 
-        OcrExecutionApplicationService.OcrOutcome ocrOutcome = ocr.recognize(owner, job.jobId(), job.mediaId());
+        OcrExecutionApplicationService.OcrOutcome ocrOutcome;
+        try {
+            ocrOutcome = ocr.recognize(owner, job.jobId(), job.mediaId());
+        } catch (ExecutionBudgetExceededException exception) {
+            return budgetExceeded(exception);
+        }
         if (ocrOutcome == OcrExecutionApplicationService.OcrOutcome.CANCELED) {
             return failed(JobErrorCategory.CANCELED, "OCR_CANCELED", "OCR processing was canceled");
         }
@@ -245,6 +283,11 @@ public class VideoContextPipelineApplicationService implements AnalysisJobPipeli
 
     private Outcome failed(JobErrorCategory category, String code, String summary) {
         return Outcome.failed(new JobFailure(category, code, summary, category == JobErrorCategory.RETRYABLE));
+    }
+
+    private Outcome budgetExceeded(ExecutionBudgetExceededException exception) {
+        return failed(JobErrorCategory.BUDGET_EXHAUSTED, "BUDGET_" + exception.reason().name(),
+                "Execution stopped by limit version " + exception.limitVersion());
     }
 
     private String sha256(String value) {

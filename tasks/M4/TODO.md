@@ -1,6 +1,6 @@
 # M4 任务清单：任务可靠性发布门
 
-> 状态：T0-T2 已完成，下一项为 T3。任务按依赖顺序执行，每项先写失败测试或可执行验收场景，再写生产代码。目标是在现有 Job/Checkpoint/Outbox/工作台上补齐 V1 发布可靠性，不新建通用工作流、策略注册表或独立运维平台。
+> 状态：T0-T3 已完成，下一项为 T4。任务按依赖顺序执行，每项先写失败测试或可执行验收场景，再写生产代码。目标是在现有 Job/Checkpoint/Outbox/工作台上补齐 V1 发布可靠性，不新建通用工作流、策略注册表或独立运维平台。
 
 ## T0：冻结 M4 可靠性合同与故障矩阵
 
@@ -47,11 +47,11 @@
 
 ## T3：落地全链路 deadline、预算、限流与资源池隔离
 
-- [ ] 定义一份最小、版本化执行限制配置，至少包含 Job deadline、各 operation 最大调用数、输入/输出计量、已知成本上限、供应商并发/等待上限和子进程/消息池容量；配置非法时启动失败，实际值写入执行 Trace 或事件。
-- [ ] 用一个确定性预算策略读取现有 Job/`model_call` 聚合，在每次 ASR、OCR、Embedding、LLM 高成本调用前后检查；价格不可得时显式保留 unknown，并继续执行调用数、计量和 deadline 硬门。
-- [ ] 超限后不再发起下一次高成本调用：Job pipeline 经统一状态迁移和事件记录 `BUDGET_EXHAUSTED`，同步回答经既有 `answer_record/model_call` 记录稳定预算错误且不回退 READY Job；超时/中断清理 FFmpeg/Tesseract/HTTP 资源，UNKNOWN 仍遵守 T1 的禁止自动重发规则。
-- [ ] 复用并补齐现有 Adapter semaphore/超时，把外部模型、FFmpeg/Tesseract、Rabbit consumer 与 Web/SSE 放入彼此隔离的有界执行资源；池满时有限等待或返回稳定可重试错误，不创建通用 bulkhead/ratelimiter 接口族。
-- [ ] 覆盖 deadline 边界、计量/成本累加、价格不可得、并发争抢、队列满、429/Retry-After、线程中断和子进程清理；断言硬门由 Java 决定且模型响应不能修改预算。
+- [x] 定义一份最小、版本化执行限制配置，至少包含 Job deadline、各 operation 最大调用数、输入/输出计量、已知成本上限、供应商并发/等待上限和子进程/消息池容量；配置非法时启动失败，实际值写入执行 Trace 或事件。
+- [x] 用一个确定性预算策略读取现有 Job/`model_call` 聚合，在每次 ASR、OCR、Embedding、LLM 高成本调用前后检查；价格不可得时显式保留 unknown，并继续执行调用数、计量和 deadline 硬门。
+- [x] 超限后不再发起下一次高成本调用：Job pipeline 经统一状态迁移和事件记录 `BUDGET_EXHAUSTED`，同步回答经既有 `answer_record/model_call` 记录稳定预算错误且不回退 READY Job；超时/中断清理 FFmpeg/Tesseract/HTTP 资源，UNKNOWN 仍遵守 T1 的禁止自动重发规则。
+- [x] 复用并补齐现有 Adapter semaphore/超时，把外部模型、FFmpeg/Tesseract、Rabbit consumer 与 Web/SSE 放入彼此隔离的有界执行资源；池满时有限等待或返回稳定可重试错误，不创建通用 bulkhead/ratelimiter 接口族。
+- [x] 覆盖 deadline 边界、计量/成本累加、价格不可得、并发争抢、队列满、429/Retry-After、线程中断和子进程清理；断言硬门由 Java 决定且模型响应不能修改预算。
 - **验收标准**：每个高成本阶段受相同版本化限制约束；任一硬门超限都确定性停止且落入所属聚合的正确真源；同步问答失败不污染 READY Job；资源饱和不拖死健康检查、Job 查询或 SSE；限制不会通过重启清零而绕过。
 - **验证**：预算纯规则/Adapter 边界/并发测试、MySQL 调用聚合集成、资源饱和故障测试；相关测试后运行 `server\mvnw.cmd test` 与定向 `verify -Pintegration`。
 - **预计改动区域**：analysis/model budget policy 与聚合 store、现有模型/媒体 Adapter 配置、pipeline 接线及对应测试。
@@ -60,8 +60,8 @@
 ### Checkpoint B：人工操作与资源硬门
 
 - [x] Replay 的 CAS、幂等、owner 和历史不可变性由自动化测试与真实浏览器共同证明。
-- [ ] deadline、调用数、计量和已知成本至少各有一个硬门失败样本；未知价格不显示为 0。
-- [ ] 外部模型、子进程和消息消费饱和时，Web/SSE/健康查询仍可响应。
+- [x] deadline、调用数、计量和已知成本至少各有一个硬门失败样本；未知价格不显示为 0。
+- [x] 外部模型、子进程和消息消费饱和时，Web/SSE/健康查询仍可响应。
 
 ## T4：交付只读可靠性运维仪表
 

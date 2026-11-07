@@ -12,6 +12,7 @@ public enum ErrorCode {
     MEDIA_NOT_READY("The media asset is not ready for analysis.", false),
     JOB_NOT_CANCELABLE("The analysis job cannot be canceled in its current state.", false),
     RATE_LIMITED("Too many requests. Try again later.", true),
+    BUDGET_EXHAUSTED("The execution budget has been exhausted.", false),
     CONFLICT("The request conflicts with the current state.", false),
     DEPENDENCY_UNAVAILABLE("A required dependency is unavailable.", true),
     INTERNAL_ERROR("An unexpected error occurred.", false);
