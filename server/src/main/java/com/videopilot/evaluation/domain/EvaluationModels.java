@@ -42,9 +42,9 @@ public final class EvaluationModels {
         public static final AnswerScoring EMPTY = new AnswerScoring(List.of(), List.of(), List.of());
 
         public AnswerScoring {
-            requiredFacts = List.copyOf(requiredFacts);
-            forbiddenClaims = List.copyOf(forbiddenClaims);
-            allowedChannels = List.copyOf(allowedChannels);
+            requiredFacts = requiredFacts == null ? List.of() : List.copyOf(requiredFacts);
+            forbiddenClaims = forbiddenClaims == null ? List.of() : List.copyOf(forbiddenClaims);
+            allowedChannels = allowedChannels == null ? List.of() : List.copyOf(allowedChannels);
         }
     }
 

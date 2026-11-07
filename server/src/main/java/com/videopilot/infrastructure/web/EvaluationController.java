@@ -60,6 +60,13 @@ public class EvaluationController {
                 .stream().map(this::run).toList();
     }
 
+    @GetMapping("/evaluation-datasets/{datasetId}/runs")
+    List<M5ApiContracts.RunSummary> runs(
+            @AuthenticationPrincipal IdentityPrincipal principal,
+            @PathVariable UUID datasetId) {
+        return evaluations.listRuns(principal.ownerContext(), datasetId).stream().map(this::run).toList();
+    }
+
     @GetMapping("/evaluation-runs/{runId}")
     M5ApiContracts.RunSummary run(
             @AuthenticationPrincipal IdentityPrincipal principal,

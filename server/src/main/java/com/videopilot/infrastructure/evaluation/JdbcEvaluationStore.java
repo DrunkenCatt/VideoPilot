@@ -153,6 +153,16 @@ public class JdbcEvaluationStore implements EvaluationStore {
     }
 
     @Override
+    public List<EvaluationRun> findDatasetRuns(OwnerId ownerId, UUID datasetId) {
+        return jdbc.sql("""
+                SELECT * FROM evaluation_run
+                WHERE owner_id = :owner AND dataset_id = :datasetId
+                ORDER BY created_at DESC, repetition_index
+                """).param("owner", ownerId.value().toString())
+                .param("datasetId", datasetId.toString()).query(this::runRow).list();
+    }
+
+    @Override
     public List<CaseResult> findResults(OwnerId ownerId, UUID runId) {
         return jdbc.sql("""
                 SELECT result.* FROM evaluation_case_result result

@@ -130,6 +130,11 @@ public final class EvaluationApplicationService {
                 .orElseThrow(() -> new EvaluationException(EvaluationException.Reason.NOT_FOUND));
     }
 
+    public List<EvaluationRun> listRuns(OwnerContext owner, UUID datasetId) {
+        getDataset(owner, datasetId);
+        return store.findDatasetRuns(owner.ownerId(), datasetId);
+    }
+
     public List<CaseResult> getResults(OwnerContext owner, UUID runId) {
         getRun(owner, runId);
         return store.findResults(owner.ownerId(), runId);

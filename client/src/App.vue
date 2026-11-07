@@ -4,6 +4,7 @@ import { onMounted, ref } from 'vue'
 import type { Session } from './api/contracts'
 import { ApiClientError, createSessionApi } from './api/session'
 import JobWorkbench from './features/jobs/JobWorkbench.vue'
+import EvaluationWorkbench from './features/evaluation/EvaluationWorkbench.vue'
 
 const sessionApi = createSessionApi()
 const session = ref<Session | null>(null)
@@ -11,6 +12,7 @@ const username = ref('')
 const password = ref('')
 const status = ref<'loading' | 'ready' | 'submitting'>('loading')
 const errorMessage = ref('')
+const workspace = ref<'video' | 'evaluation'>('video')
 
 function messageFor(error: unknown): string {
   if (!(error instanceof ApiClientError)) return '无法连接本地服务，请确认后端已启动。'
@@ -76,6 +78,20 @@ function sessionExpired() {
         v-if="session"
         class="session-actions"
       >
+        <button
+          class="text-button"
+          :aria-pressed="workspace === 'video'"
+          @click="workspace = 'video'"
+        >
+          视频
+        </button>
+        <button
+          class="text-button"
+          :aria-pressed="workspace === 'evaluation'"
+          @click="workspace = 'evaluation'"
+        >
+          评测
+        </button>
         <span>{{ session.username }}</span>
         <button
           class="text-button"
@@ -197,11 +213,17 @@ function sessionExpired() {
         {{ errorMessage }}
       </p>
       <JobWorkbench
+        v-if="workspace === 'video'"
+        :session="session"
+        @unauthenticated="sessionExpired"
+      />
+      <EvaluationWorkbench
+        v-else
         :session="session"
         @unauthenticated="sessionExpired"
       />
     </template>
 
-    <footer><span>VideoPilot / M3</span><span>Local-first · Evidence-bound</span></footer>
+    <footer><span>VideoPilot / M5</span><span>Local-first · Evidence-bound</span></footer>
   </div>
 </template>

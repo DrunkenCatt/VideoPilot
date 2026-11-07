@@ -27,6 +27,11 @@ function mountApp() {
           emits: ['unauthenticated'],
           template: '<main><h1>假任务工作台</h1></main>',
         },
+        EvaluationWorkbench: {
+          props: ['session'],
+          emits: ['unauthenticated'],
+          template: '<main><h1>假评测工作台</h1></main>',
+        },
       },
     },
   })
@@ -75,6 +80,15 @@ describe('App session flow', () => {
     expect(wrapper.get('.session-actions').text()).toContain('teacher')
     expect(wrapper.get('h1').text()).toContain('假任务工作台')
     expect(wrapper.text()).not.toContain('a local password')
+  })
+
+  it('switches between video and evaluation without creating another session boundary', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, activeSession)))
+    const wrapper = mountApp()
+    await flushPromises()
+    await wrapper.get('button[aria-pressed="false"]').trigger('click')
+    expect(wrapper.get('h1').text()).toBe('假评测工作台')
+    expect(wrapper.text()).toContain('teacher')
   })
 
   it('uses a generic message and clears the password after invalid credentials', async () => {

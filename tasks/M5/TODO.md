@@ -66,25 +66,25 @@
 
 **验收标准**
 
-- [ ] 新增一个 `features/evaluation` 纵切，在现有工作台显示 dataset version/split/frozen/review、运行状态、候选版本指纹和最近报告。
-- [ ] 用户可合法发起 dev 运行并查看逐题 Trace；test 未冻结/未双人批准/候选未冻结时按钮不可用且服务端同样拒绝。
-- [ ] 同页对比两次运行的指标、延迟、Token、调用数和成本 unknown；只展示差值，不做“提升/通过”的模型推断。
-- [ ] JSON 导出内容与服务端报告一致，仅含 case ID、状态、计数、指标、版本和去敏错误，不含问题/答案/Prompt/转录/原始响应。
-- [ ] loading/empty/partial/error/refresh/认证过期、320/768/1024px、键盘焦点和无横向溢出有组件与真实浏览器证据。
+- [x] 新增一个 `features/evaluation` 纵切，在现有工作台显示 dataset version/split/frozen/review、运行状态、候选版本指纹和最近报告。
+- [x] 用户可合法发起 dev 运行并查看逐题 Trace；test 未冻结/未双人批准/候选未冻结时按钮不可用且服务端同样拒绝。
+- [x] 同页对比两次运行的指标、延迟、Token、调用数和成本 unknown；只展示差值，不做“提升/通过”的模型推断。
+- [x] JSON 导出内容与服务端报告一致，仅含 case ID、状态、计数、指标、版本和去敏错误，不含问题/答案/Prompt/转录/原始响应。
+- [x] loading/empty/partial/error/refresh/认证过期、320/768/1024px、键盘焦点和无横向溢出有组件与真实浏览器证据。
 
 **验证**
 
-- [ ] API client、状态守卫、迟到响应、对比和导出测试通过；`client\npm.cmd run check`。
-- [ ] `server\mvnw.cmd test`；真实浏览器完成“查看 dataset -> 发起 dev run -> 展开 case -> 对比 -> 导出 -> 刷新恢复”，Console error/warning 为 0。
+- [x] API client、状态守卫、迟到响应、对比和导出测试通过；`client\npm.cmd run check`。
+- [x] `server\mvnw.cmd test`；真实浏览器完成“查看 dataset -> 发起 dev run -> 展开 case -> 对比 -> 导出 -> 刷新恢复”，Console error/warning 为 0。
 
 **预计改动区域**：`client/src/api/evaluation.ts`、`client/src/features/evaluation/`、现有工作台装配、Evaluation Web DTO/Controller。
 **依赖**：T2。
 
 ### Checkpoint B：指标与用户路径可信
 
-- [ ] 确定性指标可重复，随机性指标有重复次数、均值/标准差和状态分布。
-- [ ] 浏览器中的任一汇总值可追溯到 dataset、case results 和完整 execution fingerprint。
-- [ ] 导出、刷新、Redis 清空不改变报告；前端没有复制指标公式或 test 隔离规则。
+- [x] 确定性指标可重复，随机性指标有重复次数、均值/标准差和状态分布。
+- [x] 浏览器中的任一汇总值可追溯到 dataset、case results 和完整 execution fingerprint。
+- [x] 导出、刷新、Redis 清空不改变报告；前端没有复制指标公式或 test 隔离规则。
 
 ## T4：扩展、复核并冻结发布数据集
 

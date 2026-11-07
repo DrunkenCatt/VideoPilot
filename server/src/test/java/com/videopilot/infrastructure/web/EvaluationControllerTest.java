@@ -40,6 +40,7 @@ class EvaluationControllerTest {
         EvaluationRun run = run(datasetId);
         when(service.listDatasets(owner)).thenReturn(List.of(dataset));
         when(service.getDataset(owner, datasetId)).thenReturn(dataset);
+        when(service.listRuns(owner, datasetId)).thenReturn(List.of(run));
         when(service.createRuns(
                 org.mockito.ArgumentMatchers.eq(owner), org.mockito.ArgumentMatchers.eq(datasetId),
                 org.mockito.ArgumentMatchers.eq("intent-1"), org.mockito.ArgumentMatchers.any()))
@@ -50,6 +51,7 @@ class EvaluationControllerTest {
                 "formula", "gate", "limits", "config");
 
         var datasets = controller.datasets(principal);
+        var listedRuns = controller.runs(principal, datasetId);
         var created = controller.createRuns(principal, datasetId, "intent-1",
                 new M5ApiContracts.CreateRunRequest(M5ApiContracts.BaselineType.BASELINE_V1, 1, versions));
 
@@ -61,6 +63,8 @@ class EvaluationControllerTest {
             assertThat(value.runId()).isEqualTo(run.runId());
             assertThat(value.status()).isEqualTo(M5ApiContracts.RunStatus.REQUESTED);
         });
+        assertThat(listedRuns).singleElement().extracting(M5ApiContracts.RunSummary::runId)
+                .isEqualTo(run.runId());
     }
 
     @Test

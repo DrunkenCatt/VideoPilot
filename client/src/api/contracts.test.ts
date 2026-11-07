@@ -198,6 +198,8 @@ describe('M5 API contract', () => {
       rank: 1,
       claimCount: 2,
       citationCount: 2,
+      supportedClaimCount: 2,
+      localizedCitationCount: 2,
       latencyMs: 350,
       tokenCount: 120,
       estimatedCost: null,

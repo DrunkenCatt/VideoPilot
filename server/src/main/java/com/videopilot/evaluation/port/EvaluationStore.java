@@ -29,6 +29,8 @@ public interface EvaluationStore {
 
     Optional<EvaluationRun> findRun(OwnerId ownerId, UUID runId);
 
+    List<EvaluationRun> findDatasetRuns(OwnerId ownerId, UUID datasetId);
+
     List<CaseResult> findResults(OwnerId ownerId, UUID runId);
 
     List<EvaluationRun> findSeriesRuns(OwnerId ownerId, UUID seriesId);

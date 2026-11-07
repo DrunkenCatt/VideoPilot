@@ -370,10 +370,50 @@ export interface EvaluationCaseResult {
   rank: number | null
   claimCount: number
   citationCount: number
+  supportedClaimCount: number
+  localizedCitationCount: number
   latencyMs: number
   tokenCount: number
   estimatedCost: number | null
   errorCode: string | null
+}
+
+export interface EvaluationMetric {
+  name: string
+  numerator: number
+  denominator: number
+  value: number | null
+  exclusions: Record<string, number>
+}
+
+export interface EvaluationUsage {
+  totalCalls: number
+  inputUnits: number
+  outputUnits: number
+  latencyMs: number
+  estimatedCost: number | null
+  currency: string | null
+  unavailablePriceCalls: number
+  callOutcomes: Record<string, number>
+}
+
+export interface EvaluationSeriesStatistics {
+  repetitions: number
+  mean: number
+  sampleStandardDeviation: number | null
+  outcomeDistribution: Record<string, number>
+}
+
+export interface EvaluationReport {
+  runId: EvaluationRunId
+  datasetId: EvaluationDatasetId
+  datasetFingerprint: string
+  executionFingerprint: string
+  versions: EvaluationExecutionVersions
+  metrics: EvaluationMetric[]
+  usage: EvaluationUsage
+  series: Record<string, EvaluationSeriesStatistics>
+  generatedAt: string
 }
 
 export interface JobEvent {

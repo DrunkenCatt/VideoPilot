@@ -102,6 +102,8 @@ class JdbcEvaluationStoreIT {
                 .isInstanceOf(EvaluationException.class);
         List<EvaluationRun> created = store.createRuns(
                 ownerId, dataset, "intent-1", requestFingerprint, seriesId, requested);
+        assertThat(store.findDatasetRuns(ownerId, datasetId)).extracting(EvaluationRun::runId)
+                .containsExactlyElementsOf(created.stream().map(EvaluationRun::runId).toList());
         List<EvaluationRun> duplicate = store.createRuns(
                 ownerId, dataset, "intent-1", requestFingerprint, UUID.randomUUID(), requested);
         assertThat(duplicate).extracting(EvaluationRun::runId)
