@@ -1,6 +1,6 @@
 # M3 任务清单：混合检索与有证据问答
 
-> 状态：T0-T6 产品验收与五项技术条件已完成；OWASP 依赖扫描受 NVD 首次同步阻塞，完成该扫描并经项目负责人确认后才能进入下一里程碑。任务按依赖顺序执行，每项先写失败测试或可执行验收场景，再写生产代码。目标是最小可演示 RAG 闭环，并控制在一个检索 application service、一个回答 application service 和必要的外部 Adapter 内。
+> 状态：T0-T6 与 M3 退出门已完成。项目负责人于 2026-11-07 明确批准暂缓 NVD/OWASP Dependency-Check；该遗留安全项继续跟踪，但不阻塞进入下一里程碑。任务按依赖顺序执行，每项先写失败测试或可执行验收场景，再写生产代码。目标是最小可演示 RAG 闭环，并控制在一个检索 application service、一个回答 application service 和必要的外部 Adapter 内。
 
 ## T0：冻结 M3 验收合同与人工种子集
 
@@ -98,7 +98,7 @@
 - [x] 运行 T0 全部种子题并提交聚合基线报告和逐题脱敏摘要；报告 `Recall@3`、`Hit@1`、`MRR@3`、分组结果、引用定位率、拒答结果、数据量和限制。
 - [x] 真实浏览器验证正常回答、拒答、Qdrant 降级、引用 seek、刷新恢复、窄屏、键盘、可访问树、网络请求与零 Console error/warning，并把证据记录到 `tasks/M3/ACCEPTANCE.md`。
 - [x] 更新 README、Compose/环境示例、供应商目录和 `docs/M3_RUNBOOK.md`，写清 BGE-M3、DeepSeek、Qdrant schema/重建、版本、资源上限、降级和排障；只记录实际验证能力。
-- [ ] 记录实际执行命令、耗时、环境、失败/未执行项和对应 commit；覆盖率、ArchUnit、Gitleaks、npm audit 与 suppression/Floor 复核已完成，OWASP Dependency-Check 因 NVD 首次同步连续失败 20 次而未完成。
+- [x] 记录实际执行命令、耗时、环境、失败/未执行项和对应 commit；覆盖率、ArchUnit、Gitleaks、npm audit 与 suppression/Floor 复核已完成。OWASP Dependency-Check 因 NVD 首次同步连续失败 20 次而未完成，项目负责人于 2026-11-07 明确接受临时例外；现有安全脚本与 `failBuildOnCVSS=7` 阈值保持不变。
 - **验收标准**：Roadmap M3 退出门均有可复现证据；每条事实 Claim 有可点击证据；伪造引用被硬门拦截；Qdrant 不可用仍可降级完成；至少 1 条真实教学视频有人工种子标注与检索报告；负责人确认后才能进入 M4/M5。
 - **验证**：`server\mvnw.cmd test`；`server\mvnw.cmd verify -Pintegration`；`client\npm.cmd run check`；`client\npm.cmd audit --audit-level=high`；`docker compose config --quiet`；`powershell -ExecutionPolicy Bypass -File .\scripts\security-check.ps1`；`git diff --check`；Compose + 真实浏览器验收。
 - **预计改动区域**：验收/故障测试、benchmark report、README/config/runbook、`tasks/M3/ACCEPTANCE.md` 与本文件。
@@ -111,4 +111,4 @@
 - [x] 每条发布的事实 `AnswerClaim` 至少绑定一个可在声明时间窗原文中确定性定位的 `CitedEvidence`。
 - [x] 伪造、越界、跨视频和错绑引用被 Java 硬门拦截；无足够证据时系统明确拒答。
 - [x] 浏览器可完成提问、按 Claim 阅读证据、点击时间戳定位、识别拒答/降级并在刷新后恢复。
-- [ ] 本次实际质量门结果和未执行项已记录；等待项目负责人审阅本轮结果并明确确认可进入下一里程碑。
+- [x] 本次实际质量门结果和未执行项已记录；项目负责人于 2026-11-07 明确批准暂缓 NVD/OWASP 扫描并确认 M3 退出，可进入下一里程碑。

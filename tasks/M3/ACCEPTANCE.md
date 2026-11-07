@@ -500,6 +500,7 @@ Compose 现在显式传递 Embedding timeout/总字符/响应/并发/尝试、�
 | `npm audit --audit-level=high --registry=https://registry.npmjs.org` | 通过 High/Critical 门；报告 11 个仅影响开发工具链的 moderate，未用 `--force` 修改依赖 | 9.3 s |
 | Gitleaks v8.29.1 | 通过；扫描 82 commits、约 2.29 MB，`no leaks found` | 4.8 s |
 | `scripts\security-check.ps1` | 未完成；前置 318 tests、ArchUnit、JaCoCo 均通过，OWASP Dependency-Check 在无 NVD API Key 的首次 CVE 同步中连续失败 20 次后终止；没有关闭更新或降低 `failBuildOnCVSS=7` | 外部阻塞 |
+| 项目负责人安全例外 | 2026-11-07 明确批准暂缓 NVD/OWASP Dependency-Check 并完成 M3 退出；这是对未执行项及残余风险的接受，不代表扫描通过，现有脚本和 `failBuildOnCVSS=7` 保持不变 | 已确认 |
 | `docker compose config --quiet` | 通过；M3 新增配置可展开 | < 1 s |
 | 最终真实浏览器 | 正常回答、拒答、`VECTOR_STORE` 降级、刷新恢复、Enter 引用 seek、320px 无横向溢出；Console warning/error 0 | 通过 |
 | timeout 分类 mutation | 临时把 `UNKNOWN_OUTCOME` 反转为 `NON_RETRYABLE` 后 1/3 测试按预期失败；恢复后 3/3 与 JaCoCo 门通过 | 21.1 s（恢复后） |
@@ -508,4 +509,4 @@ Compose 现在显式传递 Embedding timeout/总字符/响应/并发/尝试、�
 
 全量基线最终仍为检索 `Recall@3=100%`、`Hit@1=81.82%`、`MRR@3=90.91%`；回答期望状态命中 2/6，已发布的 2 条 Citation 均可定位。回答覆盖不足是已知质量债，不阻断 M3 的证据安全退出门，也没有通过降低证据阈值掩盖。后端本轮最终切片没有新增生产 Java 分支；全局 JaCoCo 门通过，前端变更行由完整覆盖率门覆盖。`git diff --check` 通过，未发现新增 suppression、跳过测试或降低 Floor 的改动。
 
-T6 独立提交为 `ae7cf3b`、`3ddec0d`、`59752db`、`c8dda68`、`7388dcf`，最终质量门与退出记录由本节所在提交收口。M3 的五项产品技术退出条件已经满足，但统一安全入口尚未完成 OWASP 依赖扫描；补齐 NVD 数据同步并通过 `failBuildOnCVSS=7` 后，仍需项目负责人审阅本节的回答覆盖和安全结果并明确确认进入下一里程碑。
+T6 独立提交为 `ae7cf3b`、`3ddec0d`、`59752db`、`c8dda68`、`7388dcf`，最终质量门与退出记录由本节所在提交收口。M3 的五项产品技术退出条件已经满足；项目负责人于 2026-11-07 明确接受暂缓 NVD/OWASP Dependency-Check 的残余风险并批准 M3 退出，因此可以进入下一里程碑。该决定不会把未完成的扫描转换为“通过”：当前没有 Java 依赖漏洞扫描结论，`scripts\security-check.ps1` 与 `failBuildOnCVSS=7` 均保持不变；在具备可用 NVD API Key/数据源后应补跑，并须在公网或生产部署前完成安全复核。
