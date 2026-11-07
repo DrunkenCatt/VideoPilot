@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -142,13 +143,43 @@ public final class M5ApiContracts {
             Integer rank,
             int claimCount,
             int citationCount,
+            int supportedClaimCount,
+            int localizedCitationCount,
             long latencyMs,
             long tokenCount,
             BigDecimal estimatedCost,
             String errorCode) {
+
+        public CaseResult(
+                String caseId, CaseType caseType, CaseOutcome outcome, Integer rank,
+                int claimCount, int citationCount, long latencyMs, long tokenCount,
+                BigDecimal estimatedCost, String errorCode) {
+            this(caseId, caseType, outcome, rank, claimCount, citationCount, 0, 0,
+                    latencyMs, tokenCount, estimatedCost, errorCode);
+        }
     }
 
-    public record MetricValue(String name, long numerator, long denominator, Double value) {
+    public record MetricValue(
+            String name, double numerator, long denominator, Double value,
+            Map<String, Long> exclusions) {
+    }
+
+    public record UsageSummary(
+            long totalCalls,
+            long inputUnits,
+            long outputUnits,
+            long latencyMs,
+            BigDecimal estimatedCost,
+            String currency,
+            long unavailablePriceCalls,
+            Map<String, Long> callOutcomes) {
+    }
+
+    public record SeriesStatistics(
+            int repetitions,
+            double mean,
+            Double sampleStandardDeviation,
+            Map<String, Long> outcomeDistribution) {
     }
 
     public record EvaluationReport(
@@ -158,11 +189,8 @@ public final class M5ApiContracts {
             String executionFingerprint,
             ExecutionVersions versions,
             List<MetricValue> metrics,
-            long totalCalls,
-            long inputUnits,
-            long outputUnits,
-            BigDecimal estimatedCost,
-            String currency,
+            UsageSummary usage,
+            Map<String, SeriesStatistics> series,
             Instant generatedAt) {
     }
 

@@ -4,6 +4,7 @@ import com.videopilot.evaluation.domain.EvaluationModels.CaseResult;
 import com.videopilot.evaluation.domain.EvaluationModels.ClaimedRun;
 import com.videopilot.evaluation.domain.EvaluationModels.EvaluationDataset;
 import com.videopilot.evaluation.domain.EvaluationModels.EvaluationRun;
+import com.videopilot.evaluation.domain.EvaluationModels.UsageSummary;
 import com.videopilot.identity.domain.OwnerId;
 import java.time.Instant;
 import java.util.List;
@@ -29,6 +30,10 @@ public interface EvaluationStore {
     Optional<EvaluationRun> findRun(OwnerId ownerId, UUID runId);
 
     List<CaseResult> findResults(OwnerId ownerId, UUID runId);
+
+    List<EvaluationRun> findSeriesRuns(OwnerId ownerId, UUID seriesId);
+
+    UsageSummary summarizeUsage(OwnerId ownerId, UUID runId);
 
     Optional<ClaimedRun> claimNext(String leaseId, Instant leaseUntil, Instant now);
 

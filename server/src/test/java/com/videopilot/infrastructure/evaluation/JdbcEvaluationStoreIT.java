@@ -89,6 +89,17 @@ class JdbcEvaluationStoreIT {
         UUID seriesId = UUID.randomUUID();
         String requestFingerprint = "c".repeat(64);
         List<EvaluationRun> requested = List.of(run(seriesId, 1, now), run(seriesId, 2, now));
+        List<EvaluationRun> wrongPipeline = requested.stream().map(value -> new EvaluationRun(
+                value.runId(), value.seriesId(), value.datasetId(), value.datasetFingerprint(),
+                "wrong-pipeline", value.requestFingerprint(), value.executionFingerprint(),
+                new ExecutionVersions(
+                        "commit", "pipeline-v2", "prompt", "model", "embedding", "chunk",
+                        "formula", "gate", "limits", "config"), value.status(), value.repetitionIndex(),
+                value.repetitionCount(), value.completedCaseCount(), value.totalCaseCount(),
+                value.errorCode(), value.createdAt(), value.completedAt())).toList();
+        assertThatThrownBy(() -> store.createRuns(
+                ownerId, dataset, "wrong-pipeline", requestFingerprint, seriesId, wrongPipeline))
+                .isInstanceOf(EvaluationException.class);
         List<EvaluationRun> created = store.createRuns(
                 ownerId, dataset, "intent-1", requestFingerprint, seriesId, requested);
         List<EvaluationRun> duplicate = store.createRuns(
@@ -150,7 +161,7 @@ class JdbcEvaluationStoreIT {
 
     private ExecutionVersions versions() {
         return new ExecutionVersions(
-                "commit", "pipeline", "prompt", "model", "embedding", "chunk",
+                "commit", "pipeline-v1", "prompt", "model", "embedding", "chunk",
                 "formula", "gate", "limits", "config");
     }
 }

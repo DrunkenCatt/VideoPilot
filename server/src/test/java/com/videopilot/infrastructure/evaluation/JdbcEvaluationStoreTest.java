@@ -73,6 +73,7 @@ class JdbcEvaluationStoreTest {
                 doReturn(List.of(mapped)).when(query).list();
             }
             doReturn(Optional.of(mapped)).when(query).optional();
+            doReturn(mapped).when(query).single();
             return query;
         });
 
@@ -90,6 +91,11 @@ class JdbcEvaluationStoreTest {
                 .containsExactly(run);
         assertThat(store.findRun(ownerId, RUN)).isPresent();
         assertThat(store.findResults(ownerId, RUN)).singleElement();
+        assertThat(store.findSeriesRuns(ownerId, SERIES)).singleElement();
+        assertThat(store.summarizeUsage(ownerId, RUN)).satisfies(usage -> {
+            assertThat(usage.latencyMs()).isEqualTo(1L);
+            assertThat(usage.callOutcomes()).isNotEmpty();
+        });
 
         var claim = store.claimNext("00000000-0000-0000-0000-000000000606",
                 NOW.plusSeconds(60), NOW).orElseThrow();
@@ -119,6 +125,10 @@ class JdbcEvaluationStoreTest {
         when(row.getString("question")).thenReturn("question");
         when(row.getString("expected_segment_ids"))
                 .thenReturn("[\"00000000-0000-0000-0000-000000000607\"]");
+        when(row.getString("answerability")).thenReturn("NOT_APPLICABLE");
+        when(row.getString("answer_scoring"))
+                .thenReturn("{\"requiredFacts\":[],\"forbiddenClaims\":[],\"allowedChannels\":[]}");
+        when(row.getString("reliability_fact")).thenReturn(null);
         when(row.getString("review_status")).thenReturn("APPROVED");
         when(row.getInt("reviewer_count")).thenReturn(1);
         when(row.getString("case_fingerprint")).thenReturn("b".repeat(64));

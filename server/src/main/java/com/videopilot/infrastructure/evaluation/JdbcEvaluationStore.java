@@ -5,6 +5,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.videopilot.evaluation.application.EvaluationException;
 import com.videopilot.evaluation.domain.EvaluationModels.CaseOutcome;
+import com.videopilot.evaluation.domain.EvaluationModels.AnswerScoring;
+import com.videopilot.evaluation.domain.EvaluationModels.Answerability;
 import com.videopilot.evaluation.domain.EvaluationModels.CaseResult;
 import com.videopilot.evaluation.domain.EvaluationModels.CaseType;
 import com.videopilot.evaluation.domain.EvaluationModels.ClaimedRun;
@@ -15,11 +17,17 @@ import com.videopilot.evaluation.domain.EvaluationModels.EvaluationDataset;
 import com.videopilot.evaluation.domain.EvaluationModels.EvaluationRun;
 import com.videopilot.evaluation.domain.EvaluationModels.ExecutionVersions;
 import com.videopilot.evaluation.domain.EvaluationModels.RunStatus;
+import com.videopilot.evaluation.domain.EvaluationModels.UsageSummary;
+import com.videopilot.evaluation.domain.EvaluationModels.ReliabilityFact;
+import com.videopilot.evaluation.domain.EvaluationModels.ReliabilityObservation;
 import com.videopilot.evaluation.port.EvaluationStore;
 import com.videopilot.identity.domain.OwnerId;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.math.BigDecimal;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -96,6 +104,17 @@ public class JdbcEvaluationStore implements EvaluationStore {
             List<EvaluationRun> runs) {
         List<EvaluationRun> existing = findByIntent(ownerId, idempotencyKey);
         if (!existing.isEmpty()) return matchingRequest(existing, requestFingerprint);
+        if (runs.isEmpty()) throw new EvaluationException(EvaluationException.Reason.INVALID_REQUEST);
+        String pipelineVersion = runs.getFirst().versions().pipelineVersion();
+        boolean pipelineMatches = dataset.cases().stream().allMatch(evaluationCase ->
+                jdbc.sql("""
+                        SELECT COUNT(*) FROM analysis_job
+                        WHERE job_id = :jobId AND owner_id = :owner
+                          AND pipeline_version = :pipelineVersion
+                        """).param("jobId", evaluationCase.jobId().toString())
+                        .param("owner", ownerId.value().toString())
+                        .param("pipelineVersion", pipelineVersion).query(Long.class).single() == 1);
+        if (!pipelineMatches) throw new EvaluationException(EvaluationException.Reason.INVALID_REQUEST);
         try {
             for (EvaluationRun run : runs) {
                 jdbc.sql("""
@@ -145,6 +164,66 @@ public class JdbcEvaluationStore implements EvaluationStore {
     }
 
     @Override
+    public List<EvaluationRun> findSeriesRuns(OwnerId ownerId, UUID seriesId) {
+        return jdbc.sql("""
+                SELECT * FROM evaluation_run
+                WHERE owner_id = :owner AND series_id = :seriesId
+                ORDER BY repetition_index
+                """).param("owner", ownerId.value().toString()).param("seriesId", seriesId.toString())
+                .query(this::runRow).list();
+    }
+
+    @Override
+    public UsageSummary summarizeUsage(OwnerId ownerId, UUID runId) {
+        UsageRow usage = jdbc.sql("""
+                SELECT COUNT(call_record.model_call_id) AS total_calls,
+                       COALESCE(SUM(call_record.input_units), 0) AS input_units,
+                       COALESCE(SUM(call_record.output_units), 0) AS output_units,
+                       COALESCE(SUM(call_record.latency_ms), 0) AS call_latency_ms,
+                       CASE WHEN SUM(CASE WHEN call_record.model_call_id IS NOT NULL
+                                              AND (call_record.price_status <> 'AVAILABLE'
+                                                   OR call_record.estimated_cost IS NULL)
+                                          THEN 1 ELSE 0 END) > 0
+                            THEN NULL ELSE COALESCE(SUM(call_record.estimated_cost), 0) END AS estimated_cost,
+                       CASE WHEN COUNT(DISTINCT call_record.currency) = 1 THEN MAX(call_record.currency)
+                            ELSE NULL END AS currency,
+                       SUM(CASE WHEN call_record.model_call_id IS NOT NULL
+                                     AND (call_record.price_status <> 'AVAILABLE'
+                                          OR call_record.estimated_cost IS NULL)
+                                THEN 1 ELSE 0 END) AS unavailable_prices
+                FROM evaluation_run run
+                LEFT JOIN model_call call_record ON call_record.evaluation_run_id = run.run_id
+                WHERE run.owner_id = :owner AND run.run_id = :runId
+                """).param("owner", ownerId.value().toString()).param("runId", runId.toString())
+                .query((row, ignored) -> new UsageRow(
+                        row.getLong("total_calls"), row.getLong("input_units"),
+                        row.getLong("output_units"), row.getLong("call_latency_ms"),
+                        row.getBigDecimal("estimated_cost"), row.getString("currency"),
+                        row.getLong("unavailable_prices"))).single();
+        long resultLatency = jdbc.sql("""
+                SELECT COALESCE(SUM(result.latency_ms), 0)
+                FROM evaluation_case_result result
+                INNER JOIN evaluation_run run ON run.run_id = result.run_id
+                WHERE run.owner_id = :owner AND run.run_id = :runId
+                """).param("owner", ownerId.value().toString()).param("runId", runId.toString())
+                .query(Long.class).single();
+        Map<String, Long> outcomes = new LinkedHashMap<>();
+        jdbc.sql("""
+                SELECT call_record.status, COUNT(*) AS total
+                FROM evaluation_run run
+                INNER JOIN model_call call_record ON call_record.evaluation_run_id = run.run_id
+                WHERE run.owner_id = :owner AND run.run_id = :runId
+                GROUP BY call_record.status ORDER BY call_record.status
+                """).param("owner", ownerId.value().toString()).param("runId", runId.toString())
+                .query((row, ignored) -> Map.entry(row.getString("status"), row.getLong("total")))
+                .list().forEach(value -> outcomes.put(value.getKey(), value.getValue()));
+        return new UsageSummary(
+                usage.totalCalls(), usage.inputUnits(), usage.outputUnits(),
+                Math.max(resultLatency, usage.callLatencyMs()), usage.estimatedCost(), usage.currency(),
+                usage.unavailablePrices(), outcomes);
+    }
+
+    @Override
     @Transactional
     public Optional<ClaimedRun> claimNext(String leaseId, Instant leaseUntil, Instant now) {
         Optional<ClaimRow> candidate = jdbc.sql("""
@@ -175,15 +254,19 @@ public class JdbcEvaluationStore implements EvaluationStore {
         jdbc.sql("""
                 INSERT INTO evaluation_case_result (
                     run_id, dataset_id, case_id, case_type, outcome, result_rank, claim_count,
-                    citation_count, latency_ms, token_count, estimated_cost, error_code, completed_at
+                    citation_count, supported_claim_count, localized_citation_count, answer_id,
+                    latency_ms, token_count, estimated_cost, error_code, completed_at
                 ) SELECT run_id, dataset_id, :caseId, :caseType, :outcome, :rank, :claims,
-                    :citations, :latency, :tokens, :cost, :errorCode, :completedAt
+                    :citations, :supported, :localized, :answerId,
+                    :latency, :tokens, :cost, :errorCode, :completedAt
                 FROM evaluation_run
                 WHERE run_id = :runId AND status = 'RUNNING' AND lease_id = :leaseId
                 ON DUPLICATE KEY UPDATE run_id = evaluation_case_result.run_id
                 """).param("caseId", result.caseId()).param("caseType", result.caseType().name())
                 .param("outcome", result.outcome().name()).param("rank", result.rank())
                 .param("claims", result.claimCount()).param("citations", result.citationCount())
+                .param("supported", result.supportedClaimCount())
+                .param("localized", result.localizedCitationCount()).param("answerId", result.answerId())
                 .param("latency", result.latencyMs()).param("tokens", result.tokenCount())
                 .param("cost", result.estimatedCost()).param("errorCode", result.errorCode())
                 .param("completedAt", result.completedAt()).param("runId", result.runId().toString())
@@ -222,13 +305,22 @@ public class JdbcEvaluationStore implements EvaluationStore {
         jdbc.sql("""
                 INSERT INTO evaluation_case (
                     dataset_id, case_id, ordinal, case_type, job_id, question, expected_segment_ids,
+                    answerability, answer_scoring, reliability_fact, reliability_passed,
                     review_status, reviewer_count, case_fingerprint
                 ) VALUES (:datasetId,:caseId,:ordinal,:caseType,:jobId,:question,
-                    CAST(:expected AS JSON),:reviewStatus,:reviewers,:fingerprint)
+                    CAST(:expected AS JSON),:answerability,CAST(:answerScoring AS JSON),
+                    :reliabilityFact,:reliabilityPassed,:reviewStatus,:reviewers,:fingerprint)
                 """).param("datasetId", datasetId.toString()).param("caseId", value.caseId())
                 .param("ordinal", value.ordinal()).param("caseType", value.type().name())
                 .param("jobId", value.jobId().toString()).param("question", value.question())
-                .param("expected", write(value.expectedSegmentIds())).param("reviewStatus", value.reviewStatus())
+                .param("expected", write(value.expectedSegmentIds()))
+                .param("answerability", value.answerability().name())
+                .param("answerScoring", write(value.answerScoring()))
+                .param("reliabilityFact", value.reliability() == null
+                        ? null : value.reliability().fact().name())
+                .param("reliabilityPassed", value.reliability() == null
+                        ? null : value.reliability().passed())
+                .param("reviewStatus", value.reviewStatus())
                 .param("reviewers", value.reviewerCount()).param("fingerprint", value.fingerprint()).update();
     }
 
@@ -278,6 +370,11 @@ public class JdbcEvaluationStore implements EvaluationStore {
                 row.getString("case_id"), row.getInt("ordinal"),
                 CaseType.valueOf(row.getString("case_type")), UUID.fromString(row.getString("job_id")),
                 row.getString("question"), read(row.getString("expected_segment_ids"), UUIDS),
+                Answerability.valueOf(row.getString("answerability")),
+                read(row.getString("answer_scoring"), AnswerScoring.class),
+                row.getString("reliability_fact") == null ? null : new ReliabilityObservation(
+                        ReliabilityFact.valueOf(row.getString("reliability_fact")),
+                        row.getBoolean("reliability_passed")),
                 row.getString("review_status"), row.getInt("reviewer_count"),
                 row.getString("case_fingerprint"));
     }
@@ -301,6 +398,8 @@ public class JdbcEvaluationStore implements EvaluationStore {
                 UUID.fromString(row.getString("run_id")), row.getString("case_id"),
                 CaseType.valueOf(row.getString("case_type")), CaseOutcome.valueOf(row.getString("outcome")),
                 row.wasNull() ? null : rank, row.getInt("claim_count"), row.getInt("citation_count"),
+                row.getInt("supported_claim_count"), row.getInt("localized_citation_count"),
+                row.getString("answer_id") == null ? null : UUID.fromString(row.getString("answer_id")),
                 row.getLong("latency_ms"), row.getLong("token_count"), row.getBigDecimal("estimated_cost"),
                 row.getString("error_code"), instant(row, "completed_at"));
     }
@@ -335,5 +434,10 @@ public class JdbcEvaluationStore implements EvaluationStore {
     }
 
     private record ClaimRow(UUID runId, OwnerId ownerId) {
+    }
+
+    private record UsageRow(
+            long totalCalls, long inputUnits, long outputUnits, long callLatencyMs,
+            BigDecimal estimatedCost, String currency, long unavailablePrices) {
     }
 }

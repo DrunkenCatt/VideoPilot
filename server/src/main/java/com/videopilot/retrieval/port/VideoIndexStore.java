@@ -83,6 +83,7 @@ public interface VideoIndexStore {
             int attempt,
             Instant startedAt) { }
 
+
     record EmbeddedChunk(UUID chunkId, List<Float> vector, String inputFingerprint, String vectorDigest) {
         public EmbeddedChunk {
             vector = List.copyOf(vector);
@@ -127,7 +128,18 @@ public interface VideoIndexStore {
             String embeddingVersion,
             String inputFingerprint,
             int attempt,
-            Instant startedAt) { }
+            UUID evaluationRunId,
+            String evaluationCaseId,
+            Instant startedAt) {
+
+        public RetrievalEmbeddingCallStart(
+                UUID modelCallId, UUID jobId, String requestId, String operationType,
+                String provider, String model, String embeddingVersion, String inputFingerprint,
+                int attempt, Instant startedAt) {
+            this(modelCallId, jobId, requestId, operationType, provider, model, embeddingVersion,
+                    inputFingerprint, attempt, null, null, startedAt);
+        }
+    }
 
     record RetrievalEmbeddingCompletion(
             UUID modelCallId,

@@ -48,16 +48,16 @@
 
 **验收标准**
 
-- [ ] 在同一聚合器中实现并测试 `Recall@3`、`Hit@1`、`MRR@3`、严格 Claim-Evidence 支持率、引用定位率和拒答正确率；每个指标保存分子、分母和排除原因。
-- [ ] 复用 `model_call`/运行事实聚合延迟、Token、调用数及已知/未知成本；不把缺价、timeout、坏 JSON、拒答或无发布 Claim 记为零成本/成功。
-- [ ] 同 execution fingerprint 的检索至少重复 2 次并断言逐题 rank/指标一致；答案以同一 series 下不同 repetition index 至少重复 3 次，报告均值、样本标准差、逐题状态分布和 UNKNOWN。
-- [ ] Execution fingerprint 缺任一冻结版本即拒绝正式运行；运行中版本漂移立即失败并保留已完成 Trace，不混合计算。
-- [ ] 可靠性数据只复用 M4 冻结样本和结果摘要，形成丢任务、重复高成本调用、非法迁移、恢复成功率等报告，不复制故障编排框架。
+- [x] 在同一聚合器中实现并测试 `Recall@3`、`Hit@1`、`MRR@3`、严格 Claim-Evidence 支持率、引用定位率和拒答正确率；每个指标保存分子、分母和排除原因。
+- [x] 复用 `model_call`/运行事实聚合延迟、Token、调用数及已知/未知成本；不把缺价、timeout、坏 JSON、拒答或无发布 Claim 记为零成本/成功。
+- [x] 同 execution fingerprint 的检索至少重复 2 次并断言逐题 rank/指标一致；答案以同一 series 下不同 repetition index 至少重复 3 次，报告均值、样本标准差、逐题状态分布和 UNKNOWN。
+- [x] Execution fingerprint 缺任一冻结版本即拒绝正式运行；运行中版本漂移立即失败并保留已完成 Trace，不混合计算。
+- [x] 可靠性数据只复用 M4 冻结样本和结果摘要，形成丢任务、重复高成本调用、非法迁移、恢复成功率等报告，不复制故障编排框架。
 
 **验证**
 
-- [ ] 公式边界、空分母、部分失败、版本漂移、随机性统计和确定性重复测试通过；临时 mutation 能让关键指标测试失败。
-- [ ] `server\mvnw.cmd test`；真实小样本连续运行产生可比较、可重建的脱敏报告。
+- [x] 公式边界、空分母、部分失败、版本漂移、随机性统计和确定性重复测试通过；临时 mutation 能让关键指标测试失败。
+- [x] `server\mvnw.cmd test`；真实小样本连续运行产生可比较、可重建的脱敏报告。
 
 **预计改动区域**：`evaluation/application` 指标/报告、持久化查询、运行 DTO、benchmark 报告 schema。
 **依赖**：T1。

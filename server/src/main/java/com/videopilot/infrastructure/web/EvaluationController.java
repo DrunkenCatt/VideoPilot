@@ -74,6 +74,31 @@ public class EvaluationController {
         return evaluations.getResults(principal.ownerContext(), runId).stream().map(this::result).toList();
     }
 
+    @GetMapping("/evaluation-runs/{runId}/report")
+    M5ApiContracts.EvaluationReport report(
+            @AuthenticationPrincipal IdentityPrincipal principal,
+            @PathVariable UUID runId) {
+        var report = evaluations.getReport(principal.ownerContext(), runId);
+        var usage = report.usage();
+        return new M5ApiContracts.EvaluationReport(
+                report.runId(), report.datasetId(), report.datasetFingerprint(),
+                report.executionFingerprint(), versions(report.versions()),
+                report.metrics().stream().map(value -> new M5ApiContracts.MetricValue(
+                        value.name(), value.numerator(), value.denominator(), value.value(),
+                        value.exclusions())).toList(),
+                new M5ApiContracts.UsageSummary(
+                        usage.totalCalls(), usage.inputUnits(), usage.outputUnits(), usage.latencyMs(),
+                        usage.estimatedCost(), usage.currency(), usage.unavailablePriceCalls(),
+                        usage.callOutcomes()),
+                report.series().entrySet().stream().collect(java.util.stream.Collectors.toMap(
+                        java.util.Map.Entry::getKey,
+                        entry -> new M5ApiContracts.SeriesStatistics(
+                                entry.getValue().repetitions(), entry.getValue().mean(),
+                                entry.getValue().sampleStandardDeviation(),
+                                entry.getValue().outcomeDistribution()))),
+                report.generatedAt());
+    }
+
     private M5ApiContracts.DatasetSummary dataset(EvaluationDataset value) {
         int retrieval = (int) value.cases().stream()
                 .filter(item -> item.type().name().equals("RETRIEVAL")).count();
@@ -100,12 +125,20 @@ public class EvaluationController {
         return new M5ApiContracts.CaseResult(
                 value.caseId(), M5ApiContracts.CaseType.valueOf(value.caseType().name()),
                 M5ApiContracts.CaseOutcome.valueOf(value.outcome().name()), value.rank(), value.claimCount(),
-                value.citationCount(), value.latencyMs(), value.tokenCount(), value.estimatedCost(),
+                value.citationCount(), value.supportedClaimCount(), value.localizedCitationCount(),
+                value.latencyMs(), value.tokenCount(), value.estimatedCost(),
                 value.errorCode());
     }
 
     private ExecutionVersions versions(M5ApiContracts.ExecutionVersions value) {
         return new ExecutionVersions(
+                value.codeCommit(), value.pipelineVersion(), value.promptVersion(), value.modelVersion(),
+                value.embeddingVersion(), value.chunkVersion(), value.retrievalFormulaVersion(),
+                value.evidenceGateVersion(), value.limitsVersion(), value.configurationVersion());
+    }
+
+    private M5ApiContracts.ExecutionVersions versions(ExecutionVersions value) {
+        return new M5ApiContracts.ExecutionVersions(
                 value.codeCommit(), value.pipelineVersion(), value.promptVersion(), value.modelVersion(),
                 value.embeddingVersion(), value.chunkVersion(), value.retrievalFormulaVersion(),
                 value.evidenceGateVersion(), value.limitsVersion(), value.configurationVersion());

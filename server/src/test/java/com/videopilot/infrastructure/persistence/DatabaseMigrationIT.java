@@ -177,6 +177,39 @@ class DatabaseMigrationIT {
     }
 
     @Test
+    void addsEvaluationScoringAndTraceFactsWithoutASecondCallLedger() {
+        List<String> caseColumns = jdbcClient.sql("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'evaluation_case'
+                  AND column_name IN (
+                    'answerability', 'answer_scoring', 'reliability_fact', 'reliability_passed'
+                  )
+                ORDER BY ordinal_position
+                """).query(String.class).list();
+        List<String> resultColumns = jdbcClient.sql("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'evaluation_case_result'
+                  AND column_name IN (
+                    'supported_claim_count', 'localized_citation_count', 'answer_id'
+                  )
+                ORDER BY ordinal_position
+                """).query(String.class).list();
+
+        assertThat(caseColumns).containsExactly(
+                "answerability", "answer_scoring", "reliability_fact", "reliability_passed");
+        assertThat(resultColumns).containsExactly(
+                "supported_claim_count", "localized_citation_count", "answer_id");
+
+        List<String> callColumns = jdbcClient.sql("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'model_call'
+                  AND column_name IN ('evaluation_run_id', 'evaluation_case_id')
+                ORDER BY ordinal_position
+                """).query(String.class).list();
+        assertThat(callColumns).containsExactly("evaluation_run_id", "evaluation_case_id");
+    }
+
+    @Test
     @Transactional
     void enforcesJobIdentityAndStageFingerprintUniqueness() {
         insertMedia("00000000-0000-0000-0000-000000000001");

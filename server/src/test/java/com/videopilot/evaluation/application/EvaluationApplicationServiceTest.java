@@ -1,6 +1,7 @@
 package com.videopilot.evaluation.application;
 
 import static com.videopilot.evaluation.domain.EvaluationModels.CaseOutcome.COMPLETED;
+import static com.videopilot.evaluation.domain.EvaluationModels.CaseOutcome.ERROR;
 import static com.videopilot.evaluation.domain.EvaluationModels.CaseType.RETRIEVAL;
 import static com.videopilot.evaluation.domain.EvaluationModels.DatasetSplit.DEV;
 import static com.videopilot.evaluation.domain.EvaluationModels.DatasetSplit.TEST;
@@ -23,6 +24,7 @@ import com.videopilot.evaluation.domain.EvaluationModels.EvaluationCase;
 import com.videopilot.evaluation.domain.EvaluationModels.EvaluationDataset;
 import com.videopilot.evaluation.domain.EvaluationModels.EvaluationRun;
 import com.videopilot.evaluation.domain.EvaluationModels.ExecutionVersions;
+import com.videopilot.evaluation.domain.EvaluationModels.UsageSummary;
 import com.videopilot.evaluation.port.EvaluationStore;
 import com.videopilot.identity.application.OwnerContext;
 import com.videopilot.identity.domain.OwnerId;
@@ -32,6 +34,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.UUID;
+import java.util.Map;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -150,6 +153,127 @@ class EvaluationApplicationServiceTest {
         verify(runner).run(OWNER, run, second);
         verify(store).saveResult(any(), eq(fresh));
         verify(store).completeRun(any(), eq(runId), eq(NOW));
+    }
+
+    @Test
+    void rejectsTooFewRepetitionsForDeterministicRetrieval() {
+        EvaluationStore store = mock(EvaluationStore.class);
+        EvaluationBaselineRunner runner = mock(EvaluationBaselineRunner.class);
+        UUID datasetId = UUID.randomUUID();
+        EvaluationDataset dataset = new EvaluationDataset(
+                datasetId, "m5-dev-repeat", "b".repeat(64), DEV, FROZEN, 1,
+                List.of(evaluationCase("retrieval-1", 1)), NOW, NOW);
+        when(store.findDataset(OWNER.ownerId(), datasetId)).thenReturn(Optional.of(dataset));
+        EvaluationApplicationService service = service(store, runner, UUID.randomUUID().toString());
+
+        assertThatThrownBy(() -> service.createRuns(OWNER, datasetId, "repeat-run",
+                new EvaluationApplicationService.StartRun(1, versions())))
+                .isInstanceOf(EvaluationException.class)
+                .extracting(exception -> ((EvaluationException) exception).reason())
+                .isEqualTo(EvaluationException.Reason.INVALID_REQUEST);
+    }
+
+    @Test
+    void persistsVersionDriftTraceAndFailsRunWithoutExecutingLaterCases() {
+        EvaluationStore store = mock(EvaluationStore.class);
+        EvaluationBaselineRunner runner = mock(EvaluationBaselineRunner.class);
+        UUID runId = UUID.randomUUID();
+        EvaluationCase first = evaluationCase("retrieval-001", 1);
+        EvaluationCase second = evaluationCase("retrieval-002", 2);
+        EvaluationRun run = new EvaluationRun(
+                runId, UUID.randomUUID(), UUID.randomUUID(), "d".repeat(64), "request-1",
+                "e".repeat(64), "f".repeat(64), versions(), RUNNING, 1, 2, 0, 2,
+                null, NOW, null);
+        CaseResult drift = new CaseResult(runId, first.caseId(), RETRIEVAL, ERROR, null,
+                0, 0, 0, 0, null, 5, 0, null, "VERSION_DRIFT", NOW);
+        when(store.claimNext(any(), any(), eq(NOW))).thenReturn(Optional.of(new ClaimedRun(
+                OWNER.ownerId(), run, List.of(first, second), List.of())));
+        when(runner.run(OWNER, run, first)).thenReturn(drift);
+        EvaluationApplicationService service = service(store, runner, UUID.randomUUID().toString());
+
+        assertThat(service.processNext()).isTrue();
+
+        verify(store).saveResult(any(), eq(drift));
+        verify(store).failRun(any(), eq(runId), eq("VERSION_DRIFT"), eq(NOW));
+        verify(runner, never()).run(OWNER, run, second);
+        verify(store, never()).completeRun(any(), any(), any());
+    }
+
+    @Test
+    void rebuildsReportAndSeriesStatisticsFromStoreFacts() {
+        EvaluationStore store = mock(EvaluationStore.class);
+        EvaluationBaselineRunner runner = mock(EvaluationBaselineRunner.class);
+        UUID datasetId = UUID.randomUUID();
+        UUID seriesId = UUID.randomUUID();
+        EvaluationCase evaluationCase = evaluationCase("retrieval-1", 1);
+        EvaluationDataset dataset = new EvaluationDataset(
+                datasetId, "m5-report", "b".repeat(64), DEV, FROZEN, 1,
+                List.of(evaluationCase), NOW, NOW);
+        EvaluationRun first = new EvaluationRun(
+                UUID.randomUUID(), seriesId, datasetId, dataset.fingerprint(), "report-1",
+                "c".repeat(64), "d".repeat(64), versions(),
+                com.videopilot.evaluation.domain.EvaluationModels.RunStatus.COMPLETED,
+                1, 2, 1, 1, null, NOW, NOW);
+        EvaluationRun second = new EvaluationRun(
+                UUID.randomUUID(), seriesId, datasetId, dataset.fingerprint(), "report-1",
+                "c".repeat(64), "d".repeat(64), versions(),
+                com.videopilot.evaluation.domain.EvaluationModels.RunStatus.COMPLETED,
+                2, 2, 1, 1, null, NOW, NOW);
+        CaseResult firstResult = result(first.runId(), evaluationCase.caseId());
+        CaseResult secondResult = new CaseResult(
+                second.runId(), evaluationCase.caseId(), RETRIEVAL, COMPLETED, 2,
+                0, 0, 5, 0, null, null, NOW);
+        when(store.findRun(OWNER.ownerId(), second.runId())).thenReturn(Optional.of(second));
+        when(store.findDataset(OWNER.ownerId(), datasetId)).thenReturn(Optional.of(dataset));
+        when(store.findResults(OWNER.ownerId(), first.runId())).thenReturn(List.of(firstResult));
+        when(store.findResults(OWNER.ownerId(), second.runId())).thenReturn(List.of(secondResult));
+        when(store.findSeriesRuns(OWNER.ownerId(), seriesId)).thenReturn(List.of(first, second));
+        when(store.summarizeUsage(OWNER.ownerId(), second.runId())).thenReturn(new UsageSummary(
+                2, 10, 20, 30, null, null, 2, Map.of("UNKNOWN_OUTCOME", 1L)));
+        EvaluationApplicationService service = service(store, runner, UUID.randomUUID().toString());
+
+        var report = service.getReport(OWNER, second.runId());
+
+        assertThat(report.metrics()).filteredOn(value -> value.name().equals("mrrAt3"))
+                .singleElement().extracting(value -> value.numerator()).isEqualTo(0.5);
+        assertThat(report.series().get("mrrAt3").repetitions()).isEqualTo(2);
+        assertThat(report.series().get("mrrAt3").sampleStandardDeviation()).isNotNull();
+        assertThat(report.usage().estimatedCost()).isNull();
+    }
+
+    @Test
+    void failsLaterRepetitionWhenRetrievalRankChanges() {
+        EvaluationStore store = mock(EvaluationStore.class);
+        EvaluationBaselineRunner runner = mock(EvaluationBaselineRunner.class);
+        UUID seriesId = UUID.randomUUID();
+        UUID currentRunId = UUID.randomUUID();
+        UUID previousRunId = UUID.randomUUID();
+        EvaluationCase evaluationCase = evaluationCase("retrieval-1", 1);
+        EvaluationRun current = new EvaluationRun(
+                currentRunId, seriesId, UUID.randomUUID(), "d".repeat(64), "request-1",
+                "e".repeat(64), "f".repeat(64), versions(), RUNNING, 2, 2, 0, 1,
+                null, NOW, null);
+        EvaluationRun previous = new EvaluationRun(
+                previousRunId, seriesId, current.datasetId(), "d".repeat(64), "request-1",
+                "e".repeat(64), "f".repeat(64), versions(),
+                com.videopilot.evaluation.domain.EvaluationModels.RunStatus.COMPLETED,
+                1, 2, 1, 1, null, NOW, NOW);
+        CaseResult currentResult = new CaseResult(
+                currentRunId, evaluationCase.caseId(), RETRIEVAL, COMPLETED, 2,
+                0, 0, 5, 0, null, null, NOW);
+        CaseResult previousResult = result(previousRunId, evaluationCase.caseId());
+        when(store.claimNext(any(), any(), eq(NOW))).thenReturn(Optional.of(new ClaimedRun(
+                OWNER.ownerId(), current, List.of(evaluationCase), List.of())));
+        when(runner.run(OWNER, current, evaluationCase)).thenReturn(currentResult);
+        when(store.findResults(OWNER.ownerId(), currentRunId)).thenReturn(List.of(currentResult));
+        when(store.findResults(OWNER.ownerId(), previousRunId)).thenReturn(List.of(previousResult));
+        when(store.findSeriesRuns(OWNER.ownerId(), seriesId)).thenReturn(List.of(previous, current));
+        EvaluationApplicationService service = service(store, runner, UUID.randomUUID().toString());
+
+        assertThat(service.processNext()).isTrue();
+
+        verify(store).failRun(any(), eq(currentRunId), eq("NON_DETERMINISTIC_RETRIEVAL"), eq(NOW));
+        verify(store, never()).completeRun(any(), any(), any());
     }
 
     private EvaluationApplicationService service(

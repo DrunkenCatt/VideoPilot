@@ -4,7 +4,7 @@
   "title": "VideoPilot redacted evaluation report",
   "type": "object",
   "additionalProperties": false,
-  "required": ["runId", "datasetId", "datasetFingerprint", "executionFingerprint", "versions", "metrics", "usage", "generatedAt"],
+  "required": ["runId", "datasetId", "datasetFingerprint", "executionFingerprint", "versions", "metrics", "usage", "series", "generatedAt"],
   "properties": {
     "runId": { "type": "string", "format": "uuid" },
     "datasetId": { "type": "string", "format": "uuid" },
@@ -32,25 +32,52 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "numerator", "denominator", "value"],
+        "required": ["name", "numerator", "denominator", "value", "exclusions"],
         "properties": {
           "name": { "type": "string", "minLength": 1 },
-          "numerator": { "type": "integer", "minimum": 0 },
+          "numerator": { "type": "number", "minimum": 0 },
           "denominator": { "type": "integer", "minimum": 0 },
-          "value": { "type": ["number", "null"], "minimum": 0 }
+          "value": { "type": ["number", "null"], "minimum": 0 },
+          "exclusions": {
+            "type": "object",
+            "additionalProperties": { "type": "integer", "minimum": 1 }
+          }
         }
       }
     },
     "usage": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["totalCalls", "inputUnits", "outputUnits", "estimatedCost", "currency"],
+      "required": ["totalCalls", "inputUnits", "outputUnits", "latencyMs", "estimatedCost", "currency", "unavailablePriceCalls", "callOutcomes"],
       "properties": {
         "totalCalls": { "type": "integer", "minimum": 0 },
         "inputUnits": { "type": "integer", "minimum": 0 },
         "outputUnits": { "type": "integer", "minimum": 0 },
+        "latencyMs": { "type": "integer", "minimum": 0 },
         "estimatedCost": { "type": ["number", "null"], "minimum": 0 },
-        "currency": { "type": ["string", "null"] }
+        "currency": { "type": ["string", "null"] },
+        "unavailablePriceCalls": { "type": "integer", "minimum": 0 },
+        "callOutcomes": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "series": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["repetitions", "mean", "sampleStandardDeviation", "outcomeDistribution"],
+        "properties": {
+          "repetitions": { "type": "integer", "minimum": 0, "maximum": 3 },
+          "mean": { "type": "number", "minimum": 0 },
+          "sampleStandardDeviation": { "type": ["number", "null"], "minimum": 0 },
+          "outcomeDistribution": {
+            "type": "object",
+            "additionalProperties": { "type": "integer", "minimum": 1 }
+          }
+        }
       }
     },
     "generatedAt": { "type": "string", "format": "date-time" }

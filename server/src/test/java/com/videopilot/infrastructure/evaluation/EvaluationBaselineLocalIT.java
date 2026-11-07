@@ -67,7 +67,7 @@ class EvaluationBaselineLocalIT {
                 .param("mediaId", seed.mediaId().toString()).param("analysisKey", "m5-smoke-" + jobId)
                 .param("key", "m5-smoke-" + jobId).param("pipelineVersion", seed.pipelineVersion()).update();
         UUID datasetId = UUID.randomUUID();
-        String dataVersion = "m5-t1-smoke-" + datasetId;
+        String dataVersion = "m5-t2-smoke-" + datasetId;
         List<String> cases = List.of(
                 jsonCase("retrieval-smoke", "RETRIEVAL", jobId, "请概括这段教学视频的主题。"),
                 jsonCase("answer-smoke", "ANSWER", jobId, "这段教学视频主要讲解了什么？"));
@@ -75,28 +75,43 @@ class EvaluationBaselineLocalIT {
                 datasetId, dataVersion, DatasetSplit.DEV, DatasetStatus.FROZEN, 1, Instant.now()), cases);
         String commit = System.getProperty("evaluation.commit");
         assertThat(commit).as("-Devaluation.commit must identify the candidate").isNotBlank();
-        var runs = evaluations.createRuns(owner, dataset.datasetId(), "m5-t1-" + datasetId,
-                new EvaluationApplicationService.StartRun(1, new ExecutionVersions(
+        var runs = evaluations.createRuns(owner, dataset.datasetId(), "m5-t2-" + datasetId,
+                new EvaluationApplicationService.StartRun(3, new ExecutionVersions(
                         commit, "m3-evidence-qa-v1", AnswerApplicationService.PROMPT_VERSION,
-                        "deepseek-ai/DeepSeek-V3.2", "bge-m3-v1", "chunk-v1",
+                        "deepseek-ai/DeepSeek-V4-Flash", "siliconflow-bge-m3-1024-v1", "chunk-5m-v1",
                         RetrievalApplicationService.FORMULA_VERSION, "answer-evidence-gate-v1",
-                        "m4-default-v1", "m5-t1-smoke-v1")));
+                        "m4-default-v1", "m5-t2-smoke-v1")));
 
-        assertThat(evaluations.processNext()).isTrue();
+        int attempts = 0;
+        while (runs.stream().map(run -> evaluations.getRun(owner, run.runId()))
+                .anyMatch(run -> run.status().name().equals("REQUESTED")
+                        || run.status().name().equals("RUNNING"))) {
+            assertThat(attempts++).isLessThan(12);
+            assertThat(evaluations.processNext()).isTrue();
+        }
 
-        var completed = evaluations.getRun(owner, runs.getFirst().runId());
+        var completed = evaluations.getRun(owner, runs.getLast().runId());
         var results = evaluations.getResults(owner, completed.runId());
+        var report = evaluations.getReport(owner, completed.runId());
         assertThat(completed.status().name()).isEqualTo("COMPLETED");
         assertThat(results).hasSize(2);
         assertThat(results).extracting(result -> result.caseType().name())
                 .containsExactlyInAnyOrder("RETRIEVAL", "ANSWER");
+        assertThat(report.metrics()).extracting(value -> value.name())
+                .contains("recallAt3", "strictClaimEvidenceSupport", "refusalAccuracy");
+        assertThat(report.series().get("answerableStatusAccuracy").repetitions()).isEqualTo(3);
+        assertThat(report.usage().totalCalls()).isGreaterThanOrEqualTo(2);
+        assertThat(report.usage().unavailablePriceCalls()).isEqualTo(report.usage().totalCalls());
+        assertThat(report.usage().estimatedCost()).isNull();
+        assertThat(report.usage().callOutcomes()).isNotEmpty();
     }
 
     private String jsonCase(String caseId, String type, UUID jobId, String question) {
+        String answerability = "ANSWER".equals(type) ? ",\"answerability\":\"ANSWERABLE\"" : "";
         return """
-                {"caseId":"%s","caseType":"%s","jobId":"%s","question":"%s",
+                {"caseId":"%s","caseType":"%s","jobId":"%s","question":"%s"%s,
                  "expectedHits":[],"review":{"status":"APPROVED","reviewerCount":1}}
-                """.formatted(caseId, type, jobId, question);
+                """.formatted(caseId, type, jobId, question, answerability);
     }
 
     private record Seed(UUID ownerId, UUID mediaId, String pipelineVersion) {

@@ -317,11 +317,11 @@ public class VideoIndexPersistenceAdapter implements VideoIndexStore {
                 INSERT INTO model_call (
                     model_call_id, job_id, request_id, operation_type, provider, model_name,
                     model_version, embedding_version, input_fingerprint, status, attempt,
-                    price_status, started_at
+                    price_status, evaluation_run_id, evaluation_case_id, started_at
                 ) VALUES (
                     :callId, :jobId, :requestId, :operationType, :provider, :model,
                     :model, :embeddingVersion, :fingerprint, 'STARTED', :attempt,
-                    'UNAVAILABLE', :startedAt
+                    'UNAVAILABLE', :evaluationRunId, :evaluationCaseId, :startedAt
                 )
                 """)
                 .param("callId", call.modelCallId().toString()).param("jobId", call.jobId().toString())
@@ -329,6 +329,9 @@ public class VideoIndexPersistenceAdapter implements VideoIndexStore {
                 .param("provider", call.provider()).param("model", call.model())
                 .param("embeddingVersion", call.embeddingVersion())
                 .param("fingerprint", call.inputFingerprint()).param("attempt", call.attempt())
+                .param("evaluationRunId", call.evaluationRunId() == null
+                        ? null : call.evaluationRunId().toString())
+                .param("evaluationCaseId", call.evaluationCaseId())
                 .param("startedAt", call.startedAt()).update();
         if (inserted != 1) throw new IllegalStateException("retrieval embedding call was not started");
     }

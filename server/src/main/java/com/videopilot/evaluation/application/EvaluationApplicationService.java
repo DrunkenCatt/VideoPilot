@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.videopilot.evaluation.domain.EvaluationModels.CaseResult;
 import com.videopilot.evaluation.domain.EvaluationModels.CaseType;
+import com.videopilot.evaluation.domain.EvaluationModels.Answerability;
+import com.videopilot.evaluation.domain.EvaluationModels.AnswerScoring;
 import com.videopilot.evaluation.domain.EvaluationModels.DatasetSplit;
 import com.videopilot.evaluation.domain.EvaluationModels.DatasetStatus;
 import com.videopilot.evaluation.domain.EvaluationModels.EvaluationCase;
@@ -11,6 +13,10 @@ import com.videopilot.evaluation.domain.EvaluationModels.EvaluationDataset;
 import com.videopilot.evaluation.domain.EvaluationModels.EvaluationRun;
 import com.videopilot.evaluation.domain.EvaluationModels.ExecutionVersions;
 import com.videopilot.evaluation.domain.EvaluationModels.RunStatus;
+import com.videopilot.evaluation.domain.EvaluationModels.ReliabilityFact;
+import com.videopilot.evaluation.domain.EvaluationModels.ReliabilityObservation;
+import com.videopilot.evaluation.domain.EvaluationModels.EvaluationReport;
+import com.videopilot.evaluation.domain.EvaluationModels.SeriesStatistics;
 import com.videopilot.evaluation.port.EvaluationStore;
 import com.videopilot.identity.application.OwnerContext;
 import java.nio.charset.StandardCharsets;
@@ -23,6 +29,7 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -39,6 +46,7 @@ public final class EvaluationApplicationService {
     private final ObjectMapper json;
     private final Supplier<Instant> now;
     private final Supplier<UUID> ids;
+    private final EvaluationReportCalculator reports = new EvaluationReportCalculator();
 
     public EvaluationApplicationService(
             EvaluationStore store,
@@ -97,6 +105,11 @@ public final class EvaluationApplicationService {
         }
         EvaluationDataset dataset = getDataset(owner, datasetId);
         validateDataset(dataset, true);
+        int requiredRepetitions = dataset.cases().stream().anyMatch(value -> value.type() == CaseType.ANSWER)
+                ? 3 : dataset.cases().stream().anyMatch(value -> value.type() == CaseType.RETRIEVAL) ? 2 : 1;
+        if (command.repetitions() < requiredRepetitions) {
+            throw new EvaluationException(EvaluationException.Reason.INVALID_REQUEST);
+        }
         String executionFingerprint = sha256(String.join("|", command.versions().values()));
         String requestFingerprint = sha256(dataset.fingerprint() + '|' + executionFingerprint
                 + '|' + command.repetitions() + "|BASELINE_V1");
@@ -122,6 +135,36 @@ public final class EvaluationApplicationService {
         return store.findResults(owner.ownerId(), runId);
     }
 
+    public EvaluationReport getReport(OwnerContext owner, UUID runId) {
+        EvaluationRun run = getRun(owner, runId);
+        EvaluationDataset dataset = getDataset(owner, run.datasetId());
+        List<CaseResult> results = store.findResults(owner.ownerId(), runId);
+        var metrics = reports.metrics(dataset.cases(), results);
+        Map<String, SeriesStatistics> series = new java.util.LinkedHashMap<>();
+        List<EvaluationRun> repetitions = store.findSeriesRuns(owner.ownerId(), run.seriesId()).stream()
+                .filter(value -> value.status() == RunStatus.COMPLETED).toList();
+        for (var metric : metrics) {
+            List<EvaluationReportCalculator.RunObservation> observations = new ArrayList<>();
+            for (EvaluationRun repetition : repetitions) {
+                List<CaseResult> repetitionResults = store.findResults(owner.ownerId(), repetition.runId());
+                var repetitionMetric = reports.metrics(dataset.cases(), repetitionResults).stream()
+                        .filter(value -> value.name().equals(metric.name())).findFirst().orElseThrow();
+                if (repetitionMetric.value() != null) {
+                    Map<com.videopilot.evaluation.domain.EvaluationModels.CaseOutcome, Long> outcomes =
+                            repetitionResults.stream().collect(java.util.stream.Collectors.groupingBy(
+                                    CaseResult::outcome, java.util.stream.Collectors.counting()));
+                    observations.add(new EvaluationReportCalculator.RunObservation(
+                            repetition.repetitionIndex(), repetitionMetric.value(), outcomes));
+                }
+            }
+            series.put(metric.name(), reports.seriesStatistics(observations));
+        }
+        return new EvaluationReport(
+                run.runId(), run.datasetId(), run.datasetFingerprint(), run.executionFingerprint(),
+                run.versions(), metrics, store.summarizeUsage(owner.ownerId(), runId),
+                series, now.get());
+    }
+
     public boolean processNext() {
         Instant claimedAt = now.get();
         String leaseId = ids.get().toString();
@@ -135,7 +178,16 @@ public final class EvaluationApplicationService {
             for (EvaluationCase evaluationCase : work.cases().stream()
                     .sorted(Comparator.comparingInt(EvaluationCase::ordinal)).toList()) {
                 if (completed.contains(evaluationCase.caseId())) continue;
-                store.saveResult(leaseId, runner.run(owner, work.run(), evaluationCase));
+                CaseResult result = runner.run(owner, work.run(), evaluationCase);
+                store.saveResult(leaseId, result);
+                if ("VERSION_DRIFT".equals(result.errorCode())) {
+                    store.failRun(leaseId, work.run().runId(), "VERSION_DRIFT", now.get());
+                    return true;
+                }
+            }
+            if (!retrievalIsDeterministic(work)) {
+                store.failRun(leaseId, work.run().runId(), "NON_DETERMINISTIC_RETRIEVAL", now.get());
+                return true;
             }
             store.completeRun(leaseId, work.run().runId(), now.get());
             return true;
@@ -143,6 +195,26 @@ public final class EvaluationApplicationService {
             store.failRun(leaseId, work.run().runId(), "EVALUATION_EXECUTION_FAILED", now.get());
             throw new EvaluationException(EvaluationException.Reason.EXECUTION_FAILED, exception);
         }
+    }
+
+    private boolean retrievalIsDeterministic(com.videopilot.evaluation.domain.EvaluationModels.ClaimedRun work) {
+        if (work.run().repetitionIndex() == 1) return true;
+        Map<String, CaseResult> current = store.findResults(work.ownerId(), work.run().runId()).stream()
+                .filter(value -> value.caseType() == CaseType.RETRIEVAL)
+                .collect(java.util.stream.Collectors.toMap(CaseResult::caseId, value -> value));
+        return store.findSeriesRuns(work.ownerId(), work.run().seriesId()).stream()
+                .filter(value -> value.repetitionIndex() < work.run().repetitionIndex()
+                        && value.status() == RunStatus.COMPLETED)
+                .allMatch(previous -> {
+                    Map<String, CaseResult> prior = store.findResults(work.ownerId(), previous.runId()).stream()
+                            .filter(value -> value.caseType() == CaseType.RETRIEVAL)
+                            .collect(java.util.stream.Collectors.toMap(CaseResult::caseId, value -> value));
+                    return current.keySet().equals(prior.keySet()) && current.entrySet().stream().allMatch(entry -> {
+                        CaseResult before = prior.get(entry.getKey());
+                        return java.util.Objects.equals(entry.getValue().rank(), before.rank())
+                                && entry.getValue().outcome() == before.outcome();
+                    });
+                });
     }
 
     private EvaluationCase parseCase(String line, int ordinal) {
@@ -157,11 +229,25 @@ public final class EvaluationApplicationService {
                     expected.add(UUID.fromString(text(hit, "segmentId"))));
             String reviewStatus = text(root.path("review"), "status");
             int reviewerCount = root.path("review").path("reviewerCount").asInt(-1);
+            Answerability answerability = type == CaseType.ANSWER
+                    ? Answerability.valueOf(text(root, "answerability").toUpperCase(java.util.Locale.ROOT))
+                    : Answerability.NOT_APPLICABLE;
+            AnswerScoring scoring = new AnswerScoring(
+                    strings(root, "requiredFacts"), strings(root, "forbiddenClaims"),
+                    strings(root, "allowedChannels"));
+            ReliabilityObservation reliability = null;
+            if (type == CaseType.RELIABILITY) {
+                JsonNode fact = root.path("reliability");
+                if (!fact.path("passed").isBoolean()) throw new IllegalArgumentException("reliability.passed");
+                reliability = new ReliabilityObservation(
+                        ReliabilityFact.valueOf(text(fact, "fact")), fact.path("passed").asBoolean(false));
+            }
             String caseFingerprint = sha256(caseId + '|' + type + '|' + jobId + '|' + question + '|'
-                    + expected + '|' + reviewStatus + '|' + reviewerCount);
+                    + expected + '|' + answerability + '|' + scoring + '|' + reliability + '|'
+                    + reviewStatus + '|' + reviewerCount);
             return new EvaluationCase(
-                    caseId, ordinal, type, jobId, question, expected, reviewStatus, reviewerCount,
-                    caseFingerprint);
+                    caseId, ordinal, type, jobId, question, expected, answerability, scoring, reliability,
+                    reviewStatus, reviewerCount, caseFingerprint);
         } catch (RuntimeException | java.io.IOException exception) {
             throw new EvaluationException(EvaluationException.Reason.INVALID_REQUEST, exception);
         }
@@ -178,9 +264,6 @@ public final class EvaluationApplicationService {
             throw new EvaluationException(forRun
                     ? EvaluationException.Reason.DATASET_NOT_READY
                     : EvaluationException.Reason.INVALID_REQUEST);
-        }
-        if (forRun && dataset.cases().stream().anyMatch(value -> value.type() == CaseType.RELIABILITY)) {
-            throw new EvaluationException(EvaluationException.Reason.DATASET_NOT_READY);
         }
         if (forRun && dataset.split() == DatasetSplit.TEST
                 && (dataset.status() != DatasetStatus.FROZEN
@@ -204,6 +287,15 @@ public final class EvaluationApplicationService {
         String value = node.path(field).asText();
         if (!hasText(value)) throw new IllegalArgumentException(field + " is required");
         return value.trim();
+    }
+
+    private List<String> strings(JsonNode node, String field) {
+        List<String> values = new ArrayList<>();
+        node.withArray(field).forEach(value -> {
+            if (!value.isTextual() || value.asText().isBlank()) throw new IllegalArgumentException(field);
+            values.add(value.asText().trim());
+        });
+        return List.copyOf(values);
     }
 
     private boolean hasText(String value) {
