@@ -4,7 +4,7 @@
 
 ## 目录职责
 
-- `schemas/`：检索、答案、Agent 和反馈四类稳定数据合同。
+- `schemas/`：检索、答案、Agent、反馈、数据集 manifest 和脱敏评测报告的稳定数据合同。
 - `examples/`：可提交、无版权内容的最小示例，用于说明字段语义。
 - `local/`：本机原始视频、转录和工作标注；整个目录被 Git 忽略。
 
@@ -44,3 +44,9 @@ cd server
 ```
 
 运行前需要导出 `SILICONFLOW_API_KEY`，并把 integration profile 的 MySQL、Qdrant 等端口指向健康的 Compose 服务和一次性验证数据库。检索报告保存聚合指标、失败 case ID、分组方法、版本和 commit；回答报告按 case ID 保存状态、Claim/Citation 数和定位结果。两份报告均不保存问题全文、完整转录、OCR、模型回答原文、Prompt 或向量。远端 timeout 和硬门拒答属于候选版基线结果，不会被 Runner 重试或改写成通过。
+
+## M5 冻结合同
+
+M5 使用 `dataset-manifest.schema.json` 固定数据版本、split、冻结状态、权利信息和内容指纹，使用 `evaluation-report.schema.json` 固定可提交的脱敏报告。正式 `test` 只接受冻结、按视频或主题与 `dev` 隔离且全部计分题双人批准的数据；工作标注仍只保存在 `benchmark/local/`。
+
+报告只允许包含 case ID、状态、计数、指标、延迟、计量、已知/未知成本和版本指纹。问题、答案、引用原文、Prompt、完整转录/OCR、模型原始响应、对象 key、向量和凭据不得进入 Git 报告。

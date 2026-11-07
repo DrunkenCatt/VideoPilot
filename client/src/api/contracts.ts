@@ -11,6 +11,8 @@ export type ChunkId = Brand<string, 'ChunkId'>
 export type AnswerId = Brand<string, 'AnswerId'>
 export type ClaimId = Brand<string, 'ClaimId'>
 export type CitationId = Brand<string, 'CitationId'>
+export type EvaluationDatasetId = Brand<string, 'EvaluationDatasetId'>
+export type EvaluationRunId = Brand<string, 'EvaluationRunId'>
 
 export const API = {
   prefix: '/api/v1',
@@ -71,6 +73,26 @@ export function jobReplaysPath(jobId: JobId): string {
 
 export function reliabilitySummaryPath(): string {
   return `${API.prefix}/operations/reliability`
+}
+
+export function evaluationDatasetPath(datasetId: EvaluationDatasetId | string): string {
+  return `${API.prefix}/evaluation-datasets/${datasetId}`
+}
+
+export function evaluationDatasetRunsPath(datasetId: EvaluationDatasetId | string): string {
+  return `${evaluationDatasetPath(datasetId)}/runs`
+}
+
+export function evaluationRunResultsPath(runId: EvaluationRunId | string): string {
+  return `${API.prefix}/evaluation-runs/${runId}/results`
+}
+
+export function evaluationRunReportPath(runId: EvaluationRunId | string): string {
+  return `${API.prefix}/evaluation-runs/${runId}/report`
+}
+
+export function evaluationRunsComparisonPath(): string {
+  return `${API.prefix}/evaluation-runs/comparison`
 }
 
 export type AnalysisMode = 'STANDARD'
@@ -285,6 +307,73 @@ export interface ReliabilitySummary {
   providerCalls: ProviderCalls[]
   degradedSources: DegradedOperationsSource[]
   generatedAt: string
+}
+
+export type EvaluationDatasetSplit = 'DEV' | 'TEST'
+export type EvaluationDatasetStatus = 'DRAFT' | 'FROZEN'
+export type EvaluationBaselineType = 'BASELINE_V1'
+export type EvaluationRunStatus = 'REQUESTED' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+export type EvaluationCaseType = 'RETRIEVAL' | 'ANSWER' | 'RELIABILITY'
+export type EvaluationCaseOutcome = 'COMPLETED' | 'REFUSED' | 'ERROR' | 'UNKNOWN'
+
+export interface EvaluationExecutionVersions {
+  codeCommit: string
+  pipelineVersion: string
+  promptVersion: string
+  modelVersion: string
+  embeddingVersion: string
+  chunkVersion: string
+  retrievalFormulaVersion: string
+  evidenceGateVersion: string
+  limitsVersion: string
+  configurationVersion: string
+}
+
+export interface EvaluationRunRequest {
+  baselineType: EvaluationBaselineType
+  repetitions: 1 | 2 | 3
+  versions: EvaluationExecutionVersions
+}
+
+export interface EvaluationDataset {
+  datasetId: EvaluationDatasetId
+  dataVersion: string
+  datasetFingerprint: string
+  split: EvaluationDatasetSplit
+  status: EvaluationDatasetStatus
+  retrievalCaseCount: number
+  answerCaseCount: number
+  videoCount: number
+  approvedCaseCount: number
+  totalCaseCount: number
+  frozenAt: string | null
+}
+
+export interface EvaluationRun {
+  runId: EvaluationRunId
+  datasetId: EvaluationDatasetId
+  baselineType: EvaluationBaselineType
+  status: EvaluationRunStatus
+  executionFingerprint: string
+  repetitionIndex: number
+  repetitionCount: number
+  completedCaseCount: number
+  totalCaseCount: number
+  createdAt: string
+  completedAt: string | null
+}
+
+export interface EvaluationCaseResult {
+  caseId: string
+  caseType: EvaluationCaseType
+  outcome: EvaluationCaseOutcome
+  rank: number | null
+  claimCount: number
+  citationCount: number
+  latencyMs: number
+  tokenCount: number
+  estimatedCost: number | null
+  errorCode: string | null
 }
 
 export interface JobEvent {

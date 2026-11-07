@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://videopilot.local/schemas/evaluation-report.schema.json",
+  "title": "VideoPilot redacted evaluation report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["runId", "datasetId", "datasetFingerprint", "executionFingerprint", "versions", "metrics", "usage", "generatedAt"],
+  "properties": {
+    "runId": { "type": "string", "format": "uuid" },
+    "datasetId": { "type": "string", "format": "uuid" },
+    "datasetFingerprint": { "$ref": "#/$defs/fingerprint" },
+    "executionFingerprint": { "$ref": "#/$defs/fingerprint" },
+    "versions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["codeCommit", "pipelineVersion", "promptVersion", "modelVersion", "embeddingVersion", "chunkVersion", "retrievalFormulaVersion", "evidenceGateVersion", "limitsVersion", "configurationVersion"],
+      "properties": {
+        "codeCommit": { "$ref": "#/$defs/version" },
+        "pipelineVersion": { "$ref": "#/$defs/version" },
+        "promptVersion": { "$ref": "#/$defs/version" },
+        "modelVersion": { "$ref": "#/$defs/version" },
+        "embeddingVersion": { "$ref": "#/$defs/version" },
+        "chunkVersion": { "$ref": "#/$defs/version" },
+        "retrievalFormulaVersion": { "$ref": "#/$defs/version" },
+        "evidenceGateVersion": { "$ref": "#/$defs/version" },
+        "limitsVersion": { "$ref": "#/$defs/version" },
+        "configurationVersion": { "$ref": "#/$defs/version" }
+      }
+    },
+    "metrics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "numerator", "denominator", "value"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "numerator": { "type": "integer", "minimum": 0 },
+          "denominator": { "type": "integer", "minimum": 0 },
+          "value": { "type": ["number", "null"], "minimum": 0 }
+        }
+      }
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["totalCalls", "inputUnits", "outputUnits", "estimatedCost", "currency"],
+      "properties": {
+        "totalCalls": { "type": "integer", "minimum": 0 },
+        "inputUnits": { "type": "integer", "minimum": 0 },
+        "outputUnits": { "type": "integer", "minimum": 0 },
+        "estimatedCost": { "type": ["number", "null"], "minimum": 0 },
+        "currency": { "type": ["string", "null"] }
+      }
+    },
+    "generatedAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "fingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "version": { "type": "string", "minLength": 1 }
+  }
+}

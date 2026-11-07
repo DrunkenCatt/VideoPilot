@@ -11,6 +11,11 @@ import {
   jobRetrievalPath,
   jobReplaysPath,
   mediaPlaybackPath,
+  evaluationDatasetPath,
+  evaluationDatasetRunsPath,
+  evaluationRunReportPath,
+  evaluationRunResultsPath,
+  evaluationRunsComparisonPath,
   reliabilitySummaryPath,
   type AnswerResponse,
   type AnalysisJob,
@@ -20,6 +25,9 @@ import {
   type KeyframeId,
   type ReliabilitySummary,
   type ReplayRequest,
+  type EvaluationDataset,
+  type EvaluationRunRequest,
+  type EvaluationCaseResult,
   type VideoContext,
   type VideoSegment,
 } from './contracts'
@@ -140,5 +148,62 @@ describe('M4 API contract', () => {
     expect(replay.confirmed).toBe(true)
     expect(summary.providerCalls[0]?.estimatedCost).toBeNull()
     expect(summary.degradedSources).toEqual(['RABBITMQ'])
+  })
+})
+
+describe('M5 API contract', () => {
+  it('uses dataset-scoped run creation and run-scoped trace/report paths', () => {
+    expect(evaluationDatasetPath('dataset-1')).toBe('/api/v1/evaluation-datasets/dataset-1')
+    expect(evaluationDatasetRunsPath('dataset-1')).toBe('/api/v1/evaluation-datasets/dataset-1/runs')
+    expect(evaluationRunResultsPath('run-1')).toBe('/api/v1/evaluation-runs/run-1/results')
+    expect(evaluationRunReportPath('run-1')).toBe('/api/v1/evaluation-runs/run-1/report')
+    expect(evaluationRunsComparisonPath()).toBe('/api/v1/evaluation-runs/comparison')
+  })
+
+  it('keeps test freezing, repetitions and all execution versions explicit', () => {
+    const dataset = {
+      split: 'TEST',
+      status: 'FROZEN',
+      approvedCaseCount: 150,
+      totalCaseCount: 150,
+    } as EvaluationDataset
+    const request: EvaluationRunRequest = {
+      baselineType: 'BASELINE_V1',
+      repetitions: 3,
+      versions: {
+        codeCommit: 'c9b907e',
+        pipelineVersion: 'm3-evidence-qa-v1',
+        promptVersion: 'answer-evidence-v1',
+        modelVersion: 'deepseek-ai/DeepSeek-V4-Flash',
+        embeddingVersion: 'siliconflow-bge-m3-1024-v1',
+        chunkVersion: 'chunk-5m-v1',
+        retrievalFormulaVersion: 'hybrid-0.60-0.25-0.15-v1',
+        evidenceGateVersion: 'citation-gate-v1',
+        limitsVersion: 'm4-limits-v1',
+        configurationVersion: 'm5-baseline-v1',
+      },
+    }
+
+    expect(dataset.status).toBe('FROZEN')
+    expect(dataset.approvedCaseCount).toBe(dataset.totalCaseCount)
+    expect(request.repetitions).toBe(3)
+    expect(Object.values(request.versions)).not.toContain('')
+  })
+
+  it('keeps case traces free of question, answer and prompt fields', () => {
+    const result: EvaluationCaseResult = {
+      caseId: 'release-r-001',
+      caseType: 'RETRIEVAL',
+      outcome: 'COMPLETED',
+      rank: 1,
+      claimCount: 2,
+      citationCount: 2,
+      latencyMs: 350,
+      tokenCount: 120,
+      estimatedCost: null,
+      errorCode: null,
+    }
+
+    expect(Object.keys(result)).not.toEqual(expect.arrayContaining(['question', 'answer', 'prompt', 'response']))
   })
 })
