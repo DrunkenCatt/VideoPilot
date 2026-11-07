@@ -65,6 +65,7 @@ function isJobEvent(value: unknown): value is JobEvent {
 async function readEventStream(
   response: Response,
   onEvent: (event: JobEvent) => void,
+  onCursor: (cursor: number) => void,
   initialCursor: number,
 ): Promise<{ cursor: number; terminal: boolean }> {
   if (!response.body) throw new ApiClientError(response.status)
@@ -87,6 +88,7 @@ async function readEventStream(
     cursor = parsed.data.sequence
     terminal = parsed.data.terminal
     onEvent(parsed.data)
+    onCursor(cursor)
   }
 
   while (true) {
@@ -193,7 +195,12 @@ export function createJobsApi(request: Request = fetch, sleep: Sleep = defaultSl
           if (!response.ok && !response.headers.get('Content-Type')?.includes('text/event-stream')) {
             throw await errorFrom(response)
           }
-          const result = await readEventStream(response, options.onEvent, cursor)
+          const result = await readEventStream(
+            response,
+            options.onEvent,
+            (persistedCursor) => { cursor = Math.max(cursor, persistedCursor) },
+            cursor,
+          )
           cursor = Math.max(cursor, result.cursor)
           if (result.terminal) return cursor
         } catch (error) {

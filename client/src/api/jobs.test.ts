@@ -38,6 +38,24 @@ function eventStreamResponse(events: Array<{ id?: number; event: string; data: u
   return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
 }
 
+function interruptedEventStreamResponse(event: { id: number; event: string; data: unknown }): Response {
+  const encoder = new TextEncoder()
+  let delivered = false
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (!delivered) {
+        delivered = true
+        controller.enqueue(encoder.encode(
+          `id: ${event.id}\nevent: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`,
+        ))
+        return
+      }
+      controller.error(new TypeError('connection reset after event'))
+    },
+  })
+  return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+}
+
 describe('jobs API', () => {
   it('submits one intent with its stable idempotency key and CSRF token', async () => {
     const request = vi.fn().mockResolvedValue(jsonResponse(202, job))
@@ -145,6 +163,74 @@ describe('jobs API', () => {
         headers: expect.objectContaining({ 'Last-Event-ID': '2' }),
       }),
     )
+  })
+
+  it('retains the last persisted event sequence when a stream fails after delivery', async () => {
+    const queued: JobEvent = {
+      jobId: job.jobId,
+      sequence: 2,
+      eventType: 'JOB_QUEUED',
+      status: 'QUEUED',
+      stage: null,
+      message: 'Analysis job queued.',
+      occurredAt: '2026-11-02T08:00:01Z',
+      terminal: false,
+    }
+    const ready: JobEvent = {
+      ...queued,
+      sequence: 6,
+      eventType: 'JOB_READY',
+      status: 'READY',
+      message: 'Analysis job ready.',
+      terminal: true,
+    }
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(interruptedEventStreamResponse({ id: 2, event: 'job-event', data: queued }))
+      .mockResolvedValueOnce(eventStreamResponse([{ id: 6, event: 'job-event', data: ready }]))
+
+    const cursor = await createJobsApi(request, async () => undefined).followEvents(job.links.events, {
+      onEvent: vi.fn(),
+    })
+
+    expect(cursor).toBe(6)
+    expect(request).toHaveBeenNthCalledWith(
+      2,
+      job.links.events,
+      expect.objectContaining({ headers: expect.objectContaining({ 'Last-Event-ID': '2' }) }),
+    )
+  })
+
+  it('does not advance the reconnect cursor when the event handler rejects delivery', async () => {
+    const queued: JobEvent = {
+      jobId: job.jobId,
+      sequence: 2,
+      eventType: 'JOB_QUEUED',
+      status: 'QUEUED',
+      stage: null,
+      message: 'Analysis job queued.',
+      occurredAt: '2026-11-02T08:00:01Z',
+      terminal: false,
+    }
+    const ready: JobEvent = { ...queued, sequence: 3, eventType: 'JOB_READY', status: 'READY', terminal: true }
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(eventStreamResponse([{ id: 2, event: 'job-event', data: queued }]))
+      .mockResolvedValueOnce(eventStreamResponse([
+        { id: 2, event: 'job-event', data: queued },
+        { id: 3, event: 'job-event', data: ready },
+      ]))
+    const received: number[] = []
+    const onEvent = vi.fn((event: JobEvent) => {
+      if (onEvent.mock.calls.length === 1) throw new Error('render failed')
+      received.push(event.sequence)
+    })
+
+    const cursor = await createJobsApi(request, async () => undefined).followEvents(job.links.events, { onEvent })
+
+    expect(cursor).toBe(3)
+    expect(received).toEqual([2, 3])
+    expect(request.mock.calls[1]?.[1]?.headers).not.toHaveProperty('Last-Event-ID')
   })
 
   it('stops reconnecting on a stable SSE authorization error', async () => {

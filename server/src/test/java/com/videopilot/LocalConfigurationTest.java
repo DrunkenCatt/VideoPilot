@@ -35,7 +35,7 @@ class LocalConfigurationTest {
     void localProfileMapsEnvironmentVariablesToTheDatasource() {
         assertThat(environment.getProperty("spring.datasource.url"))
                 .isEqualTo("jdbc:mysql://configured-mysql:13306/configured_database"
-                        + "?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai");
+                        + "?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC");
         assertThat(environment.getProperty("spring.datasource.username"))
                 .isEqualTo("configured_user");
         assertThat(environment.getProperty("spring.datasource.password"))

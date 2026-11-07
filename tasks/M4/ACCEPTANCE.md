@@ -1,6 +1,6 @@
 # M4 验收记录：任务可靠性发布门
 
-> 状态：T0-T3 已完成；T4-T5 尚未实现。本文按任务持续追加实际命令、环境、结果和未执行项，未验证能力不得提前标记通过。
+> 状态：T0-T5 已完成；项目负责人于 2026-11-08 明确接受已记录遗留风险并批准 M4/V1 MVP 退出。本文按任务持续追加实际命令、环境、结果和未执行项，未验证能力不得提前标记通过。
 
 ## 1. M4 针对现有流程解决的问题
 
@@ -321,3 +321,77 @@ T4 复用现有工作台，增加一个 owner-scoped、24 小时固定窗口的�
 ## 25. T4 退出结论
 
 T4 的积压、失败分类、阶段耗时和供应商调用/计量/成本均来自 owner-scoped 的 MySQL/RabbitMQ 事实；单源失败保留其他指标并显式降级，敏感字段不进入响应。定向真实 MySQL、前后端完整门、配置回归、真实浏览器桌面/手机/刷新和代码审查均通过，没有降低质量门。T4 可以独立提交并进入 T5。
+
+## 26. T5 冻结故障矩阵与回归修复
+
+T5 新增 `scripts/run-m4-reliability-gate.ps1`。脚本只允许重建保留测试库 `videopilot_m4_gate`，从 V1 前进迁移到 V16 后执行两层门：
+
+- provider、预算、资源池和非法迁移纯规则/Adapter 边界；
+- 20 个冻结恢复样本，以及提交/恢复/消费并发、应用重启、Redis、RabbitMQ、Outbox、ASR/OCR Checkpoint 和 Qdrant 真实边界。
+
+20 个样本由 `CONTEXT_BUILDING`、`INDEXING`、到期 `RETRY_WAIT` 和 `MANUAL_REPLAY` 各 5 次组成。每例先持久化一个已完成高成本调用，再恢复同一 Job 到 `READY`，随后串行重投同一 delivery；断言最终状态 20/20 成功、Job 零丢失、`model_call` 增量为 0、第二次投递的 version/Event 增量为 0。恢复率为 100%，高于 19/20 的退出门；任一重复调用或非法推进都会使参数化测试直接失败。
+
+完整门首次在宿主机运行时依次捕获三项环境/可靠性问题，均保留原质量门处理：
+
+1. `.env` 的本地 HTTP Cookie 配置污染默认安全契约，使 `Secure` Cookie 断言失败；验证环境改为显式 `IDENTITY_SECURE_COOKIE=true`，没有修改断言。
+2. MySQL 容器使用 UTC，而 JDBC 声明 `Asia/Shanghai`，导致数据库生成的 Job 时间被读取为早 8 小时并立即触发 6 小时 deadline。local/integration JDBC 统一改为 UTC，M4 样本增加 `createdAt` 与当前时间接近断言，既有本地配置测试同步冻结 URL。
+3. 失败后的复用测试库残留其他 PENDING Outbox，使 owner 无关的全局 relay 并发用例领取到两条不同记录。故障脚本改为每次只重建固定隔离测试库；从空库重跑后并发单赢家通过，没有把断言改成串行或放宽数量。
+
+宿主机完整集成门还如实暴露缺少 FFmpeg/FFprobe，不能作为成功证据。因此最终完整门改在项目既有、包含 FFmpeg/Tesseract 的 Linux 验证镜像中连接 Compose 五项真实依赖，并使用全新 `videopilot_m4_release` schema；没有跳过媒体测试。
+
+## 27. T5 自动化与质量门
+
+| 命令 | 环境与结果 |
+| --- | --- |
+| `powershell -ExecutionPolicy Bypass -File .\scripts\run-m4-reliability-gate.ps1` | Windows/JDK 21、固定隔离库每次重建；纯规则门与 52 项真实边界测试通过，其中冻结恢复样本 20/20、重复高成本调用 0、非法推进 0 |
+| 容器内 `mvn -B clean verify -Pintegration -Dbenchmark.commit=m4-t5-candidate` | Linux/JDK 21、FFmpeg/Tesseract、全新 `videopilot_m4_release`、真实 MySQL/Redis/RabbitMQ/MinIO/Qdrant 和授权的 SiliconFlow 种子调用；360 项快速测试与 85 项集成测试全部通过、0 失败/错误/跳过，JaCoCo 与 ArchUnit 通过，9 分 50 秒 |
+| `server\mvnw.cmd clean test` | Windows/JDK 21；360 项通过、0 失败/错误、1 项既有 FFmpeg 环境条件跳过；JaCoCo 行覆盖率 80.0392%、80% 门与 ArchUnit 通过，1 分 39 秒 |
+| `client\npm.cmd run check`（SSE 修复前） | 16 个文件、99 项测试通过；Statements 86.66%、Branches 80.99%、Functions 87.15%、Lines 91.60%；typecheck、零 warning lint 和生产构建通过 |
+| `npm audit --audit-level=high` | High/Critical 门通过；11 个仅影响开发工具链的 moderate，未执行 breaking `--force` 升级 |
+| `scripts/security-check.ps1` 的 OWASP 阶段 | 未形成结论：无 NVD API Key，第一页请求连续 12 次失败后人工终止无效重试；`failBuildOnCVSS=7` 配置未修改，不记为通过 |
+| Gitleaks | 未执行：本机无二进制且未配置批准的 `GITLEAKS_IMAGE`；补充检查仅能确认 `.env` 未跟踪、T5 变更文件无凭据样式字面量，不能替代 Gitleaks |
+| `docker compose config --quiet` / `git diff --check` | 通过；没有新增 suppression、跳过测试或降低覆盖率/安全阈值 |
+
+## 28. T5 真实浏览器矩阵与 SSE 回归修复
+
+2026-11-07 使用重新构建的 Compose server、真实 V16 浏览器数据库和 Vite `http://localhost:5173/` 验收。三条合成 Job 仅用于展示 `CONTEXT_BUILDING` 自动恢复、`RETRY_WAIT` 和 `DEAD_LETTERED` 人工处理投影；危险确认只验证理由门和按钮状态，未提交 Replay，因此没有新增供应商调用。
+
+| 检查 | 观察 | 结果 |
+| --- | --- | --- |
+| 自动恢复 | `CONTEXT_BUILDING` 显示“系统正在自动恢复”，刷新后相同 hash、状态和持久化事件恢复，事件只出现 1 次 | 通过 |
+| 等待重试 | `RETRY_WAIT` 显示“系统将在稍后自动重试”、预计重试时间、`PROVIDER_TIMEOUT` 和持久化调度事件 | 通过 |
+| 人工处理 | `DEAD_LETTERED` 显示“自动重试已用尽，需要人工处理”；点击后明确说明创建新执行尝试及潜在模型调用，空理由禁用确认，填写理由后启用；随后取消 | 通过 |
+| 不可恢复/预算 | 非重试失败显示“该任务无法自动恢复”和稳定错误码；预算失败显示 `BUDGET_CALL_COUNT` 与 `m4-limits-v1` | 通过 |
+| 运维刷新 | 只读刷新后生成时间变化；Outbox、队列积压、失败分类、慢阶段和未知价格仍由服务端事实展示 | 通过 |
+| 桌面与刷新 | 1280x800 覆盖下 document 宽 1265px、无横向溢出；刷新后选中 Job 与事件恢复 | 通过 |
+| 手机与键盘 | 390x844 覆盖下 document 宽 375px、无横向溢出；Tab 焦点落在可见首页链接，恢复状态仍可见 | 通过 |
+| Console | 完整登录、状态切换、刷新和响应式过程的 error/warn 为 0 | 通过 |
+
+浏览器检查同时暴露一个原门未覆盖的断线窗口：`readEventStream` 已消费事件后若连接异常抛错，游标原本只存在于读取函数内部，外层重连仍可能使用旧 `Last-Event-ID`。新增可控 `ReadableStream` 失败测试先 RED，确认第二个请求没有 `Last-Event-ID: 2`；随后只在事件处理成功后把持久化 sequence 提升到外层重连游标。额外测试确认事件处理器自身抛错时不得提前确认游标，避免跳过尚未被 UI 接受的事件。
+
+修复后实际执行：
+
+| 命令 | 结果 |
+| --- | --- |
+| `client\npx.cmd vitest run src/api/jobs.test.ts` | 11 项 SSE/API 测试通过 |
+| `client\npm.cmd run check` | 16 个文件、101 项测试通过；Statements 86.60%、Branches 80.75%、Functions 87.21%、Lines 91.72%；typecheck、零 warning lint 和生产构建通过 |
+
+SSE 协议的 Header 断言由可控断线自动化直接验证；真实浏览器验证同一持久化事件在 reload 后恢复且不重复。当前 in-app Browser 不提供请求 Header 读取能力，因此没有把“肉眼读取浏览器网络 Header”伪记为通过。
+
+## 29. T5 审查结论与待批准风险
+
+提交前按 correctness、readability、architecture、security 和 performance 五轴复核。审查发现并修正游标确认顺序：必须先让 `onEvent` 成功，再提升重连游标；否则 UI 处理异常可能导致已持久化事件被跳过。回归测试在修复前确实失败，修复后通过。其余 T5 改动复用既有 Job/Checkpoint/Outbox、SSE 和脚本入口，没有新增工作流抽象、依赖或生产状态真源；最终未发现剩余代码阻断项。
+
+待项目负责人明确接受的遗留风险：
+
+1. OWASP Dependency-Check 因无 NVD API Key 且请求连续失败未形成结论；CVSS 阈值未修改，不能记为通过。
+2. Gitleaks 因本机无二进制且未配置批准镜像未执行；`.env` 未跟踪和变更字面量检查只作为补充，不替代正式扫描。
+3. `npm audit` 仍有 11 个 moderate，均位于开发工具链；High/Critical 为 0，没有用 breaking `--force` 升级规避。
+4. MySQL 8.4 会产生 Flyway“比已测试版本更新”的告警，但全新 schema V1-V16 迁移、真实持久化和完整集成门均已通过。
+5. M3 小样本内容质量债务继续进入 M5 数据集/评测，不属于 M4 的流程可靠性退出指标。
+
+## 30. 项目负责人批准与 M4 退出
+
+2026-11-08，项目负责人明确确认接受第 29 节列出的五项遗留风险，并批准 M4/V1 MVP 退出。该决定不把 OWASP Dependency-Check、Gitleaks 或 M3 内容质量债务改写为已通过；它们继续按原结论进入后续安全环境完善和 M5 数据集/评测工作。
+
+Checkpoint C 四项全部完成：自动 Recovery、有限 Retry、DLQ 和 Manual Replay 共享 MySQL 状态/事件真源；20/20 冻结样本达到恢复率门且零任务丢失、零重复高成本调用、零非法推进；预算/资源硬门、只读运维仪表、运行手册和完整质量门均有可复核证据；负责人已完成风险审阅与明确批准。M4 正式退出，V1 MVP 可靠性发布门完成，项目可按依赖顺序开始 M5。

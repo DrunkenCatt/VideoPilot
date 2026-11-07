@@ -5,12 +5,12 @@
 项目从零构建；`C:\Users\zzm\Desktop\com\DoVideoAI` 仅作为只读设计参考。先用 Java 模块化单体和固定云端模型供应商跑通教学视频解析闭环，再建设真正由工具观察驱动的 Agent Loop、用户反馈改进闭环和可复现评测体系。
 
 项目总体规划、架构边界、验收指标和逐级里程碑见 [docs/PROJECT_ROADMAP.md](docs/PROJECT_ROADMAP.md)，Redis 与参考项目的对比、当前边界及 M2-M8 演进设计见 [docs/REDIS_ARCHITECTURE.md](docs/REDIS_ARCHITECTURE.md)。
-M1 的上传/Job 基线手册见 [docs/M1_RUNBOOK.md](docs/M1_RUNBOOK.md)；M2 的真实解析、恢复、降级与播放器验收步骤见 [docs/M2_RUNBOOK.md](docs/M2_RUNBOOK.md)；M3 的 Chunk、BGE-M3/Qdrant、混合检索和有证据问答操作见 [docs/M3_RUNBOOK.md](docs/M3_RUNBOOK.md)。
+M1 的上传/Job 基线手册见 [docs/M1_RUNBOOK.md](docs/M1_RUNBOOK.md)；M2 的真实解析、恢复、降级与播放器验收步骤见 [docs/M2_RUNBOOK.md](docs/M2_RUNBOOK.md)；M3 的 Chunk、BGE-M3/Qdrant、混合检索和有证据问答操作见 [docs/M3_RUNBOOK.md](docs/M3_RUNBOOK.md)；M4 的恢复、DLQ、Replay、预算、积压诊断和回滚步骤见 [docs/M4_RUNBOOK.md](docs/M4_RUNBOOK.md)。
 
 ## 当前阶段
 
-- 状态：M3 已完成并退出；项目负责人于 2026-11-07 批准暂缓 NVD/OWASP Dependency-Check，可进入下一里程碑；该遗留安全扫描继续跟踪，且不视为已经通过
-- 当前可验证：M2 全部能力，以及版本化 5 分钟 `VideoChunk`、SiliconFlow BGE-M3、可重建 Qdrant 索引、semantic/keyword/OCR 混合检索、SiliconFlow DeepSeek 候选回答、Java 确定性证据门、明确拒答和引用 seek
+- 状态：M4/V1 MVP 已于 2026-11-08 经项目负责人明确接受遗留风险后正式退出；下一里程碑为 M5 数据集、基线与评测流水线。OWASP Dependency-Check 与 Gitleaks 仍未形成通过结论，详见 `tasks/M4/ACCEPTANCE.md`
+- 当前可验证：M3 全部能力，以及 MySQL 真源自动 Recovery、有限 Retry/DLQ、受控 Manual Replay、版本化预算/资源硬门、只读可靠性仪表和可重复故障矩阵；20/20 恢复样本无任务丢失、重复高成本调用或非法推进
 - 当前不包含：动态 Agent Loop、自动 Query Rewrite/Cross Encoder、多供应商路由、公开的索引修复/Replay UI、完整学习管理系统或公网部署
 - 第一目标：可靠的视频解析与有证据问答 MVP
 - 第二目标：可持久化、可预算、可评测的 Agent Loop
