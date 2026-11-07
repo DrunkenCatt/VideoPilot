@@ -3,6 +3,7 @@ package com.videopilot.infrastructure.web;
 import com.videopilot.analysis.application.AnalysisJobException;
 import com.videopilot.answer.application.AnswerException;
 import com.videopilot.context.application.VideoContextQueryException;
+import com.videopilot.evaluation.application.EvaluationException;
 import com.videopilot.identity.application.IdentityException;
 import com.videopilot.infrastructure.error.ErrorCode;
 import com.videopilot.infrastructure.error.VideoPilotException;
@@ -97,6 +98,19 @@ public final class GlobalExceptionHandler {
             case DEPENDENCY_UNAVAILABLE -> ErrorCode.DEPENDENCY_UNAVAILABLE;
         };
         LOGGER.warn("Answer request failed code={}", errorCode);
+        return response(errorCode, statusFor(errorCode));
+    }
+
+    @ExceptionHandler(EvaluationException.class)
+    ResponseEntity<ApiErrorResponse> handleEvaluationFailure(EvaluationException exception) {
+        ErrorCode errorCode = switch (exception.reason()) {
+            case INVALID_REQUEST -> ErrorCode.INVALID_REQUEST;
+            case NOT_FOUND -> ErrorCode.RESOURCE_NOT_FOUND;
+            case IDEMPOTENCY_KEY_REUSED -> ErrorCode.IDEMPOTENCY_KEY_REUSED;
+            case DATASET_NOT_READY -> ErrorCode.CONFLICT;
+            case EXECUTION_FAILED -> ErrorCode.INTERNAL_ERROR;
+        };
+        LOGGER.warn("Evaluation request failed code={}", errorCode);
         return response(errorCode, statusFor(errorCode));
     }
 

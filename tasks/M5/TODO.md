@@ -24,25 +24,25 @@
 
 **验收标准**
 
-- [ ] 用一份前进 Flyway 迁移建立 `evaluation_dataset`、`evaluation_case`、`evaluation_run`、`evaluation_case_result`；唯一约束保护 dataset version/fingerprint、创建请求幂等、同系列 repetition index 和 case result 幂等，不阻止同 execution fingerprint 的受控重复运行。
-- [ ] 一个 `EvaluationApplicationService` 完成受控 JSONL 导入、运行创建、逐题执行、聚合读取和失败终止；POST 只持久化并返回，由一个 MySQL CAS 领取 Worker 顺序续跑，Controller 不执行长任务且只调用该 service。
-- [ ] Runner 直接调用现有 `RetrievalApplicationService` 与 `AnswerApplicationService`，不复制检索公式、Prompt、引用硬门、模型调用或成本逻辑。
-- [ ] 用 M3 已有小种子打通“导入 -> 运行 -> 逐题结果 -> 聚合报告”真实 MySQL/Qdrant/模型路径；重复请求不重复创建同一 run 或高成本调用。
-- [ ] Redis 清空、导出文件删除或进程重启后，运行状态、逐题结果和聚合指标仍可从 MySQL 读取；Worker 从未完成 case 续跑，不重复已完成的高成本调用。
+- [x] 用一份前进 Flyway 迁移建立 `evaluation_dataset`、`evaluation_case`、`evaluation_run`、`evaluation_case_result`；唯一约束保护 dataset version/fingerprint、创建请求幂等、同系列 repetition index 和 case result 幂等，不阻止同 execution fingerprint 的受控重复运行。
+- [x] 一个 `EvaluationApplicationService` 完成受控 JSONL 导入、运行创建、逐题执行、聚合读取和失败终止；POST 只持久化并返回，由一个 MySQL CAS 领取 Worker 顺序续跑，Controller 不执行长任务且只调用该 service。
+- [x] Runner 直接调用现有 `RetrievalApplicationService` 与 `AnswerApplicationService`，不复制检索公式、Prompt、引用硬门、模型调用或成本逻辑。
+- [x] 用 M3 已有小种子打通“导入 -> 运行 -> 逐题结果 -> 聚合报告”真实 MySQL/Qdrant/模型路径；重复请求不重复创建同一 run 或高成本调用。
+- [x] Redis 清空、导出文件删除或进程重启后，运行状态、逐题结果和聚合指标仍可从 MySQL 读取；Worker 从未完成 case 续跑，不重复已完成的高成本调用。
 
 **验证**
 
-- [ ] 定向单元/Controller/迁移测试和真实依赖 IT 通过；至少包含 owner 隔离、非法 split、未批准题、重复请求和中途失败。
-- [ ] `server\mvnw.cmd test`；本任务相关的 `server\mvnw.cmd verify -Pintegration` 测试集。
+- [x] 定向单元/Controller/迁移测试和真实依赖 IT 通过；至少包含 owner 隔离、非法 split、未批准题、重复请求和中途失败。
+- [x] `server\mvnw.cmd test`；本任务相关的 `server\mvnw.cmd verify -Pintegration` 测试集。
 
 **预计改动区域**：`evaluation/application`、`evaluation/port`、`infrastructure/evaluation`、M5 Flyway 迁移、Web 合同/Controller。
 **依赖**：T0。
 
 ### Checkpoint A：评测真源可回放
 
-- [ ] MySQL 是 Dataset/Run/CaseResult/版本指纹唯一真源，Redis 和报告文件可删除重建。
-- [ ] 小型 dev 纵切真实调用生产检索和回答代码，并持久化明确的成功、拒答、UNKNOWN 或失败结果。
-- [ ] 未批准、split 不合法、指纹缺失和跨 owner 请求被服务端拒绝。
+- [x] MySQL 是 Dataset/Run/CaseResult/版本指纹唯一真源，Redis 和报告文件可删除重建。
+- [x] 小型 dev 纵切真实调用生产检索和回答代码，并持久化明确的成功、拒答、UNKNOWN 或失败结果。
+- [x] 未批准、split 不合法、指纹缺失和跨 owner 请求被服务端拒绝。
 
 ## T2：固化指标、重复运行与可复现报告
 

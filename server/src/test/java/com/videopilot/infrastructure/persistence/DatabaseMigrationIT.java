@@ -47,7 +47,11 @@ class DatabaseMigrationIT {
                     'video_chunk',
                     'video_segment',
                     'identity_user',
-                    'user_session'
+                    'user_session',
+                    'evaluation_dataset',
+                    'evaluation_case',
+                    'evaluation_run',
+                    'evaluation_case_result'
                   )
                 ORDER BY table_name
                 """)
@@ -58,6 +62,10 @@ class DatabaseMigrationIT {
                 "analysis_job",
                 "analysis_message_failure",
                 "context_work_item",
+                "evaluation_case",
+                "evaluation_case_result",
+                "evaluation_dataset",
+                "evaluation_run",
                 "identity_user",
                 "job_event_outbox",
                 "job_stage_attempt",

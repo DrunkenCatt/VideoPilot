@@ -1,0 +1,101 @@
+CREATE TABLE evaluation_dataset (
+    dataset_id CHAR(36) NOT NULL,
+    owner_id VARCHAR(100) NOT NULL,
+    data_version VARCHAR(100) NOT NULL,
+    dataset_fingerprint CHAR(64) NOT NULL,
+    split VARCHAR(16) NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    video_count INT UNSIGNED NOT NULL,
+    frozen_at TIMESTAMP(6) NULL,
+    created_at TIMESTAMP(6) NOT NULL,
+    PRIMARY KEY (dataset_id),
+    UNIQUE KEY uk_evaluation_dataset_version (owner_id, data_version, split),
+    UNIQUE KEY uk_evaluation_dataset_fingerprint (owner_id, dataset_fingerprint),
+    CONSTRAINT chk_evaluation_dataset_split CHECK (split IN ('DEV', 'TEST')),
+    CONSTRAINT chk_evaluation_dataset_status CHECK (status IN ('DRAFT', 'FROZEN')),
+    CONSTRAINT chk_evaluation_dataset_videos CHECK (video_count > 0),
+    CONSTRAINT chk_evaluation_dataset_freeze CHECK (status <> 'FROZEN' OR frozen_at IS NOT NULL)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci;
+
+CREATE TABLE evaluation_case (
+    dataset_id CHAR(36) NOT NULL,
+    case_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    ordinal INT UNSIGNED NOT NULL,
+    case_type VARCHAR(20) NOT NULL,
+    job_id CHAR(36) NOT NULL,
+    question VARCHAR(1000) NOT NULL,
+    expected_segment_ids JSON NOT NULL,
+    review_status VARCHAR(20) NOT NULL,
+    reviewer_count INT UNSIGNED NOT NULL,
+    case_fingerprint CHAR(64) NOT NULL,
+    PRIMARY KEY (dataset_id, case_id),
+    UNIQUE KEY uk_evaluation_case_ordinal (dataset_id, ordinal),
+    UNIQUE KEY uk_evaluation_case_fingerprint (dataset_id, case_fingerprint),
+    KEY idx_evaluation_case_job (job_id),
+    CONSTRAINT fk_evaluation_case_dataset FOREIGN KEY (dataset_id) REFERENCES evaluation_dataset (dataset_id),
+    CONSTRAINT fk_evaluation_case_job FOREIGN KEY (job_id) REFERENCES analysis_job (job_id),
+    CONSTRAINT chk_evaluation_case_type CHECK (case_type IN ('RETRIEVAL', 'ANSWER', 'RELIABILITY')),
+    CONSTRAINT chk_evaluation_case_review CHECK (review_status IN ('APPROVED', 'PENDING', 'DISPUTED')),
+    CONSTRAINT chk_evaluation_case_reviewer CHECK (reviewer_count <= 20)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci;
+
+CREATE TABLE evaluation_run (
+    run_id CHAR(36) NOT NULL,
+    series_id CHAR(36) NOT NULL,
+    owner_id VARCHAR(100) NOT NULL,
+    dataset_id CHAR(36) NOT NULL,
+    dataset_fingerprint CHAR(64) NOT NULL,
+    idempotency_key VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    request_fingerprint CHAR(64) NOT NULL,
+    baseline_type VARCHAR(32) NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    execution_fingerprint CHAR(64) NOT NULL,
+    execution_versions JSON NOT NULL,
+    repetition_index INT UNSIGNED NOT NULL,
+    repetition_count INT UNSIGNED NOT NULL,
+    completed_case_count INT UNSIGNED NOT NULL DEFAULT 0,
+    total_case_count INT UNSIGNED NOT NULL,
+    lease_id CHAR(36) NULL,
+    lease_until TIMESTAMP(6) NULL,
+    error_code VARCHAR(100) NULL,
+    created_at TIMESTAMP(6) NOT NULL,
+    completed_at TIMESTAMP(6) NULL,
+    updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (run_id),
+    UNIQUE KEY uk_evaluation_run_intent (owner_id, idempotency_key, repetition_index),
+    UNIQUE KEY uk_evaluation_run_series (series_id, repetition_index),
+    KEY idx_evaluation_run_claim (status, lease_until, created_at),
+    KEY idx_evaluation_run_dataset (dataset_id, created_at),
+    CONSTRAINT fk_evaluation_run_dataset FOREIGN KEY (dataset_id) REFERENCES evaluation_dataset (dataset_id),
+    CONSTRAINT chk_evaluation_run_baseline CHECK (baseline_type = 'BASELINE_V1'),
+    CONSTRAINT chk_evaluation_run_status CHECK (status IN ('REQUESTED', 'RUNNING', 'COMPLETED', 'FAILED')),
+    CONSTRAINT chk_evaluation_run_repetitions CHECK (
+        repetition_count BETWEEN 1 AND 3
+        AND repetition_index BETWEEN 1 AND repetition_count
+    ),
+    CONSTRAINT chk_evaluation_run_counts CHECK (completed_case_count <= total_case_count)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci;
+
+CREATE TABLE evaluation_case_result (
+    run_id CHAR(36) NOT NULL,
+    dataset_id CHAR(36) NOT NULL,
+    case_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    case_type VARCHAR(20) NOT NULL,
+    outcome VARCHAR(20) NOT NULL,
+    result_rank INT UNSIGNED NULL,
+    claim_count INT UNSIGNED NOT NULL,
+    citation_count INT UNSIGNED NOT NULL,
+    latency_ms BIGINT UNSIGNED NOT NULL,
+    token_count BIGINT UNSIGNED NOT NULL,
+    estimated_cost DECIMAL(20, 8) NULL,
+    error_code VARCHAR(100) NULL,
+    completed_at TIMESTAMP(6) NOT NULL,
+    PRIMARY KEY (run_id, case_id),
+    KEY idx_evaluation_result_dataset_case (dataset_id, case_id),
+    CONSTRAINT fk_evaluation_result_run FOREIGN KEY (run_id) REFERENCES evaluation_run (run_id),
+    CONSTRAINT fk_evaluation_result_case FOREIGN KEY (dataset_id, case_id)
+        REFERENCES evaluation_case (dataset_id, case_id),
+    CONSTRAINT chk_evaluation_result_type CHECK (case_type IN ('RETRIEVAL', 'ANSWER', 'RELIABILITY')),
+    CONSTRAINT chk_evaluation_result_outcome CHECK (outcome IN ('COMPLETED', 'REFUSED', 'ERROR', 'UNKNOWN')),
+    CONSTRAINT chk_evaluation_result_rank CHECK (result_rank IS NULL OR result_rank BETWEEN 1 AND 3)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci;

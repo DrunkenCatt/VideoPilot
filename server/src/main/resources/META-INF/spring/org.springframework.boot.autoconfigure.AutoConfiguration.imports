@@ -6,5 +6,6 @@ com.videopilot.infrastructure.context.ocr.OcrAutoConfiguration
 com.videopilot.infrastructure.context.persistence.VideoContextPipelineAutoConfiguration
 com.videopilot.infrastructure.retrieval.persistence.VideoIndexAutoConfiguration
 com.videopilot.infrastructure.answer.AnswerAutoConfiguration
+com.videopilot.infrastructure.evaluation.EvaluationAutoConfiguration
 com.videopilot.infrastructure.web.VideoContextWebAutoConfiguration
 com.videopilot.infrastructure.media.persistence.MediaUploadAutoConfiguration
