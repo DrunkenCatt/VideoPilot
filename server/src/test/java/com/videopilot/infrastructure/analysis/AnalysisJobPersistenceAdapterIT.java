@@ -8,6 +8,9 @@ import com.videopilot.analysis.application.AnalysisJobEventApplicationService;
 import com.videopilot.analysis.application.AnalysisJobException;
 import com.videopilot.analysis.application.JobTransitionConflictException;
 import com.videopilot.analysis.application.JobTransitionService;
+import com.videopilot.analysis.application.AnalysisJobReliabilityService;
+import com.videopilot.analysis.application.ReplayAnalysisJobCommand;
+import com.videopilot.analysis.application.ReplayAnalysisJobResult;
 import com.videopilot.analysis.domain.AnalysisJob;
 import com.videopilot.analysis.domain.JobEventType;
 import com.videopilot.analysis.domain.JobStage;
@@ -46,6 +49,9 @@ class AnalysisJobPersistenceAdapterIT {
 
     @Autowired
     private AnalysisJobEventApplicationService jobEvents;
+
+    @Autowired
+    private AnalysisJobReliabilityService reliability;
 
     @Autowired
     private JdbcClient jdbcClient;
@@ -97,6 +103,70 @@ class AnalysisJobPersistenceAdapterIT {
         assertThat(jobValue("version", Long.class)).isEqualTo(1L);
         assertThat(jobValue("event_sequence", Long.class)).isEqualTo(1L);
         assertThat(count("job_event_outbox")).isEqualTo(1);
+    }
+
+    @Test
+    void persistsReplayAuditAndReturnsOneResultForDuplicateIntent() {
+        insertCreatedJob();
+        insertStage("completed-input-fingerprint");
+        jdbcClient.sql("""
+                UPDATE analysis_job
+                SET status = 'DEAD_LETTERED', version = 9, event_sequence = 9,
+                    error_category = 'RETRYABLE', error_code = 'RETRY_EXHAUSTED',
+                    error_summary = 'Retry budget exhausted', retryable = true
+                WHERE job_id = :jobId
+                """).param("jobId", jobId.toString()).update();
+        ReplayAnalysisJobCommand command = new ReplayAnalysisJobCommand(
+                jobId, OWNER_ID.toString(), 9, "replay-persistence", true,
+                "Provider incident resolved", "request-replay");
+
+        ReplayAnalysisJobResult first = reliability.replay(command);
+        ReplayAnalysisJobResult duplicate = reliability.replay(command);
+
+        assertThat(duplicate).isEqualTo(first);
+        assertThat(first.attempt()).isEqualTo(1);
+        assertThat(jobValue("status", String.class)).isEqualTo("QUEUED");
+        assertThat(jobValue("version", Long.class)).isEqualTo(11L);
+        assertThat(jobValue("attempt", Integer.class)).isEqualTo(1);
+        assertThat(count("job_event_outbox")).isEqualTo(2);
+        assertThat(count("job_stage_attempt")).isEqualTo(1);
+        assertThat(jdbcClient.sql("""
+                        SELECT COUNT(*) FROM job_event_outbox
+                        WHERE job_id = :jobId AND operation_key = 'replay-persistence'
+                          AND operation_fingerprint IS NOT NULL AND operation_attempt = 1
+                        """).param("jobId", jobId.toString()).query(Integer.class).single()).isEqualTo(1);
+    }
+
+    @Test
+    void concurrentReplayWithTheSameKeyCreatesOneAttemptAndOneQueueMessage() throws Exception {
+        insertCreatedJob();
+        jdbcClient.sql("""
+                UPDATE analysis_job
+                SET status = 'DEAD_LETTERED', version = 9, event_sequence = 9,
+                    error_category = 'RETRYABLE', error_code = 'RETRY_EXHAUSTED',
+                    error_summary = 'Retry budget exhausted', retryable = true
+                WHERE job_id = :jobId
+                """).param("jobId", jobId.toString()).update();
+        ReplayAnalysisJobCommand command = new ReplayAnalysisJobCommand(
+                jobId, OWNER_ID.toString(), 9, "replay-concurrent", true,
+                "Provider incident resolved", "request-replay");
+        CountDownLatch start = new CountDownLatch(1);
+
+        try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+            Callable<ReplayAnalysisJobResult> replay = () -> {
+                start.await();
+                return reliability.replay(command);
+            };
+            List<Future<ReplayAnalysisJobResult>> results = List.of(
+                    executor.submit(replay), executor.submit(replay));
+            start.countDown();
+
+            assertThat(results).extracting(this::replayResultOf).containsOnly(results.getFirst().get());
+        }
+
+        assertThat(jobValue("attempt", Integer.class)).isEqualTo(1);
+        assertThat(jobValue("status", String.class)).isEqualTo("QUEUED");
+        assertThat(count("job_event_outbox")).isEqualTo(2);
     }
 
     @Test
@@ -330,6 +400,7 @@ class AnalysisJobPersistenceAdapterIT {
             case "status" -> "SELECT status FROM analysis_job WHERE job_id = :jobId";
             case "version" -> "SELECT version FROM analysis_job WHERE job_id = :jobId";
             case "event_sequence" -> "SELECT event_sequence FROM analysis_job WHERE job_id = :jobId";
+            case "attempt" -> "SELECT attempt FROM analysis_job WHERE job_id = :jobId";
             default -> throw new IllegalArgumentException("Unsupported test column: " + column);
         };
         return jdbcClient.sql(sql)
@@ -339,6 +410,14 @@ class AnalysisJobPersistenceAdapterIT {
     }
 
     private Object resultOf(Future<Object> future) {
+        try {
+            return future.get();
+        } catch (Exception exception) {
+            throw new AssertionError(exception);
+        }
+    }
+
+    private ReplayAnalysisJobResult replayResultOf(Future<ReplayAnalysisJobResult> future) {
         try {
             return future.get();
         } catch (Exception exception) {

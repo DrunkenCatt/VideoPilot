@@ -29,6 +29,7 @@ const goal = ref('')
 const loading = ref(true)
 const submitting = ref(false)
 const canceling = ref(false)
+const replaying = ref(false)
 const errorMessage = ref('')
 let idempotencyKey: string | null = null
 let eventController: globalThis.AbortController | null = null
@@ -44,6 +45,7 @@ function safeMessage(error: unknown): string {
   if (error.code === 'IDEMPOTENCY_KEY_REUSED') return '本次提交意图已变更，请重新提交。'
   if (error.code === 'RESOURCE_NOT_FOUND') return '任务不存在，或当前账号无权访问。'
   if (error.code === 'JOB_NOT_CANCELABLE') return '任务已进入不可取消状态，已从服务端重新读取。'
+  if (error.code === 'CONFLICT') return '任务状态已变化，已从服务端重新读取。'
   if (error.code === 'AUTHENTICATION_REQUIRED') return '会话已过期，请重新登录。'
   return error.retryable ? '服务暂时不可用，请稍后重试。' : '请求未完成，请检查输入。'
 }
@@ -173,6 +175,35 @@ async function cancel() {
     }
   } finally {
     canceling.value = false
+  }
+}
+
+async function replay(reason: string) {
+  if (!selected.value || replaying.value) return
+  const replayedJob = selected.value
+  errorMessage.value = ''
+  replaying.value = true
+  eventController?.abort()
+  try {
+    await api.replay(
+      replayedJob.jobId,
+      { expectedVersion: replayedJob.version, confirmed: true, reason },
+      globalThis.crypto.randomUUID(),
+      props.session.csrfToken,
+    )
+    const refreshed = await api.get(replayedJob.links.self)
+    replaceJob(refreshed)
+    events.value = []
+    void follow(refreshed)
+  } catch (error) {
+    handleError(error)
+    try {
+      replaceJob(await api.get(replayedJob.links.self))
+    } catch (refreshError) {
+      handleError(refreshError)
+    }
+  } finally {
+    replaying.value = false
   }
 }
 
@@ -325,9 +356,10 @@ onBeforeUnmount(() => eventController?.abort())
         :media="jobMedia"
         :media-unavailable="jobMediaUnavailable"
         :events="events"
-        :action-busy="canceling"
+        :action-busy="canceling || replaying"
         :csrf-token="session.csrfToken"
         @cancel="cancel"
+        @replay="replay"
         @unauthenticated="emit('unauthenticated')"
       />
       <section

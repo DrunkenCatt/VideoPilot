@@ -16,6 +16,8 @@ import com.videopilot.analysis.application.AnalysisJobEventView;
 import com.videopilot.analysis.application.AnalysisJobException;
 import com.videopilot.analysis.application.AnalysisJobPage;
 import com.videopilot.analysis.application.AnalysisJobView;
+import com.videopilot.analysis.application.AnalysisJobReliabilityService;
+import com.videopilot.analysis.application.ReplayAnalysisJobResult;
 import com.videopilot.analysis.domain.AnalysisMode;
 import com.videopilot.analysis.domain.JobStatus;
 import com.videopilot.analysis.domain.JobEventType;
@@ -60,6 +62,9 @@ class AnalysisJobControllerTest {
 
     @MockitoBean
     private AnalysisJobEventApplicationService jobEvents;
+
+    @MockitoBean
+    private AnalysisJobReliabilityService reliability;
 
     @MockitoBean(name = "analysisJobSseExecutor")
     private Executor analysisJobSseExecutor;
@@ -169,6 +174,48 @@ class AnalysisJobControllerTest {
                 .andExpect(jsonPath("$.jobId").value(JOB_ID.toString()));
 
         verify(jobEvents).cancel(any(), org.mockito.ArgumentMatchers.eq(JOB_ID), any());
+    }
+
+    @Test
+    void acceptsAConfirmedReplayWithOwnerVersionAndIdempotencyContext() throws Exception {
+        when(reliability.replay(any())).thenReturn(new ReplayAnalysisJobResult(
+                JOB_ID, 2, Instant.parse("2026-11-07T09:00:00Z")));
+
+        mockMvc.perform(post("/api/v1/analysis-jobs/{jobId}/replays", JOB_ID)
+                        .cookie(new jakarta.servlet.http.Cookie("VP_SESSION", "opaque-session-token"))
+                        .header("X-CSRF-Token", "csrf-token")
+                        .header("Idempotency-Key", "replay-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"expectedVersion":9,"confirmed":true,
+                                 "reason":"Provider incident resolved"}
+                                """))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.jobId").value(JOB_ID.toString()))
+                .andExpect(jsonPath("$.attempt").value(2))
+                .andExpect(jsonPath("$.status").value("ACCEPTED"));
+
+        ArgumentCaptor<com.videopilot.analysis.application.ReplayAnalysisJobCommand> command =
+                ArgumentCaptor.forClass(com.videopilot.analysis.application.ReplayAnalysisJobCommand.class);
+        verify(reliability).replay(command.capture());
+        org.assertj.core.api.Assertions.assertThat(command.getValue()).satisfies(value -> {
+            org.assertj.core.api.Assertions.assertThat(value.ownerId()).isEqualTo(OWNER_ID.toString());
+            org.assertj.core.api.Assertions.assertThat(value.expectedVersion()).isEqualTo(9);
+            org.assertj.core.api.Assertions.assertThat(value.idempotencyKey()).isEqualTo("replay-1");
+        });
+    }
+
+    @Test
+    void rejectsAnUnconfirmedReplayAtTheHttpBoundary() throws Exception {
+        mockMvc.perform(post("/api/v1/analysis-jobs/{jobId}/replays", JOB_ID)
+                        .cookie(new jakarta.servlet.http.Cookie("VP_SESSION", "opaque-session-token"))
+                        .header("X-CSRF-Token", "csrf-token")
+                        .header("Idempotency-Key", "replay-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"expectedVersion":9,"confirmed":false,"reason":"reason"}
+                                """))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

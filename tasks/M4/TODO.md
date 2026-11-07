@@ -1,6 +1,6 @@
 # M4 任务清单：任务可靠性发布门
 
-> 状态：T0-T1 已完成，下一项为 T2。任务按依赖顺序执行，每项先写失败测试或可执行验收场景，再写生产代码。目标是在现有 Job/Checkpoint/Outbox/工作台上补齐 V1 发布可靠性，不新建通用工作流、策略注册表或独立运维平台。
+> 状态：T0-T2 已完成，下一项为 T3。任务按依赖顺序执行，每项先写失败测试或可执行验收场景，再写生产代码。目标是在现有 Job/Checkpoint/Outbox/工作台上补齐 V1 发布可靠性，不新建通用工作流、策略注册表或独立运维平台。
 
 ## T0：冻结 M4 可靠性合同与故障矩阵
 
@@ -35,11 +35,11 @@
 
 ## T2：交付受控 Manual Replay 端到端操作
 
-- [ ] 在 T1 的可靠性 service 内增加 owner-scoped Replay 命令：只接受 T0 冻结的前置状态、预期 Job 版本、操作幂等键、明确确认和非空原因；使用既有 `DEAD_LETTERED -> MANUAL_REPLAY -> QUEUED` 受控迁移或 ADR-0008 冻结的新路径。
-- [ ] Replay 递增同一 Job 的 execution attempt，写不可变审计事件和新的 Outbox 消息；旧 attempt、失败记录和事件保持只读，禁止重新投递旧 messageId。
-- [ ] 依据阶段输入指纹复用视频固有的已完成 Context/索引和模型调用结果，只让失败/失效阶段重新执行；UNKNOWN 高成本调用必须先进入人工确认语义，不能被 Replay 默认当作未执行。
-- [ ] 提供最小 REST API 和 TypeScript client，在现有 Job 工作台为可 Replay 状态显示危险操作；确认文案说明会产生新执行尝试，提交中防双击，成功后显示 attempt/审计结果，403/409/重复提交有稳定反馈。
-- [ ] 覆盖跨 owner、非法状态、旧版本、重复幂等键、并发双击、Outbox 发布中断和 Replay 后刷新/SSE 恢复；断言仅一个新 attempt/消息，高成本已完成阶段调用增量为 0。
+- [x] 在 T1 的可靠性 service 内增加 owner-scoped Replay 命令：只接受 T0 冻结的前置状态、预期 Job 版本、操作幂等键、明确确认和非空原因；使用既有 `DEAD_LETTERED -> MANUAL_REPLAY -> QUEUED` 受控迁移或 ADR-0008 冻结的新路径。
+- [x] Replay 递增同一 Job 的 execution attempt，写不可变审计事件和新的 Outbox 消息；旧 attempt、失败记录和事件保持只读，禁止重新投递旧 messageId。
+- [x] 依据阶段输入指纹复用视频固有的已完成 Context/索引和模型调用结果，只让失败/失效阶段重新执行；UNKNOWN 高成本调用必须先进入人工确认语义，不能被 Replay 默认当作未执行。
+- [x] 提供最小 REST API 和 TypeScript client，在现有 Job 工作台为可 Replay 状态显示危险操作；确认文案说明会产生新执行尝试，提交中防双击，成功后显示 attempt/审计结果，403/409/重复提交有稳定反馈。
+- [x] 覆盖跨 owner、非法状态、旧版本、重复幂等键、并发双击、Outbox 发布中断和 Replay 后刷新/SSE 恢复；断言仅一个新 attempt/消息，高成本已完成阶段调用增量为 0。
 - **验收标准**：用户只能 Replay 自己且满足条件的 Job；每次操作可追溯、可幂等、不可改写历史；浏览器能区分 Replay 已接受、执行中、再次失败和完成。
 - **验证**：Replay 规则/Controller/持久化集成测试、前端 API/组件测试、真实浏览器确认与刷新验收；相关测试后运行 `server\mvnw.cmd test`、`client\npm.cmd run check` 和定向集成测试。
 - **预计改动区域**：analysis reliability application/store/web、Flyway（若 T1 迁移未覆盖审计字段）、jobs API/workbench 及对应测试。
@@ -59,7 +59,7 @@
 
 ### Checkpoint B：人工操作与资源硬门
 
-- [ ] Replay 的 CAS、幂等、owner 和历史不可变性由自动化测试与真实浏览器共同证明。
+- [x] Replay 的 CAS、幂等、owner 和历史不可变性由自动化测试与真实浏览器共同证明。
 - [ ] deadline、调用数、计量和已知成本至少各有一个硬门失败样本；未知价格不显示为 0。
 - [ ] 外部模型、子进程和消息消费饱和时，Web/SSE/健康查询仍可响应。
 

@@ -1,6 +1,7 @@
 package com.videopilot.analysis.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.videopilot.analysis.domain.AnalysisJob;
 import com.videopilot.analysis.domain.JobErrorCategory;
@@ -10,6 +11,7 @@ import com.videopilot.analysis.domain.JobStatus;
 import com.videopilot.analysis.port.AnalysisJobReliabilityStore;
 import com.videopilot.analysis.port.AnalysisJobReliabilityStore.RecoveryCandidate;
 import com.videopilot.analysis.port.JobTransitionStore;
+import com.videopilot.analysis.port.JobTransitionStore.TransitionCommit;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -95,6 +97,86 @@ class AnalysisJobReliabilityServiceTest {
         assertThat(store.job.status()).isEqualTo(JobStatus.RETRY_WAIT);
     }
 
+    @Test
+    void acceptsAnOwnedDeadLetterReplayAsANewAttempt() {
+        FakeStore store = new FakeStore(job(JobStatus.DEAD_LETTERED, 3, 9, 9));
+
+        ReplayAnalysisJobResult result = service(store).replay(new ReplayAnalysisJobCommand(
+                JOB_ID, store.job.ownerId(), 9, "replay-401", true,
+                "Provider incident resolved", "request-replay"));
+
+        assertThat(result).extracting(ReplayAnalysisJobResult::jobId, ReplayAnalysisJobResult::attempt)
+                .containsExactly(JOB_ID, 1);
+        assertThat(result.acceptedAt()).isEqualTo(NOW);
+        assertThat(store.job.status()).isEqualTo(JobStatus.QUEUED);
+        assertThat(store.job.attempt()).isEqualTo(1);
+        assertThat(store.commits).extracting(TransitionCommit::expectedStatus)
+                .containsExactly(JobStatus.DEAD_LETTERED, JobStatus.MANUAL_REPLAY);
+    }
+
+    @Test
+    void returnsTheOriginalResultForTheSameReplayKeyAndIntent() {
+        FakeStore store = new FakeStore(job(JobStatus.DEAD_LETTERED, 3, 9, 9));
+        ReplayAnalysisJobCommand command = new ReplayAnalysisJobCommand(
+                JOB_ID, store.job.ownerId(), 9, "replay-401", true,
+                "Provider incident resolved", "request-replay");
+
+        ReplayAnalysisJobResult first = service(store).replay(command);
+        ReplayAnalysisJobResult duplicate = service(store).replay(command);
+
+        assertThat(duplicate).isEqualTo(first);
+        assertThat(store.commits).hasSize(2);
+    }
+
+    @Test
+    void rejectsAReplayKeyReusedWithDifferentIntent() {
+        FakeStore store = new FakeStore(job(JobStatus.DEAD_LETTERED, 3, 9, 9));
+        service(store).replay(new ReplayAnalysisJobCommand(
+                JOB_ID, store.job.ownerId(), 9, "replay-401", true, "Reason one", "request-1"));
+
+        assertThatThrownBy(() -> service(store).replay(new ReplayAnalysisJobCommand(
+                JOB_ID, store.job.ownerId(), 9, "replay-401", true, "Reason two", "request-2")))
+                .isInstanceOf(AnalysisJobException.class)
+                .extracting("reason").isEqualTo(AnalysisJobException.Reason.IDEMPOTENCY_KEY_REUSED);
+    }
+
+    @Test
+    void hidesCrossOwnerJobsAndRejectsStaleOrIllegalReplays() {
+        FakeStore store = new FakeStore(job(JobStatus.DEAD_LETTERED, 3, 9, 9));
+        AnalysisJobReliabilityService service = service(store);
+
+        assertThatThrownBy(() -> service.replay(new ReplayAnalysisJobCommand(
+                JOB_ID, "other-owner", 9, "replay-owner", true, "reason", "request")))
+                .isInstanceOf(AnalysisJobException.class)
+                .extracting("reason").isEqualTo(AnalysisJobException.Reason.RESOURCE_NOT_FOUND);
+        assertThatThrownBy(() -> service.replay(new ReplayAnalysisJobCommand(
+                JOB_ID, store.job.ownerId(), 8, "replay-stale", true, "reason", "request")))
+                .isInstanceOf(AnalysisJobException.class)
+                .extracting("reason").isEqualTo(AnalysisJobException.Reason.CONFLICT);
+
+        store.job = job(JobStatus.FAILED, 3, 9, 9);
+        assertThatThrownBy(() -> service.replay(new ReplayAnalysisJobCommand(
+                JOB_ID, store.job.ownerId(), 9, "replay-state", true, "reason", "request")))
+                .isInstanceOf(AnalysisJobException.class)
+                .extracting("reason").isEqualTo(AnalysisJobException.Reason.CONFLICT);
+    }
+
+    @Test
+    void recoversAManualReplayInterruptedBeforeItsQueueTransition() {
+        FakeStore store = new FakeStore(job(JobStatus.DEAD_LETTERED, 3, 9, 9));
+        store.rejectTargetOnce = JobStatus.QUEUED;
+
+        assertThatThrownBy(() -> service(store).replay(new ReplayAnalysisJobCommand(
+                JOB_ID, store.job.ownerId(), 9, "replay-interrupted", true,
+                "Provider incident resolved", "request-replay")))
+                .isInstanceOf(JobTransitionConflictException.class);
+        assertThat(store.job.status()).isEqualTo(JobStatus.MANUAL_REPLAY);
+        store.candidates = List.of(candidate(store.job));
+
+        assertThat(service(store).recoverDue(10)).isEqualTo(1);
+        assertThat(store.job.status()).isEqualTo(JobStatus.QUEUED);
+    }
+
     @ParameterizedTest
     @MethodSource("invalidConfiguration")
     void rejectsInvalidRecoveryConfiguration(int maxRetries, Duration retryDelay, Duration leaseDuration) {
@@ -165,6 +247,8 @@ class AnalysisJobReliabilityServiceTest {
         private final List<TransitionCommit> commits = new ArrayList<>();
         private final List<UUID> recoveryDispatches = new ArrayList<>();
         private boolean rejectNextCommit;
+        private JobStatus rejectTargetOnce;
+        private final java.util.Map<String, ReplayAudit> replays = new java.util.HashMap<>();
 
         private FakeStore(AnalysisJob job) {
             this.job = job;
@@ -181,10 +265,22 @@ class AnalysisJobReliabilityServiceTest {
                 rejectNextCommit = false;
                 return false;
             }
+            if (commit.nextJob().status() == rejectTargetOnce) {
+                rejectTargetOnce = null;
+                return false;
+            }
             if (job.status() != commit.expectedStatus() || job.version() != commit.expectedVersion()) return false;
             job = commit.nextJob();
             commits.add(commit);
+            commit.event().operation().ifPresent(operation -> replays.put(
+                    operation.key(), new ReplayAudit(
+                            operation.fingerprint(), operation.attempt(), commit.event().occurredAt())));
             return true;
+        }
+
+        @Override
+        public Optional<ReplayAudit> findReplay(UUID jobId, String idempotencyKey) {
+            return Optional.ofNullable(replays.get(idempotencyKey));
         }
 
         @Override

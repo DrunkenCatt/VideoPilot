@@ -82,7 +82,7 @@ public record AnalysisJob(
                 mediaId,
                 targetStatus,
                 stage.isPresent() ? stage : currentStage,
-                attempt,
+                targetStatus == JobStatus.MANUAL_REPLAY ? attempt + 1 : attempt,
                 targetStatus == JobStatus.RETRY_WAIT ? retryCount + 1 : retryCount,
                 version + 1,
                 eventSequence + 1,

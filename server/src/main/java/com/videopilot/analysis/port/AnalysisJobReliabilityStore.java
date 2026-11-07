@@ -2,12 +2,17 @@ package com.videopilot.analysis.port;
 
 import com.videopilot.analysis.domain.JobStatus;
 import com.videopilot.analysis.domain.JobStage;
+import com.videopilot.analysis.domain.AnalysisJob;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 public interface AnalysisJobReliabilityStore {
+
+    Optional<AnalysisJob> findById(UUID jobId);
+
+    Optional<ReplayAudit> findReplay(UUID jobId, String idempotencyKey);
 
     List<RecoveryCandidate> findRecoveryCandidates(Instant now, Instant staleBefore, int limit);
 
@@ -30,5 +35,8 @@ public interface AnalysisJobReliabilityStore {
                 UUID jobId, JobStatus status, long version, long eventSequence, Optional<Instant> nextRetryAt) {
             this(jobId, status, version, eventSequence, Optional.empty(), nextRetryAt);
         }
+    }
+
+    record ReplayAudit(String fingerprint, int attempt, Instant acceptedAt) {
     }
 }

@@ -20,6 +20,7 @@ final class TransitionWriteRows {
                 commit.expectedVersion(),
                 commit.nextJob().status().name(),
                 commit.nextJob().currentStage().map(Enum::name).orElse(null),
+                commit.nextJob().attempt(),
                 failure == null ? null : failure.category().name(),
                 failure == null ? null : failure.code(),
                 failure == null ? null : failure.summary(),
@@ -58,6 +59,9 @@ final class TransitionWriteRows {
                 event.sequence(),
                 event.requestId(),
                 event.payload(),
+                event.operation().map(JobEvent.OperationMetadata::key).orElse(null),
+                event.operation().map(JobEvent.OperationMetadata::fingerprint).orElse(null),
+                event.operation().map(JobEvent.OperationMetadata::attempt).orElse(null),
                 event.occurredAt(),
                 job.status().name(),
                 job.currentStage().map(Enum::name).orElse(null),
@@ -77,6 +81,7 @@ final class TransitionWriteRows {
             case JOB_RETRY_SCHEDULED -> "Analysis job scheduled for automatic retry.";
             case JOB_RECOVERY_QUEUED -> "Analysis job recovery queued.";
             case JOB_DEAD_LETTERED -> "Automatic retry budget exhausted; manual review is required.";
+            case JOB_MANUAL_REPLAY_STARTED -> "Manual replay accepted.";
             case JOB_READY -> "Analysis job ready.";
         };
     }
@@ -94,6 +99,7 @@ final class TransitionWriteRows {
             long expectedVersion,
             String status,
             String currentStage,
+            int attempt,
             String errorCategory,
             String errorCode,
             String errorSummary,
@@ -129,6 +135,9 @@ final class TransitionWriteRows {
             long sequence,
             String requestId,
             String payload,
+            String operationKey,
+            String operationFingerprint,
+            Integer operationAttempt,
             Instant occurredAt,
             String jobStatus,
             String jobStage,

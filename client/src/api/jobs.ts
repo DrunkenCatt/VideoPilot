@@ -4,6 +4,9 @@ import {
   type CreateAnalysisJobRequest,
   type JobEvent,
   type PageResponse,
+  type ReplayRequest,
+  type ReplayResponse,
+  jobReplaysPath,
 } from './contracts'
 import { ApiClientError } from './session'
 
@@ -151,6 +154,27 @@ export function createJobsApi(request: Request = fetch, sleep: Sleep = defaultSl
       })
       if (!response.ok) throw await errorFrom(response)
       return (await response.json()) as AnalysisJob
+    },
+
+    async replay(
+      jobId: AnalysisJob['jobId'],
+      input: ReplayRequest,
+      idempotencyKey: string,
+      csrfToken: string,
+    ): Promise<ReplayResponse> {
+      const response = await request(jobReplaysPath(jobId), {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          [API.idempotencyKeyHeader]: idempotencyKey,
+          'X-CSRF-Token': csrfToken,
+        },
+        body: JSON.stringify(input),
+      })
+      if (!response.ok) throw await errorFrom(response)
+      return (await response.json()) as ReplayResponse
     },
 
     async followEvents(eventsLink: string, options: FollowEventsOptions): Promise<number> {

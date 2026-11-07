@@ -151,6 +151,24 @@ class DatabaseMigrationIT {
     }
 
     @Test
+    void addsDurableManualReplayIdempotencyAudit() {
+        List<String> columns = jdbcClient.sql("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'job_event_outbox'
+                  AND column_name IN ('operation_key', 'operation_fingerprint', 'operation_attempt')
+                ORDER BY ordinal_position
+                """).query(String.class).list();
+        List<String> indexes = jdbcClient.sql("""
+                SELECT DISTINCT index_name FROM information_schema.statistics
+                WHERE table_schema = DATABASE() AND table_name = 'job_event_outbox'
+                  AND index_name = 'uk_job_event_replay_operation'
+                """).query(String.class).list();
+
+        assertThat(columns).containsExactly("operation_key", "operation_fingerprint", "operation_attempt");
+        assertThat(indexes).containsExactly("uk_job_event_replay_operation");
+    }
+
+    @Test
     @Transactional
     void enforcesJobIdentityAndStageFingerprintUniqueness() {
         insertMedia("00000000-0000-0000-0000-000000000001");

@@ -103,6 +103,7 @@ interface AnalysisJobMapper extends BaseMapper<AnalysisJobRow> {
             UPDATE analysis_job
             SET status = #{row.status},
                 current_stage = #{row.currentStage},
+                attempt = #{row.attempt},
                 version = version + 1,
                 event_sequence = event_sequence + 1,
                 error_category = #{row.errorCategory},
@@ -122,6 +123,7 @@ interface AnalysisJobMapper extends BaseMapper<AnalysisJobRow> {
     @Select("""
             SELECT * FROM analysis_job
             WHERE (status = 'RETRY_WAIT' AND next_retry_at <= #{now})
+               OR (status = 'MANUAL_REPLAY' AND updated_at <= #{staleBefore})
                OR (status IN ('CONSUMING','PROBING','CONTEXT_BUILDING','INDEXING','ANSWERING')
                    AND ((execution_lease_until IS NULL AND updated_at <= #{staleBefore})
                         OR execution_lease_until <= #{now}))
@@ -191,12 +193,22 @@ interface AnalysisJobMapper extends BaseMapper<AnalysisJobRow> {
     @Insert("""
             INSERT INTO job_event_outbox (
                 message_id, job_id, event_type, schema_version, job_sequence,
-                request_id, payload, occurred_at, job_status, job_stage, public_message, terminal
+                request_id, operation_key, operation_fingerprint, operation_attempt,
+                payload, occurred_at, job_status, job_stage, public_message, terminal
             ) VALUES (
                 #{row.messageId}, #{row.jobId}, #{row.eventType}, #{row.schemaVersion},
-                #{row.sequence}, #{row.requestId}, CAST(#{row.payload} AS JSON), #{row.occurredAt},
+                #{row.sequence}, #{row.requestId}, #{row.operationKey}, #{row.operationFingerprint},
+                #{row.operationAttempt}, CAST(#{row.payload} AS JSON), #{row.occurredAt},
                 #{row.jobStatus}, #{row.jobStage}, #{row.publicMessage}, #{row.terminal}
             )
             """)
     int insertEvent(@Param("row") EventWrite row);
+
+    @Select("""
+            SELECT operation_fingerprint, operation_attempt, occurred_at
+            FROM job_event_outbox
+            WHERE job_id = #{jobId} AND event_type = 'JOB_MANUAL_REPLAY_STARTED'
+              AND operation_key = #{operationKey}
+            """)
+    ReplayAuditRow selectReplay(@Param("jobId") String jobId, @Param("operationKey") String operationKey);
 }

@@ -52,6 +52,7 @@ public final class JobTransitionService {
                 1,
                 command.requestId(),
                 command.eventPayload(),
+                command.operation(),
                 occurredAt);
         TransitionCommit commit = new TransitionCommit(
                 command.expectedStatus(),

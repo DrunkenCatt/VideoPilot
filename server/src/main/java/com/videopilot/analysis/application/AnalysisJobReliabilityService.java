@@ -5,8 +5,13 @@ import com.videopilot.analysis.domain.JobErrorCategory;
 import com.videopilot.analysis.domain.JobEventType;
 import com.videopilot.analysis.domain.JobFailure;
 import com.videopilot.analysis.domain.JobStatus;
+import com.videopilot.analysis.domain.JobEvent.OperationMetadata;
 import com.videopilot.analysis.port.AnalysisJobReliabilityStore;
 import com.videopilot.analysis.port.AnalysisJobReliabilityStore.RecoveryCandidate;
+import com.videopilot.analysis.port.AnalysisJobReliabilityStore.ReplayAudit;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
@@ -74,6 +79,117 @@ public final class AnalysisJobReliabilityService implements AutoCloseable {
                 requestId, "{}"));
     }
 
+    public ReplayAnalysisJobResult replay(ReplayAnalysisJobCommand command) {
+        validateReplay(command);
+        String reason = command.reason().trim();
+        String fingerprint = replayFingerprint(command.expectedVersion(), reason);
+        Optional<ReplayAudit> existing = store.findReplay(command.jobId(), command.idempotencyKey());
+        if (existing.isPresent()) {
+            return resumeOrReturn(command, fingerprint, existing.orElseThrow());
+        }
+
+        AnalysisJob current = requireOwnedJob(command);
+        if (current.status() != JobStatus.DEAD_LETTERED || current.version() != command.expectedVersion()) {
+            throw new AnalysisJobException(AnalysisJobException.Reason.CONFLICT);
+        }
+        int replayAttempt = current.attempt() + 1;
+        AnalysisJob replaying;
+        try {
+            replaying = transitions.transition(new JobTransitionCommand(
+                    current.jobId(), current.status(), current.version(), JobStatus.MANUAL_REPLAY,
+                    Optional.empty(), Optional.empty(), JobEventType.JOB_MANUAL_REPLAY_STARTED,
+                    command.requestId(), replayPayload(reason), Optional.empty(),
+                    Optional.of(new OperationMetadata(command.idempotencyKey(), fingerprint, replayAttempt))));
+        } catch (JobTransitionConflictException conflict) {
+            return store.findReplay(command.jobId(), command.idempotencyKey())
+                    .map(audit -> resumeOrReturn(command, fingerprint, audit))
+                    .orElseThrow(() -> new AnalysisJobException(AnalysisJobException.Reason.CONFLICT));
+        }
+        queueReplay(replaying, command.requestId());
+        ReplayAudit committedAudit = store.findReplay(command.jobId(), command.idempotencyKey())
+                .orElseThrow(() -> new IllegalStateException("Committed replay audit is unavailable"));
+        return new ReplayAnalysisJobResult(current.jobId(), replayAttempt, committedAudit.acceptedAt());
+    }
+
+    private ReplayAnalysisJobResult resumeOrReturn(
+            ReplayAnalysisJobCommand command, String fingerprint, ReplayAudit audit) {
+        if (!audit.fingerprint().equals(fingerprint)) {
+            throw new AnalysisJobException(AnalysisJobException.Reason.IDEMPOTENCY_KEY_REUSED);
+        }
+        AnalysisJob job = requireOwnedJob(command);
+        if (job.status() == JobStatus.MANUAL_REPLAY && job.attempt() == audit.attempt()) {
+            queueReplay(job, command.requestId());
+        }
+        return new ReplayAnalysisJobResult(command.jobId(), audit.attempt(), audit.acceptedAt());
+    }
+
+    private void queueReplay(AnalysisJob replaying, String requestId) {
+        try {
+            transitions.transition(new JobTransitionCommand(
+                    replaying.jobId(), JobStatus.MANUAL_REPLAY, replaying.version(), JobStatus.QUEUED,
+                    Optional.empty(), Optional.empty(), JobEventType.JOB_QUEUED,
+                    requestId, "{}"));
+        } catch (JobTransitionConflictException conflict) {
+            AnalysisJob winner = store.findById(replaying.jobId()).orElseThrow(() -> conflict);
+            if (winner.attempt() != replaying.attempt() || winner.status() == JobStatus.MANUAL_REPLAY
+                    || winner.status() == JobStatus.DEAD_LETTERED) {
+                throw conflict;
+            }
+        }
+    }
+
+    private AnalysisJob requireOwnedJob(ReplayAnalysisJobCommand command) {
+        return store.findById(command.jobId())
+                .filter(job -> job.ownerId().equals(command.ownerId()))
+                .orElseThrow(() -> new AnalysisJobException(AnalysisJobException.Reason.RESOURCE_NOT_FOUND));
+    }
+
+    private void validateReplay(ReplayAnalysisJobCommand command) {
+        if (command == null || command.jobId() == null || command.ownerId() == null
+                || command.ownerId().isBlank() || command.expectedVersion() < 0
+                || command.idempotencyKey() == null
+                || !command.idempotencyKey().matches("[A-Za-z0-9._:-]{1,128}")
+                || !command.confirmed() || command.reason() == null || command.reason().isBlank()
+                || command.reason().length() > 500 || command.requestId() == null
+                || command.requestId().isBlank()) {
+            throw new AnalysisJobException(AnalysisJobException.Reason.INVALID_REQUEST);
+        }
+    }
+
+    private String replayFingerprint(long expectedVersion, String reason) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest((expectedVersion + "\n" + reason).getBytes(StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 is unavailable", impossible);
+        }
+    }
+
+    private String replayPayload(String reason) {
+        StringBuilder escaped = new StringBuilder(reason.length());
+        for (int index = 0; index < reason.length(); index++) {
+            char character = reason.charAt(index);
+            switch (character) {
+                case '"' -> escaped.append("\\\"");
+                case '\\' -> escaped.append("\\\\");
+                case '\b' -> escaped.append("\\b");
+                case '\f' -> escaped.append("\\f");
+                case '\n' -> escaped.append("\\n");
+                case '\r' -> escaped.append("\\r");
+                case '\t' -> escaped.append("\\t");
+                default -> {
+                    if (character < 0x20) {
+                        escaped.append(String.format("\\u%04x", (int) character));
+                    } else {
+                        escaped.append(character);
+                    }
+                }
+            }
+        }
+        return "{\"reason\":\"" + escaped + "\"}";
+    }
+
     public int recoverDue(int limit) {
         if (limit < 1) {
             throw new IllegalArgumentException("Recovery batch size must be positive");
@@ -82,7 +198,7 @@ public final class AnalysisJobReliabilityService implements AutoCloseable {
         int recovered = 0;
         for (RecoveryCandidate candidate : store.findRecoveryCandidates(
                 currentTime, currentTime.minus(leaseDuration), limit)) {
-            if (candidate.status() == JobStatus.RETRY_WAIT) {
+            if (candidate.status() == JobStatus.RETRY_WAIT || candidate.status() == JobStatus.MANUAL_REPLAY) {
                 try {
                     transitions.transition(new JobTransitionCommand(
                             candidate.jobId(), candidate.status(), candidate.version(), JobStatus.QUEUED,

@@ -34,6 +34,13 @@ public class AnalysisJobPersistenceAdapter implements JobTransitionStore, Analys
     }
 
     @Override
+    public Optional<ReplayAudit> findReplay(UUID jobId, String idempotencyKey) {
+        return Optional.ofNullable(mapper.selectReplay(jobId.toString(), idempotencyKey))
+                .map(row -> new ReplayAudit(
+                        row.getOperationFingerprint(), row.getOperationAttempt(), row.getOccurredAt()));
+    }
+
+    @Override
     public Optional<MediaForAnalysis> findMedia(OwnerId ownerId, UUID mediaId) {
         return Optional.ofNullable(mapper.selectMedia(ownerId.value().toString(), mediaId.toString()))
                 .map(row -> new MediaForAnalysis(

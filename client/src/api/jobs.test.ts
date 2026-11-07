@@ -76,6 +76,38 @@ describe('jobs API', () => {
     expect(JSON.stringify(request.mock.calls)).not.toContain('ownerId')
   })
 
+  it('submits a confirmed replay with version, idempotency and CSRF guards', async () => {
+    const request = vi.fn().mockResolvedValue(jsonResponse(202, {
+      jobId: job.jobId,
+      attempt: 1,
+      status: 'ACCEPTED',
+      acceptedAt: '2026-11-07T09:00:00Z',
+    }))
+
+    await createJobsApi(request).replay(
+      job.jobId,
+      { expectedVersion: 9, confirmed: true, reason: 'Provider recovered' },
+      'replay-8',
+      'csrf-8',
+    )
+
+    expect(request).toHaveBeenCalledWith(
+      `${job.links.self}/replays`,
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'Idempotency-Key': 'replay-8',
+          'X-CSRF-Token': 'csrf-8',
+        }),
+      }),
+    )
+    expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body))).toEqual({
+      expectedVersion: 9,
+      confirmed: true,
+      reason: 'Provider recovered',
+    })
+  })
+
   it('reconnects a non-terminal stream with the last persisted event sequence', async () => {
     const queued: JobEvent = {
       jobId: job.jobId,

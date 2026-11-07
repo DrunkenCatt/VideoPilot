@@ -167,6 +167,54 @@ describe('JobWorkbench', () => {
     expect(wrapper.get('[aria-live="polite"]').text()).toContain('已取消')
   })
 
+  it('confirms a dead-letter replay once and refreshes the persisted attempt', async () => {
+    const exhausted = {
+      ...job,
+      status: 'DEAD_LETTERED' as const,
+      version: 9,
+      failure: { code: 'RETRY_EXHAUSTED', retryable: true, summary: 'Retry budget exhausted.' },
+      reliability: {
+        recoveryState: 'MANUAL_ACTION_REQUIRED' as const,
+        operatorAction: 'MANUAL_REPLAY' as const,
+        attempt: 0,
+        nextRetryAt: null,
+        reasonCode: 'RETRY_EXHAUSTED',
+      },
+    }
+    const queued = {
+      ...exhausted,
+      status: 'QUEUED' as const,
+      attempt: 1,
+      version: 11,
+      failure: null,
+      reliability: { ...exhausted.reliability, recoveryState: 'AUTO_RECOVERING' as const, operatorAction: 'NONE' as const, attempt: 1 },
+    }
+    const page = { ...emptyPage, data: [exhausted], pagination: { ...emptyPage.pagination, totalItems: 1, totalPages: 1 } }
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(200, page))
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'Content-Type': 'text/event-stream' } }))
+      .mockResolvedValueOnce(jsonResponse(202, {
+        jobId: job.jobId, attempt: 1, status: 'ACCEPTED', acceptedAt: '2026-11-07T09:00:00Z',
+      }))
+      .mockResolvedValueOnce(jsonResponse(200, queued))
+      .mockResolvedValueOnce(new Response('', { status: 200, headers: { 'Content-Type': 'text/event-stream' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const wrapper = mountWorkbench()
+    await flushPromises()
+
+    await wrapper.get('[data-test="open-job"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-test="open-replay"]').trigger('click')
+    await wrapper.get('#replay-reason').setValue('Provider incident resolved')
+    await wrapper.get('[data-test="replay-confirmation"]').trigger('submit')
+    await flushPromises()
+
+    expect(fetchMock.mock.calls[2]?.[0]).toBe(`${job.links.self}/replays`)
+    expect(wrapper.get('[data-test="job-status"]').text()).toContain('排队中')
+    expect(wrapper.text()).toContain('执行尝试2')
+  })
+
   it('renders the stable failure summary without exposing internal details', async () => {
     const failed = {
       ...job,

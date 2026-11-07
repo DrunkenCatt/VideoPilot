@@ -8,6 +8,9 @@ import com.videopilot.analysis.application.AnalysisJobException;
 import com.videopilot.analysis.application.AnalysisJobPage;
 import com.videopilot.analysis.application.AnalysisJobView;
 import com.videopilot.analysis.application.SubmitAnalysisJobCommand;
+import com.videopilot.analysis.application.AnalysisJobReliabilityService;
+import com.videopilot.analysis.application.ReplayAnalysisJobCommand;
+import com.videopilot.analysis.application.ReplayAnalysisJobResult;
 import com.videopilot.analysis.domain.AnalysisMode;
 import com.videopilot.analysis.domain.JobFailure;
 import com.videopilot.analysis.domain.JobStage;
@@ -21,6 +24,7 @@ import com.videopilot.infrastructure.web.contract.M1ApiContracts.CreateAnalysisJ
 import com.videopilot.infrastructure.web.contract.M1ApiContracts.JobLinks;
 import com.videopilot.infrastructure.web.contract.M1ApiContracts.PageMetadata;
 import com.videopilot.infrastructure.web.contract.M1ApiContracts.PageResponse;
+import com.videopilot.infrastructure.web.contract.M4ApiContracts;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -62,15 +66,33 @@ public class AnalysisJobController {
 
     private final AnalysisJobApplicationService jobs;
     private final AnalysisJobEventApplicationService jobEvents;
+    private final AnalysisJobReliabilityService reliability;
     private final Executor sseExecutor;
 
     public AnalysisJobController(
             AnalysisJobApplicationService jobs,
             AnalysisJobEventApplicationService jobEvents,
+            AnalysisJobReliabilityService reliability,
             @Qualifier("analysisJobSseExecutor") Executor sseExecutor) {
         this.jobs = jobs;
         this.jobEvents = jobEvents;
+        this.reliability = reliability;
         this.sseExecutor = sseExecutor;
+    }
+
+    @PostMapping("/{jobId}/replays")
+    ResponseEntity<M4ApiContracts.ReplayResponse> replay(
+            @AuthenticationPrincipal IdentityPrincipal principal,
+            @PathVariable UUID jobId,
+            @RequestHeader(M1ApiContracts.IDEMPOTENCY_KEY_HEADER)
+                    @Pattern(regexp = "[A-Za-z0-9._:-]{1,128}") String idempotencyKey,
+            @Valid @RequestBody M4ApiContracts.ReplayRequest request) {
+        ReplayAnalysisJobResult result = reliability.replay(new ReplayAnalysisJobCommand(
+                jobId, principal.ownerContext().ownerId().value().toString(), request.expectedVersion(),
+                idempotencyKey, request.confirmed(), request.reason(), MDC.get(TraceContext.REQUEST_ID)));
+        return ResponseEntity.accepted().body(new M4ApiContracts.ReplayResponse(
+                result.jobId(), result.attempt(), M4ApiContracts.ReplayStatus.ACCEPTED,
+                result.acceptedAt()));
     }
 
     @PostMapping
@@ -242,12 +264,22 @@ public class AnalysisJobController {
         return new M1ApiContracts.JobEventResponse(
                 event.jobId(),
                 event.sequence(),
-                M1ApiContracts.JobEventType.valueOf(event.eventType().name()),
+                publicEventType(event.eventType()),
                 M1ApiContracts.JobStatus.valueOf(event.status().name()),
                 event.stage().flatMap(this::toContractStage).orElse(null),
                 event.message(),
                 event.occurredAt(),
                 event.terminal());
+    }
+
+    private M1ApiContracts.JobEventType publicEventType(
+            com.videopilot.analysis.domain.JobEventType eventType) {
+        return switch (eventType) {
+            case JOB_RETRY_SCHEDULED, JOB_RECOVERY_QUEUED, JOB_MANUAL_REPLAY_STARTED ->
+                    M1ApiContracts.JobEventType.JOB_QUEUED;
+            case JOB_DEAD_LETTERED -> M1ApiContracts.JobEventType.JOB_FAILED;
+            default -> M1ApiContracts.JobEventType.valueOf(eventType.name());
+        };
     }
 
     private long parseLastEventId(String value) {

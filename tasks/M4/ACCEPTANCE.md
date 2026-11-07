@@ -1,6 +1,6 @@
 # M4 验收记录：任务可靠性发布门
 
-> 状态：T0-T1 已完成；T2-T5 尚未实现。本文按任务持续追加实际命令、环境、结果和未执行项，未验证能力不得提前标记通过。
+> 状态：T0-T2 已完成；T3-T5 尚未实现。本文按任务持续追加实际命令、环境、结果和未执行项，未验证能力不得提前标记通过。
 
 ## 1. M4 针对现有流程解决的问题
 
@@ -127,7 +127,7 @@ T0 未改变运行时代码或页面，浏览器验收用于冻结 M4 开始前�
 
 ## 9. 后续任务证据
 
-T2-T5 每完成一项在此追加候选 commit、RED/GREEN、定向/完整测试、真实浏览器、故障注入、未执行项和退出结论；上一个退出门未通过时不得开始下一项。
+T3-T5 每完成一项在此追加候选 commit、RED/GREEN、定向/完整测试、真实浏览器、故障注入、未执行项和退出结论；上一个退出门未通过时不得开始下一项。
 
 ## 10. T1 实现与审查结论
 
@@ -177,3 +177,51 @@ T1 没有提供 Manual Replay 操作，浏览器仅展示等待重试、自动�
 ## 13. T1 退出结论
 
 T1 的自动 Recovery、有限 Retry、重试耗尽、数据库 lease/CAS、Outbox 重新排队和最小用户投影均使用现有 MySQL Job/Checkpoint/事件真源。完整与最终定向测试、代码审查及真实浏览器均通过；没有降低阈值、跳过新增测试或增加 suppression。Checkpoint A 通过，可以进入 T2。
+
+## 14. T2 实现与审查结论
+
+T2 在 T1 的可靠性 service、统一状态迁移和既有工作台内补齐 Manual Replay，没有增加 Replay 表、通用操作框架或第二套实时协议：
+
+- owner、预期版本、明确确认、非空原因和操作幂等键在 application service 统一校验；仅 `DEAD_LETTERED` 可进入 Replay。
+- 同一 Job 经 `DEAD_LETTERED -> MANUAL_REPLAY -> QUEUED` 产生新 attempt 和新 Outbox 消息；操作 key、意图指纹和 attempt 写入不可变事件，数据库唯一约束裁决并发。
+- 相同 key 与相同意图返回同一审计结果；相同 key 改变意图稳定拒绝。竞态胜出者已推进到队列后，其他调用读取同一审计事实，不再产生第二个 attempt。
+- 旧阶段尝试、Checkpoint、失败和事件不删除、不改写；后续执行继续使用已有输入指纹恢复规则，已完成且输入一致的阶段不重复调用供应商。
+- REST 和 TypeScript 只增加一个 Replay 命令；工作台只在允许状态展示危险操作、二次确认和原因输入，提交中禁用重复操作，成功后重新读取持久化 Job 并继续既有 SSE。
+- 内部 Manual Replay 审计事件投影到冻结的 M1 公共事件枚举，没有为局部实现扩大公开合同。
+
+代码审查发现并修复了两个真实竞态问题：MySQL 将时间戳规范化到微秒后，首次响应和重复请求一度可能返回不同精度；最终首次响应也读取已提交审计行。两个并发相同 key 的调用也可能在第二次迁移 CAS 上竞争；最终输家只在同 attempt 已被胜出者推进时接受数据库现状，其他冲突继续失败。最终审查未发现剩余阻断项。
+
+## 15. T2 RED/GREEN 与自动化证据
+
+### RED
+
+最初的 `AnalysisJobReliabilityServiceTest` 在 Replay 命令、审计查询和状态迁移接线不存在时无法编译；前端 API/组件测试在 Replay client、确认 UI 和防双击行为不存在时失败。没有删除断言、增加 suppression 或降低覆盖率门。
+
+### GREEN
+
+| 命令 | 环境与结果 |
+| --- | --- |
+| `server\mvnw.cmd -q -Dtest=AnalysisJobReliabilityServiceTest test` | Replay 规则、owner 隔离、旧版本、非法状态、幂等复用和中断恢复 13 项通过 |
+| `server\mvnw.cmd -q test-compile failsafe:integration-test failsafe:verify -Dit.test=AnalysisJobPersistenceAdapterIT` | 本机 Compose MySQL `127.0.0.1:13306`；Replay 审计、历史保留和真实并发同 key 共 9 项通过 |
+| `server\mvnw.cmd -q test-compile failsafe:integration-test failsafe:verify -Dit.test=AnalysisJobPersistenceAdapterIT,DatabaseMigrationIT` | 隔离数据库从 V1 前进迁移至 V16；迁移与持久化定向 15 项通过，验证微秒审计时间与唯一约束 |
+| `server\mvnw.cmd test` | Windows/JDK 21；337 项通过、0 失败、1 项既有 FFmpeg 环境条件跳过；JaCoCo 80% 门通过，1 分 26 秒 |
+| `client\npm.cmd run check` | typecheck、零 warning lint、96 项 Vitest、覆盖率与生产构建全部通过；Statements 86.77%、Branches 80.98%、Functions 86.89%、Lines 91.96% |
+
+T2 没有修改 RabbitMQ 拓扑或供应商主路径，因此没有重复执行全量、可能产生外部模型费用的 `verify -Pintegration`；V16、MySQL CAS/唯一约束、Outbox 和并发操作已由隔离数据库定向集成门覆盖。T5 仍必须在同一候选提交执行完整 Docker 集成门。
+
+## 16. T2 真实浏览器验收
+
+2026-11-07 使用重新构建的 Compose server、真实 V16 数据库和 Vite `http://localhost:5173/` 验收。使用本地 `DEAD_LETTERED` fixture，Replay 后 ASR 配置缺失按既有故障路径安全失败，没有发起付费模型调用。
+
+| 检查 | 观察 | 结果 |
+| --- | --- | --- |
+| 危险操作边界 | 仅 `operatorAction=MANUAL_REPLAY` 时显示“人工重放”；点击后才展开确认区 | 通过 |
+| 明确确认 | 确认文案说明会创建新执行尝试且可能产生模型调用；原因为空时提交按钮禁用 | 通过 |
+| 执行与审计 | 提交后 Job 从 attempt 1 进入 attempt 2，事件依次显示 Manual Replay accepted、queued 和后续执行阶段 | 通过 |
+| 刷新持久化 | 页面刷新后仍从服务端显示 attempt 2、Replay 审计事件和最终失败状态 | 通过 |
+| 防重复与响应式 | 提交期间按钮禁用；桌面 `1280x800` 与手机 `375x812` 均无横向溢出，手机详情宽 328px | 通过 |
+| 运行时 | DOM 交互、请求和刷新无可见运行时错误；本次 in-app Browser 接口未提供 Console 消息读取能力 | 限制已记录 |
+
+## 17. T2 退出结论
+
+T2 的 owner、CAS、幂等、同 Job 新 attempt、不可变历史、新 Outbox 和真实浏览器操作均通过。已完成阶段继续由既有输入指纹规则复用，自动化断言 Replay 不清除阶段历史；没有重新投递旧 messageId。Checkpoint B 的 Replay 子项通过，deadline/预算/资源隔离两项仍保持未完成并由 T3 验证。T2 可以独立提交并进入 T3。

@@ -96,5 +96,28 @@ describe('JobDetail answer integration', () => {
     })
 
     expect(wrapper.get('[data-test="job-reliability"]').text()).toContain('自动重试已用尽，需要人工处理')
+    expect(wrapper.get('[data-test="open-replay"]').text()).toContain('人工重放')
+  })
+
+  it('requires an explicit reason and confirmation before emitting replay', async () => {
+    const exhausted = {
+      ...job,
+      status: 'DEAD_LETTERED',
+      reliability: {
+        recoveryState: 'MANUAL_ACTION_REQUIRED', operatorAction: 'MANUAL_REPLAY',
+        attempt: 0, nextRetryAt: null, reasonCode: 'RETRY_EXHAUSTED',
+      },
+    } as AnalysisJob
+    const wrapper = mount(JobDetail, {
+      props: { job: exhausted, media: null, mediaUnavailable: false, events: [], actionBusy: false, csrfToken: 'csrf' },
+      global: { stubs: { VideoContextTimeline: true, AnswerWorkspace: true } },
+    })
+
+    await wrapper.get('[data-test="open-replay"]').trigger('click')
+    expect(wrapper.get('[data-test="confirm-replay"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('#replay-reason').setValue('  Provider incident resolved  ')
+    await wrapper.get('[data-test="replay-confirmation"]').trigger('submit')
+
+    expect(wrapper.emitted('replay')).toEqual([['Provider incident resolved']])
   })
 })
