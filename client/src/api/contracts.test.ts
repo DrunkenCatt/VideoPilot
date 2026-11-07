@@ -9,12 +9,17 @@ import {
   jobAnswerPath,
   jobAnswersPath,
   jobRetrievalPath,
+  jobReplaysPath,
   mediaPlaybackPath,
+  reliabilitySummaryPath,
   type AnswerResponse,
   type AnalysisJob,
   type EvidenceHit,
   type JobEvent,
+  type JobReliability,
   type KeyframeId,
+  type ReliabilitySummary,
+  type ReplayRequest,
   type VideoContext,
   type VideoSegment,
 } from './contracts'
@@ -101,5 +106,39 @@ describe('M2 API contract', () => {
     expect(context.status).toBe('READY')
     expect(context.ocrState).toBe('DEGRADED')
     expect(segment.endMs).toBe(60_000)
+  })
+})
+
+describe('M4 API contract', () => {
+  it('uses owner-scoped replay and read-only reliability paths', () => {
+    const jobId = 'job-1' as AnalysisJob['jobId']
+
+    expect(jobReplaysPath(jobId)).toBe('/api/v1/analysis-jobs/job-1/replays')
+    expect(reliabilitySummaryPath()).toBe('/api/v1/operations/reliability')
+  })
+
+  it('keeps recovery state separate from the allowed operator action', () => {
+    const reliability: JobReliability = {
+      recoveryState: 'MANUAL_ACTION_REQUIRED',
+      operatorAction: 'MANUAL_REPLAY',
+      attempt: 2,
+      nextRetryAt: null,
+      reasonCode: 'RETRY_EXHAUSTED',
+    }
+
+    expect(reliability.recoveryState).toBe('MANUAL_ACTION_REQUIRED')
+    expect(reliability.operatorAction).toBe('MANUAL_REPLAY')
+  })
+
+  it('requires an explicit replay confirmation and exposes unknown cost as null', () => {
+    const replay: ReplayRequest = { expectedVersion: 7, confirmed: true, reason: 'Provider recovered.' }
+    const summary = {
+      providerCalls: [{ provider: 'SILICONFLOW', estimatedCost: null, currency: 'CNY' }],
+      degradedSources: ['RABBITMQ'],
+    } as ReliabilitySummary
+
+    expect(replay.confirmed).toBe(true)
+    expect(summary.providerCalls[0]?.estimatedCost).toBeNull()
+    expect(summary.degradedSources).toEqual(['RABBITMQ'])
   })
 })

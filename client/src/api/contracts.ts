@@ -34,6 +34,7 @@ export const CONTRACT_LIMITS = {
   defaultAnswerPageSize: 20,
   maxAnswerPageSize: 100,
   maxClaimsPerAnswer: 8,
+  maxReplayReasonLength: 500,
 } as const
 
 export function contextPath(jobId: JobId): string {
@@ -62,6 +63,14 @@ export function jobAnswersPath(jobId: JobId): string {
 
 export function jobAnswerPath(jobId: JobId, answerId: AnswerId | string): string {
   return `${jobAnswersPath(jobId)}/${answerId}`
+}
+
+export function jobReplaysPath(jobId: JobId): string {
+  return `${API.analysisJobs}/${jobId}/replays`
+}
+
+export function reliabilitySummaryPath(): string {
+  return `${API.prefix}/operations/reliability`
 }
 
 export type AnalysisMode = 'STANDARD'
@@ -209,6 +218,72 @@ export interface AnalysisJob {
     events: string
     cancellations: string
   }
+}
+
+export type RecoveryState =
+  | 'NONE'
+  | 'AUTO_RECOVERING'
+  | 'RETRY_WAIT'
+  | 'MANUAL_ACTION_REQUIRED'
+  | 'NON_RECOVERABLE'
+  | 'BUDGET_EXHAUSTED'
+
+export type OperatorAction = 'NONE' | 'WAIT' | 'MANUAL_REPLAY'
+
+export interface JobReliability {
+  recoveryState: RecoveryState
+  operatorAction: OperatorAction
+  attempt: number
+  nextRetryAt: string | null
+  reasonCode: string | null
+}
+
+export interface ReplayRequest {
+  expectedVersion: number
+  confirmed: true
+  reason: string
+}
+
+export interface ReplayResponse {
+  jobId: JobId
+  attempt: number
+  status: 'ACCEPTED'
+  acceptedAt: string
+}
+
+export interface CountByCode {
+  code: string
+  count: number
+}
+
+export interface StageDuration {
+  stage: string
+  p50Ms: number
+  p95Ms: number
+}
+
+export interface ProviderCalls {
+  provider: string
+  totalCalls: number
+  failedCalls: number
+  inputUnits: number
+  outputUnits: number
+  estimatedCost: number | null
+  currency: string | null
+}
+
+export type DegradedOperationsSource = 'MYSQL' | 'RABBITMQ'
+
+export interface ReliabilitySummary {
+  windowStart: string
+  windowEnd: string
+  pendingOutbox: number
+  queueBacklog: number
+  failureCounts: CountByCode[]
+  stageDurations: StageDuration[]
+  providerCalls: ProviderCalls[]
+  degradedSources: DegradedOperationsSource[]
+  generatedAt: string
 }
 
 export interface JobEvent {
