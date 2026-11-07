@@ -42,7 +42,8 @@ public final class JobTransitionService {
 
         Instant occurredAt = now.get();
         Optional<JobStage> stage = command.stageAttempt().map(attempt -> attempt.stage());
-        AnalysisJob next = current.advance(command.targetStatus(), stage, command.failure(), occurredAt);
+        AnalysisJob next = current.advance(
+                command.targetStatus(), stage, command.failure(), command.nextRetryAt(), occurredAt);
         JobEvent event = new JobEvent(
                 UUID.randomUUID(),
                 current.jobId(),

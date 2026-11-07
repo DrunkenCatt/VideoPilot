@@ -7,6 +7,7 @@ import com.videopilot.analysis.domain.JobStatus;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.time.Instant;
 
 public record JobTransitionCommand(
         UUID jobId,
@@ -17,7 +18,8 @@ public record JobTransitionCommand(
         Optional<JobFailure> failure,
         JobEventType eventType,
         String requestId,
-        String eventPayload) {
+        String eventPayload,
+        Optional<Instant> nextRetryAt) {
 
     public JobTransitionCommand {
         Objects.requireNonNull(jobId, "jobId");
@@ -25,6 +27,7 @@ public record JobTransitionCommand(
         Objects.requireNonNull(targetStatus, "targetStatus");
         stageAttempt = Objects.requireNonNull(stageAttempt, "stageAttempt");
         failure = Objects.requireNonNull(failure, "failure");
+        nextRetryAt = Objects.requireNonNull(nextRetryAt, "nextRetryAt");
         Objects.requireNonNull(eventType, "eventType");
         if (expectedVersion < 0) {
             throw new IllegalArgumentException("expectedVersion must not be negative");
@@ -36,5 +39,19 @@ public record JobTransitionCommand(
                 && failure.isEmpty()) {
             throw new IllegalArgumentException(targetStatus + " transition requires a stable failure");
         }
+    }
+
+    public JobTransitionCommand(
+            UUID jobId,
+            JobStatus expectedStatus,
+            long expectedVersion,
+            JobStatus targetStatus,
+            Optional<JobStageAttempt> stageAttempt,
+            Optional<JobFailure> failure,
+            JobEventType eventType,
+            String requestId,
+            String eventPayload) {
+        this(jobId, expectedStatus, expectedVersion, targetStatus, stageAttempt, failure,
+                eventType, requestId, eventPayload, Optional.empty());
     }
 }

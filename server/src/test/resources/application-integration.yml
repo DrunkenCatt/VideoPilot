@@ -22,6 +22,10 @@ spring:
     connection-timeout: ${RABBITMQ_CONNECTION_TIMEOUT:2s}
 
 videopilot:
+  analysis:
+    recovery:
+      scan-delay: 1h
+      initial-delay: 1h
   storage:
     media:
       enabled: true

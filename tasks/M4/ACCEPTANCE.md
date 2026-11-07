@@ -1,6 +1,6 @@
 # M4 验收记录：任务可靠性发布门
 
-> 状态：T0 合同与基线验收已完成；T1-T5 尚未实现。本文按任务持续追加实际命令、环境、结果和未执行项，未验证能力不得提前标记通过。
+> 状态：T0-T1 已完成；T2-T5 尚未实现。本文按任务持续追加实际命令、环境、结果和未执行项，未验证能力不得提前标记通过。
 
 ## 1. M4 针对现有流程解决的问题
 
@@ -127,4 +127,53 @@ T0 未改变运行时代码或页面，浏览器验收用于冻结 M4 开始前�
 
 ## 9. 后续任务证据
 
-T1-T5 每完成一项在此追加候选 commit、RED/GREEN、定向/完整测试、真实浏览器、故障注入、未执行项和退出结论；上一个退出门未通过时不得开始下一项。
+T2-T5 每完成一项在此追加候选 commit、RED/GREEN、定向/完整测试、真实浏览器、故障注入、未执行项和退出结论；上一个退出门未通过时不得开始下一项。
+
+## 10. T1 实现与审查结论
+
+T1 只增加一条可靠性 application service 和一份 V15 前进迁移，没有引入 retry job 表、第二套状态机或第二条实时协议：
+
+- `analysis_job` 增加 `retry_count`、`next_retry_at` 和执行 lease；Job、阶段尝试和 Outbox 仍为 MySQL 唯一真源。
+- 可重试失败进入最多 3 次的 `RETRY_WAIT`，到期后经既有 `JobTransitionService` 进入 `QUEUED`；耗尽后经合法的 `FAILED -> DEAD_LETTERED` 迁移停止自动执行。
+- 活跃 Job 的过期 lease 通过 version CAS 只追加恢复事件和新 Outbox 消息；Redis 锁只减少并发，不能替代数据库 lease/CAS。
+- UNKNOWN、不可重试和取消沿既有确定性分类停止或失败，不由消息 header、Broker DLQ 或模型输出改变。
+- Job DTO 和既有工作台增加最小可靠性投影，状态仍由相同 REST/SSE 持久化事件恢复。
+
+代码审查发现并修复了恢复扫描竞态：两个扫描器同时读取到期 `RETRY_WAIT` 时，CAS 失败的一方原本会中断整批；最终实现只跳过已被其他执行者领取的候选，后续候选继续处理。恢复次数、退避、lease 和 batch size 的非法配置会在执行前直接拒绝。
+
+## 11. T1 RED/GREEN 与自动化证据
+
+### RED
+
+最初的 `AnalysisJobReliabilityServiceTest` 在可靠性 service、store port、`retryCount/nextRetryAt/lease` 领域事实不存在时无法编译；前端 Job 详情测试在可靠性投影和状态卡不存在时失败。没有删除断言或降低覆盖率阈值。
+
+### GREEN
+
+| 命令 | 环境与结果 |
+| --- | --- |
+| `server\mvnw.cmd -q "-Dtest=AnalysisJobReliabilityServiceTest,AnalysisJobExecutionHandlerTest,M4ContractTest" test` | 最终候选的可靠性规则、扫描竞态、配置校验、消费接线和 M4 合同通过 |
+| `server\mvnw.cmd test` | Windows/JDK 21；330 项通过、0 失败、1 项既有 FFmpeg 环境条件跳过；JaCoCo 80% 门通过，1 分 34 秒 |
+| `client\npm.cmd run check` | typecheck、零 warning lint、93 项 Vitest、覆盖率与生产构建全部通过；Statements 87.55%、Branches 80.64%、Functions 87.37%、Lines 92.59% |
+| Docker `mvn -Dbenchmark.commit=m4-t1 verify -Pintegration` | 隔离 MySQL 数据库、Redis/RabbitMQ/MinIO/Qdrant、容器 FFmpeg/Tesseract 和经授权的真实 SiliconFlow 调用；326 项单元测试与 60 项集成测试全通过，0 跳过，9 分 16 秒 |
+| Docker `mvn test-compile failsafe:integration-test failsafe:verify -Dit.test=AnalysisJobPersistenceAdapterIT,ApplicationRestartRecoveryIT` | 最终候选、全新数据库从 V1 迁移至 V15；MySQL CAS/lease/Outbox 7 项和应用重启恢复 1 项全部通过，3 分 15 秒 |
+
+完整 Docker 门证明基准 Embedding/LLM 主路径仍可用；最终定向门在审查修复后重新证明 V15、CAS、lease、Outbox 和重启恢复。完整门生成的 M3 benchmark 内容与原基线指标一致，不作为 T1 功能改动提交。
+
+## 12. T1 真实浏览器验收
+
+2026-11-07 使用重新构建的 Compose server、真实 V15 主数据库与 Vite `http://localhost:5173/` 验收。登录凭据只提交到本机页面，没有输出或写入浏览器存储。
+
+| 检查 | 观察 | 结果 |
+| --- | --- | --- |
+| 持久化合同 | 选择已有 FAILED Job 后显示 `该任务无法自动恢复` 和稳定原因码 `ANALYSIS_FIXTURE_FAILURE` | 通过 |
+| 刷新恢复 | 页面刷新后 hash 仍指向同一 Job，`data-test=job-reliability` 从服务端重新显示相同状态与原因码 | 通过 |
+| 桌面 1440x900 | `scrollWidth=1425 < innerWidth=1440`；可靠性卡位于内容边界内 | 通过 |
+| 手机 375x812 | `scrollWidth=360 < innerWidth=375`；可靠性卡左右为 16/344px、宽 328px，无横向溢出 | 通过 |
+| 可访问状态 | 可靠性卡使用 `role=status`，原失败详情继续使用 `alert`，两者语义可区分 | 通过 |
+| Console | 最终 error/warn 为 0 | 通过 |
+
+T1 没有提供 Manual Replay 操作，浏览器仅展示等待重试、自动恢复、需人工处理和不可恢复投影；Replay 确认与操作反馈留给 T2，不提前伪造。
+
+## 13. T1 退出结论
+
+T1 的自动 Recovery、有限 Retry、重试耗尽、数据库 lease/CAS、Outbox 重新排队和最小用户投影均使用现有 MySQL Job/Checkpoint/事件真源。完整与最终定向测试、代码审查及真实浏览器均通过；没有降低阈值、跳过新增测试或增加 suppression。Checkpoint A 通过，可以进入 T2。

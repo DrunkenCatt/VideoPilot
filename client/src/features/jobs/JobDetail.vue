@@ -88,6 +88,22 @@ function cite(citation: CitedEvidence) {
     </p>
 
     <div
+      v-if="job.reliability.recoveryState !== 'NONE'"
+      class="job-reliability"
+      data-test="job-reliability"
+      role="status"
+    >
+      <strong v-if="job.reliability.recoveryState === 'RETRY_WAIT'">系统将在稍后自动重试</strong>
+      <strong v-else-if="job.reliability.recoveryState === 'AUTO_RECOVERING'">系统正在自动恢复</strong>
+      <strong v-else-if="job.reliability.operatorAction === 'MANUAL_REPLAY'">自动重试已用尽，需要人工处理</strong>
+      <strong v-else>该任务无法自动恢复</strong>
+      <p v-if="job.reliability.nextRetryAt">
+        预计重试：{{ new Date(job.reliability.nextRetryAt).toLocaleString('zh-CN') }}
+      </p>
+      <small v-if="job.reliability.reasonCode">{{ job.reliability.reasonCode }}</small>
+    </div>
+
+    <div
       v-if="job.failure"
       class="job-failure"
       role="alert"

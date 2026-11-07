@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.videopilot.analysis.application.AnalysisJobExecutionHandler;
 import com.videopilot.analysis.application.AnalysisJobPipeline;
 import com.videopilot.analysis.application.JobTransitionService;
+import com.videopilot.analysis.application.AnalysisJobReliabilityService;
 import com.videopilot.analysis.port.AnalysisMessageFailureRecorder;
 import com.videopilot.analysis.port.JobExecutionLock;
 import com.videopilot.analysis.port.JobTransitionStore;
@@ -67,9 +68,11 @@ class AnalysisConsumerConfiguration {
     AnalysisJobExecutionHandler analysisJobExecutionHandler(
             JobTransitionStore store,
             JobTransitionService transitions,
+            AnalysisJobReliabilityService reliability,
             JobExecutionLock lock,
             AnalysisJobPipeline pipeline) {
-        return new AnalysisJobExecutionHandler(store, transitions, lock, pipeline, Clock.systemUTC()::instant);
+        return new AnalysisJobExecutionHandler(
+                store, transitions, reliability, lock, pipeline, Clock.systemUTC()::instant);
     }
 
     @Bean

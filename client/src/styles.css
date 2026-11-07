@@ -431,6 +431,15 @@ button:disabled { cursor: wait; opacity: 0.65; }
 }
 
 .status-stamp[data-status='FAILED'], .status-stamp[data-status='DEAD_LETTERED'] { color: var(--danger); }
+
+.job-reliability {
+  margin: 1rem 0;
+  padding: 1rem 1.1rem;
+  border-left: 4px solid var(--signal, #b85c24);
+  background: color-mix(in srgb, var(--signal, #b85c24) 10%, transparent);
+}
+
+.job-reliability p { margin: .35rem 0 0; }
 .status-stamp[data-status='CANCELED'] { color: var(--muted); }
 
 .job-facts {

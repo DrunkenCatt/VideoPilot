@@ -159,6 +159,13 @@ videopilot:
       initial-delay: ${OUTBOX_RELAY_INITIAL_DELAY:2s}
   analysis:
     pipeline-version: ${ANALYSIS_PIPELINE_VERSION:m3-evidence-qa-v1}
+    recovery:
+      max-retries: ${ANALYSIS_RECOVERY_MAX_RETRIES:3}
+      retry-delay: ${ANALYSIS_RECOVERY_RETRY_DELAY:10s}
+      lease-duration: ${ANALYSIS_RECOVERY_LEASE_DURATION:90s}
+      scan-delay: ${ANALYSIS_RECOVERY_SCAN_DELAY:10s}
+      initial-delay: ${ANALYSIS_RECOVERY_INITIAL_DELAY:10s}
+      batch-size: ${ANALYSIS_RECOVERY_BATCH_SIZE:50}
     active-cache:
       ttl: ${ANALYSIS_ACTIVE_CACHE_TTL:30m}
   storage:

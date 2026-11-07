@@ -276,10 +276,31 @@ public class AnalysisJobController {
                 view.attempt(),
                 view.version(),
                 view.failure().map(this::toContractFailure).orElse(null),
+                reliability(view),
                 view.createdAt(),
                 view.updatedAt(),
                 view.completedAt().orElse(null),
                 links(view.jobId()));
+    }
+
+    private com.videopilot.infrastructure.web.contract.M4ApiContracts.JobReliability reliability(
+            AnalysisJobView view) {
+        var state = switch (view.status()) {
+            case RETRY_WAIT -> com.videopilot.infrastructure.web.contract.M4ApiContracts.RecoveryState.RETRY_WAIT;
+            case DEAD_LETTERED -> com.videopilot.infrastructure.web.contract.M4ApiContracts.RecoveryState.MANUAL_ACTION_REQUIRED;
+            case FAILED -> com.videopilot.infrastructure.web.contract.M4ApiContracts.RecoveryState.NON_RECOVERABLE;
+            default -> view.retryCount() > 0
+                    ? com.videopilot.infrastructure.web.contract.M4ApiContracts.RecoveryState.AUTO_RECOVERING
+                    : com.videopilot.infrastructure.web.contract.M4ApiContracts.RecoveryState.NONE;
+        };
+        var action = switch (view.status()) {
+            case RETRY_WAIT -> com.videopilot.infrastructure.web.contract.M4ApiContracts.OperatorAction.WAIT;
+            case DEAD_LETTERED -> com.videopilot.infrastructure.web.contract.M4ApiContracts.OperatorAction.MANUAL_REPLAY;
+            default -> com.videopilot.infrastructure.web.contract.M4ApiContracts.OperatorAction.NONE;
+        };
+        return new com.videopilot.infrastructure.web.contract.M4ApiContracts.JobReliability(
+                state, action, view.attempt(), view.nextRetryAt().orElse(null),
+                view.failure().map(JobFailure::code).orElse(null));
     }
 
     private Optional<M1ApiContracts.JobStage> toContractStage(JobStage stage) {

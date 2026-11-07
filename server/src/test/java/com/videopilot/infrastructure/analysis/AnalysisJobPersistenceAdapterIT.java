@@ -13,6 +13,7 @@ import com.videopilot.analysis.domain.JobEventType;
 import com.videopilot.analysis.domain.JobStage;
 import com.videopilot.analysis.domain.JobStageAttempt;
 import com.videopilot.analysis.domain.JobStatus;
+import com.videopilot.infrastructure.analysis.persistence.AnalysisJobPersistenceAdapter;
 import com.videopilot.identity.application.OwnerContext;
 import com.videopilot.identity.domain.OwnerId;
 import java.time.Instant;
@@ -48,6 +49,9 @@ class AnalysisJobPersistenceAdapterIT {
 
     @Autowired
     private JdbcClient jdbcClient;
+
+    @Autowired
+    private AnalysisJobPersistenceAdapter reliabilityStore;
 
     @AfterEach
     void cleanUp() {
@@ -206,6 +210,36 @@ class AnalysisJobPersistenceAdapterIT {
 
         assertThat(serviceSnapshot().status())
                 .isIn(JobStatus.CANCELED, JobStatus.CANCEL_REQUESTED);
+    }
+
+    @Test
+    void recoveryCandidateUsesMysqlLeaseAndEmitsOneCasGuardedOutboxEvent() {
+        insertCreatedJob();
+        jdbcClient.sql("""
+                UPDATE analysis_job
+                SET status = 'CONTEXT_BUILDING', current_stage = 'CONTEXT_BUILDING',
+                    version = 4, event_sequence = 4, updated_at = :updatedAt
+                WHERE job_id = :jobId
+                """)
+                .param("updatedAt", Instant.now().minusSeconds(300))
+                .param("jobId", jobId.toString())
+                .update();
+        Instant now = Instant.now();
+        var candidate = reliabilityStore.findRecoveryCandidates(now, now.minusSeconds(90), 10).stream()
+                .filter(value -> value.jobId().equals(jobId))
+                .findFirst()
+                .orElseThrow();
+        UUID firstLease = UUID.randomUUID();
+
+        assertThat(reliabilityStore.tryAcquireExecutionLease(jobId, firstLease, now, now.plusSeconds(90))).isTrue();
+        assertThat(reliabilityStore.tryAcquireExecutionLease(jobId, UUID.randomUUID(), now, now.plusSeconds(90))).isFalse();
+        reliabilityStore.releaseExecutionLease(jobId, firstLease);
+        assertThat(reliabilityStore.enqueueRecovery(candidate, UUID.randomUUID(), "request-recovery", now)).isTrue();
+        assertThat(reliabilityStore.enqueueRecovery(candidate, UUID.randomUUID(), "request-duplicate", now)).isFalse();
+
+        assertThat(jobValue("version", Long.class)).isEqualTo(5L);
+        assertThat(jobValue("event_sequence", Long.class)).isEqualTo(5L);
+        assertThat(count("job_event_outbox")).isEqualTo(1);
     }
 
     private JobTransitionCommand transition(Optional<JobStageAttempt> stage) {

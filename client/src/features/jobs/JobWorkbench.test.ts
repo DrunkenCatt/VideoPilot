@@ -21,6 +21,7 @@ const job: AnalysisJob = {
   attempt: 0,
   version: 0,
   failure: null,
+  reliability: { recoveryState: 'NONE', operatorAction: 'NONE', attempt: 0, nextRetryAt: null, reasonCode: null },
   createdAt: '2026-11-02T08:00:00Z',
   updatedAt: '2026-11-02T08:00:00Z',
   completedAt: null,

@@ -21,12 +21,15 @@ final class AnalysisJobRow {
     private String status;
     private String currentStage;
     private int attempt;
+    private int retryCount;
     private long version;
     private long eventSequence;
     private String errorCategory;
     private String errorCode;
     private String errorSummary;
     private Boolean retryable;
+    private Instant nextRetryAt;
+    private Instant executionLeaseUntil;
     private Instant createdAt;
     private Instant updatedAt;
     private Instant completedAt;
@@ -79,6 +82,10 @@ final class AnalysisJobRow {
         return attempt;
     }
 
+    int getRetryCount() {
+        return retryCount;
+    }
+
     long getVersion() {
         return version;
     }
@@ -101,6 +108,14 @@ final class AnalysisJobRow {
 
     Boolean getRetryable() {
         return retryable;
+    }
+
+    Instant getNextRetryAt() {
+        return nextRetryAt;
+    }
+
+    Instant getExecutionLeaseUntil() {
+        return executionLeaseUntil;
     }
 
     Instant getCreatedAt() {

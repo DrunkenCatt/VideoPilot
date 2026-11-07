@@ -24,6 +24,8 @@ final class TransitionWriteRows {
                 failure == null ? null : failure.code(),
                 failure == null ? null : failure.summary(),
                 failure == null ? null : failure.retryable(),
+                commit.nextJob().retryCount(),
+                commit.nextJob().nextRetryAt().orElse(null),
                 commit.nextJob().completedAt().orElse(null),
                 commit.nextJob().updatedAt());
     }
@@ -72,6 +74,9 @@ final class TransitionWriteRows {
             case JOB_CANCEL_REQUESTED -> "Analysis job cancellation requested.";
             case JOB_CANCELED -> "Analysis job canceled.";
             case JOB_FAILED -> job.failure().map(JobFailure::summary).orElse("Analysis job failed.");
+            case JOB_RETRY_SCHEDULED -> "Analysis job scheduled for automatic retry.";
+            case JOB_RECOVERY_QUEUED -> "Analysis job recovery queued.";
+            case JOB_DEAD_LETTERED -> "Automatic retry budget exhausted; manual review is required.";
             case JOB_READY -> "Analysis job ready.";
         };
     }
@@ -93,6 +98,8 @@ final class TransitionWriteRows {
             String errorCode,
             String errorSummary,
             Boolean retryable,
+            int retryCount,
+            Instant nextRetryAt,
             Instant completedAt,
             Instant updatedAt) {
     }

@@ -193,10 +193,21 @@ public final class M1ApiContracts {
             int attempt,
             long version,
             JobFailure failure,
+            M4ApiContracts.JobReliability reliability,
             Instant createdAt,
             Instant updatedAt,
             Instant completedAt,
             JobLinks links) {
+        public AnalysisJobResponse(
+                UUID jobId, UUID mediaId, String goal, AnalysisMode mode, JobStatus status,
+                JobStage currentStage, int attempt, long version, JobFailure failure,
+                Instant createdAt, Instant updatedAt, Instant completedAt, JobLinks links) {
+            this(jobId, mediaId, goal, mode, status, currentStage, attempt, version, failure,
+                    new M4ApiContracts.JobReliability(
+                            M4ApiContracts.RecoveryState.NONE, M4ApiContracts.OperatorAction.NONE,
+                            attempt, null, null),
+                    createdAt, updatedAt, completedAt, links);
+        }
     }
 
     public record JobEventResponse(

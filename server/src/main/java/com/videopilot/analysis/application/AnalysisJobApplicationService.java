@@ -255,8 +255,10 @@ public final class AnalysisJobApplicationService {
                 job.status(),
                 job.currentStage(),
                 job.attempt(),
+                job.retryCount(),
                 job.version(),
                 job.failure(),
+                job.nextRetryAt(),
                 job.createdAt(),
                 job.updatedAt(),
                 job.completedAt());

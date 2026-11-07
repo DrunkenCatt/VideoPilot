@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration;
 import com.videopilot.analysis.application.AnalysisJobApplicationService;
 import com.videopilot.analysis.application.AnalysisJobEventApplicationService;
 import com.videopilot.analysis.application.JobTransitionService;
+import com.videopilot.analysis.application.AnalysisJobReliabilityService;
 import com.videopilot.analysis.domain.JobStateMachine;
 import com.videopilot.analysis.port.ActiveAnalysisJobCache;
 import com.videopilot.infrastructure.analysis.cache.RedisActiveAnalysisJobCache;
@@ -41,6 +42,24 @@ public class AnalysisJobAutoConfiguration {
             ActiveAnalysisJobCache activeAnalysisJobCache) {
         Clock clock = Clock.systemUTC();
         return new JobTransitionService(store, activeAnalysisJobCache, new JobStateMachine(), clock::instant);
+    }
+
+    @Bean(destroyMethod = "close")
+    AnalysisJobReliabilityService analysisJobReliabilityService(
+            AnalysisJobPersistenceAdapter store, JobTransitionService transitions,
+            @Value("${videopilot.analysis.recovery.max-retries:3}") int maxRetries,
+            @Value("${videopilot.analysis.recovery.retry-delay:10s}") Duration retryDelay,
+            @Value("${videopilot.analysis.recovery.lease-duration:90s}") Duration leaseDuration) {
+        Clock clock = Clock.systemUTC();
+        return new AnalysisJobReliabilityService(
+                store, transitions, clock::instant, UUID::randomUUID, maxRetries, retryDelay, leaseDuration);
+    }
+
+    @Bean
+    AnalysisJobRecoveryWorker analysisJobRecoveryWorker(
+            AnalysisJobReliabilityService reliability,
+            @Value("${videopilot.analysis.recovery.batch-size:50}") int batchSize) {
+        return new AnalysisJobRecoveryWorker(reliability, batchSize);
     }
 
     @Bean

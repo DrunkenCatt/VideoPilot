@@ -1,6 +1,6 @@
 # M4 任务清单：任务可靠性发布门
 
-> 状态：T0 已完成，T1 待开始。任务按依赖顺序执行，每项先写失败测试或可执行验收场景，再写生产代码。目标是在现有 Job/Checkpoint/Outbox/工作台上补齐 V1 发布可靠性，不新建通用工作流、策略注册表或独立运维平台。
+> 状态：T0-T1 已完成，下一项为 T2。任务按依赖顺序执行，每项先写失败测试或可执行验收场景，再写生产代码。目标是在现有 Job/Checkpoint/Outbox/工作台上补齐 V1 发布可靠性，不新建通用工作流、策略注册表或独立运维平台。
 
 ## T0：冻结 M4 可靠性合同与故障矩阵
 
@@ -16,12 +16,12 @@
 
 ## T1：打通自动 Recovery、有限 Retry 与 DLQ 状态闭环
 
-- [ ] 用一份前进 Flyway 迁移只补充恢复所需事实，例如 `next_retry_at`、执行/恢复 lease、失败来源和 attempt 审计；保留 `analysis_job`、`job_stage_attempt`、`job_event_outbox` 为唯一真源，不创建第二套 retry job 表。
-- [ ] 在一个可靠性 application service 中实现基于 MySQL 的停滞扫描和恢复决策：只领取 lease 已过期且状态允许的 Job，经 CAS/统一迁移入口进入 `RETRY_WAIT -> QUEUED` 并写新 Outbox；完成且输入指纹一致的阶段直接复用。
-- [ ] 将 pipeline 的稳定错误分类收敛为统一动作：可重试错误有限退避，UNKNOWN 停止自动高成本重发，不可重试错误失败，取消保持取消，重试耗尽进入 `DEAD_LETTERED`；任何路径都不能直接 SQL 改 Job 状态。
-- [ ] 让消费重试耗尽、消息合同错误和 Job 执行失败审计可关联；Broker DLQ 成功/失败不能成为 Job 真源，页面最终状态必须能从 MySQL 重建，RabbitMQ/Redis 恢复后待办可继续发布/消费。
-- [ ] 在现有 Job DTO、事件和工作台中最小增加“自动恢复中 / 等待重试 / 需人工处理 / 不可恢复”投影；刷新和 SSE 重连后从持久化事件恢复，不增加第二条实时协议。
-- [ ] 覆盖应用在 PROBING、CONTEXT_BUILDING、INDEXING 前后退出、扫描器/消费者竞态、旧 lease、重复/乱序消息、Redis 丢失和 RabbitMQ 短暂不可用；断言任务不丢且已完成 ASR/OCR/Embedding 调用增量为 0。
+- [x] 用一份前进 Flyway 迁移只补充恢复所需事实，例如 `next_retry_at`、执行/恢复 lease、失败来源和 attempt 审计；保留 `analysis_job`、`job_stage_attempt`、`job_event_outbox` 为唯一真源，不创建第二套 retry job 表。
+- [x] 在一个可靠性 application service 中实现基于 MySQL 的停滞扫描和恢复决策：只领取 lease 已过期且状态允许的 Job，经 CAS/统一迁移入口进入 `RETRY_WAIT -> QUEUED` 并写新 Outbox；完成且输入指纹一致的阶段直接复用。
+- [x] 将 pipeline 的稳定错误分类收敛为统一动作：可重试错误有限退避，UNKNOWN 停止自动高成本重发，不可重试错误失败，取消保持取消，重试耗尽进入 `DEAD_LETTERED`；任何路径都不能直接 SQL 改 Job 状态。
+- [x] 让消费重试耗尽、消息合同错误和 Job 执行失败审计可关联；Broker DLQ 成功/失败不能成为 Job 真源，页面最终状态必须能从 MySQL 重建，RabbitMQ/Redis 恢复后待办可继续发布/消费。
+- [x] 在现有 Job DTO、事件和工作台中最小增加“自动恢复中 / 等待重试 / 需人工处理 / 不可恢复”投影；刷新和 SSE 重连后从持久化事件恢复，不增加第二条实时协议。
+- [x] 覆盖应用在 PROBING、CONTEXT_BUILDING、INDEXING 前后退出、扫描器/消费者竞态、旧 lease、重复/乱序消息、Redis 丢失和 RabbitMQ 短暂不可用；断言任务不丢且已完成 ASR/OCR/Embedding 调用增量为 0。
 - **验收标准**：可恢复 Job 自动续跑；自动重试次数有界且时间可审计；UNKNOWN 不自动重发；消息死信与 Job 状态可关联；MySQL/Outbox 可在 Redis/RabbitMQ 短暂丢失后重建进度。
 - **验证**：状态机/恢复策略纯规则测试、MySQL CAS/lease/Outbox 集成测试、RabbitMQ/Redis 故障集成测试、Job DTO/SSE/组件测试；相关测试后运行 `server\mvnw.cmd test` 与定向 `verify -Pintegration`。
 - **预计改动区域**：analysis application/domain/聚合 store、analysis/messaging persistence、Flyway、Job web/client 投影及对应测试。
@@ -29,9 +29,9 @@
 
 ### Checkpoint A：自动恢复真源
 
-- [ ] 重启和重投只推进同一 MySQL Job，不依赖内存定时器、Redis key 或旧 RabbitMQ 消息恢复事实。
-- [ ] 已完成且指纹一致的阶段不重复调用供应商；任何重复高成本调用都使检查点失败。
-- [ ] `RETRYABLE`、`UNKNOWN_OUTCOME`、`NON_RETRYABLE`、`CANCELED`、`BUDGET_EXHAUSTED` 的状态和用户语义稳定可测。
+- [x] 重启和重投只推进同一 MySQL Job，不依赖内存定时器、Redis key 或旧 RabbitMQ 消息恢复事实。
+- [x] 已完成且指纹一致的阶段不重复调用供应商；任何重复高成本调用都使检查点失败。
+- [x] `RETRYABLE`、`UNKNOWN_OUTCOME`、`NON_RETRYABLE`、`CANCELED`、`BUDGET_EXHAUSTED` 的状态和用户语义稳定可测。
 
 ## T2：交付受控 Manual Replay 端到端操作
 

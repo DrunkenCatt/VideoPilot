@@ -13,6 +13,7 @@ const job = {
   attempt: 0,
   version: 6,
   failure: null,
+  reliability: { recoveryState: 'NONE', operatorAction: 'NONE', attempt: 0, nextRetryAt: null, reasonCode: null },
 } as AnalysisJob
 const citation = {
   citationId: '70000000-0000-0000-0000-000000000008',
@@ -54,5 +55,46 @@ describe('JobDetail answer integration', () => {
     await wrapper.get('[data-test="emit-citation"]').trigger('click')
     expect(wrapper.get('[data-test="timeline-target"]').text()).toBe(citation.segmentId)
     expect(wrapper.findAll('[data-test="timeline-target"]')).toHaveLength(1)
+  })
+
+  it('explains when MySQL has scheduled an automatic retry', () => {
+    const retrying = {
+      ...job,
+      status: 'RETRY_WAIT',
+      reliability: {
+        recoveryState: 'RETRY_WAIT',
+        operatorAction: 'WAIT',
+        attempt: 0,
+        nextRetryAt: '2026-11-07T08:00:10Z',
+        reasonCode: 'PROVIDER_503',
+      },
+    } as AnalysisJob
+    const wrapper = mount(JobDetail, {
+      props: { job: retrying, media: null, mediaUnavailable: false, events: [], actionBusy: false, csrfToken: 'csrf' },
+      global: { stubs: { VideoContextTimeline: true, AnswerWorkspace: true } },
+    })
+
+    expect(wrapper.get('[data-test="job-reliability"]').text()).toContain('系统将在稍后自动重试')
+    expect(wrapper.get('[data-test="job-reliability"]').text()).toContain('PROVIDER_503')
+  })
+
+  it('makes exhausted automatic retries an explicit manual action', () => {
+    const exhausted = {
+      ...job,
+      status: 'DEAD_LETTERED',
+      reliability: {
+        recoveryState: 'MANUAL_ACTION_REQUIRED',
+        operatorAction: 'MANUAL_REPLAY',
+        attempt: 0,
+        nextRetryAt: null,
+        reasonCode: 'RETRY_EXHAUSTED',
+      },
+    } as AnalysisJob
+    const wrapper = mount(JobDetail, {
+      props: { job: exhausted, media: null, mediaUnavailable: false, events: [], actionBusy: false, csrfToken: 'csrf' },
+      global: { stubs: { VideoContextTimeline: true, AnswerWorkspace: true } },
+    })
+
+    expect(wrapper.get('[data-test="job-reliability"]').text()).toContain('自动重试已用尽，需要人工处理')
   })
 })

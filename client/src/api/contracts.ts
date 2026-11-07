@@ -210,6 +210,7 @@ export interface AnalysisJob {
   attempt: number
   version: number
   failure: JobFailure | null
+  reliability: JobReliability
   createdAt: string
   updatedAt: string
   completedAt: string | null

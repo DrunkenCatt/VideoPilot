@@ -6,6 +6,7 @@ import com.videopilot.infrastructure.analysis.persistence.TransitionWriteRows.Jo
 import com.videopilot.infrastructure.analysis.persistence.TransitionWriteRows.StageWrite;
 import com.videopilot.infrastructure.analysis.persistence.JobCreationWriteRows.JobInsert;
 import java.util.List;
+import java.time.Instant;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -108,6 +109,8 @@ interface AnalysisJobMapper extends BaseMapper<AnalysisJobRow> {
                 error_code = #{row.errorCode},
                 error_summary = #{row.errorSummary},
                 retryable = #{row.retryable},
+                retry_count = #{row.retryCount},
+                next_retry_at = #{row.nextRetryAt},
                 completed_at = #{row.completedAt},
                 updated_at = #{row.updatedAt}
             WHERE job_id = #{row.jobId}
@@ -115,6 +118,60 @@ interface AnalysisJobMapper extends BaseMapper<AnalysisJobRow> {
               AND version = #{row.expectedVersion}
             """)
     int compareAndSet(@Param("row") JobWrite row);
+
+    @Select("""
+            SELECT * FROM analysis_job
+            WHERE (status = 'RETRY_WAIT' AND next_retry_at <= #{now})
+               OR (status IN ('CONSUMING','PROBING','CONTEXT_BUILDING','INDEXING','ANSWERING')
+                   AND ((execution_lease_until IS NULL AND updated_at <= #{staleBefore})
+                        OR execution_lease_until <= #{now}))
+            ORDER BY COALESCE(next_retry_at, execution_lease_until, updated_at), job_id
+            LIMIT #{limit}
+            """)
+    List<AnalysisJobRow> selectRecoveryCandidates(
+            @Param("now") Instant now, @Param("staleBefore") Instant staleBefore, @Param("limit") int limit);
+
+    @Update("""
+            UPDATE analysis_job
+            SET version = version + 1, event_sequence = event_sequence + 1, updated_at = #{now}
+            WHERE job_id = #{jobId} AND status = #{status} AND version = #{version}
+            """)
+    int claimRecovery(@Param("jobId") String jobId, @Param("status") String status,
+                      @Param("version") long version, @Param("now") Instant now);
+
+    @Insert("""
+            INSERT INTO job_event_outbox (
+                message_id, job_id, event_type, schema_version, job_sequence, request_id,
+                payload, occurred_at, job_status, job_stage, public_message, terminal
+            ) VALUES (
+                #{messageId}, #{jobId}, 'JOB_RECOVERY_QUEUED', 1, #{sequence}, #{requestId},
+                CAST(#{payload} AS JSON), #{now}, #{status}, #{stage}, 'Analysis job recovery queued.', false
+            )
+            """)
+    int insertRecoveryEvent(@Param("messageId") String messageId, @Param("jobId") String jobId,
+                            @Param("sequence") long sequence, @Param("requestId") String requestId,
+                            @Param("payload") String payload, @Param("now") Instant now,
+                            @Param("status") String status, @Param("stage") String stage);
+
+    @Update("""
+            UPDATE analysis_job SET execution_lease_id = #{leaseId}, execution_lease_until = #{leaseUntil}
+            WHERE job_id = #{jobId} AND (execution_lease_until IS NULL OR execution_lease_until <= #{now})
+            """)
+    int acquireLease(@Param("jobId") String jobId, @Param("leaseId") String leaseId,
+                     @Param("now") Instant now, @Param("leaseUntil") Instant leaseUntil);
+
+    @Update("""
+            UPDATE analysis_job SET execution_lease_until = #{leaseUntil}
+            WHERE job_id = #{jobId} AND execution_lease_id = #{leaseId}
+            """)
+    int renewLease(@Param("jobId") String jobId, @Param("leaseId") String leaseId,
+                   @Param("leaseUntil") Instant leaseUntil);
+
+    @Update("""
+            UPDATE analysis_job SET execution_lease_id = NULL, execution_lease_until = NULL
+            WHERE job_id = #{jobId} AND execution_lease_id = #{leaseId}
+            """)
+    int releaseLease(@Param("jobId") String jobId, @Param("leaseId") String leaseId);
 
     @Insert("""
             INSERT INTO job_stage_attempt (

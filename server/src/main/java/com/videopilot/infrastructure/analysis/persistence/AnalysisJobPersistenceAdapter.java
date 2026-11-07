@@ -11,6 +11,7 @@ import com.videopilot.analysis.domain.StoredAnalysisJob;
 import com.videopilot.analysis.port.AnalysisJobStore;
 import com.videopilot.analysis.port.AnalysisJobEventStore;
 import com.videopilot.analysis.port.JobTransitionStore;
+import com.videopilot.analysis.port.AnalysisJobReliabilityStore;
 import com.videopilot.identity.domain.OwnerId;
 import java.util.List;
 import java.util.Optional;
@@ -18,7 +19,8 @@ import java.util.UUID;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.transaction.annotation.Transactional;
 
-public class AnalysisJobPersistenceAdapter implements JobTransitionStore, AnalysisJobStore, AnalysisJobEventStore {
+public class AnalysisJobPersistenceAdapter implements JobTransitionStore, AnalysisJobStore, AnalysisJobEventStore,
+        AnalysisJobReliabilityStore {
 
     private final AnalysisJobMapper mapper;
 
@@ -106,6 +108,44 @@ public class AnalysisJobPersistenceAdapter implements JobTransitionStore, Analys
         return true;
     }
 
+    @Override
+    public List<RecoveryCandidate> findRecoveryCandidates(java.time.Instant now, java.time.Instant staleBefore, int limit) {
+        return mapper.selectRecoveryCandidates(now, staleBefore, limit).stream()
+                .map(row -> new RecoveryCandidate(
+                        UUID.fromString(row.getJobId()), JobStatus.valueOf(row.getStatus()), row.getVersion(),
+                        row.getEventSequence(), optionalEnum(JobStage.class, row.getCurrentStage()),
+                        Optional.ofNullable(row.getNextRetryAt())))
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public boolean enqueueRecovery(RecoveryCandidate candidate, UUID messageId, String requestId, java.time.Instant now) {
+        if (mapper.claimRecovery(candidate.jobId().toString(), candidate.status().name(), candidate.version(), now) != 1) {
+            return false;
+        }
+        mapper.insertRecoveryEvent(messageId.toString(), candidate.jobId().toString(),
+                candidate.eventSequence() + 1, requestId,
+                "{\"jobId\":\"" + candidate.jobId() + "\",\"eventType\":\"ANALYSIS_EXECUTE\",\"schemaVersion\":1}",
+                now, candidate.status().name(), candidate.currentStage().map(Enum::name).orElse(null));
+        return true;
+    }
+
+    @Override
+    public boolean tryAcquireExecutionLease(UUID jobId, UUID leaseId, java.time.Instant now, java.time.Instant leaseUntil) {
+        return mapper.acquireLease(jobId.toString(), leaseId.toString(), now, leaseUntil) == 1;
+    }
+
+    @Override
+    public boolean renewExecutionLease(UUID jobId, UUID leaseId, java.time.Instant leaseUntil) {
+        return mapper.renewLease(jobId.toString(), leaseId.toString(), leaseUntil) == 1;
+    }
+
+    @Override
+    public void releaseExecutionLease(UUID jobId, UUID leaseId) {
+        mapper.releaseLease(jobId.toString(), leaseId.toString());
+    }
+
     private AnalysisJobEventView toEventView(AnalysisJobEventRow row) {
         return new AnalysisJobEventView(
                 UUID.fromString(row.getJobId()),
@@ -126,9 +166,12 @@ public class AnalysisJobPersistenceAdapter implements JobTransitionStore, Analys
                 JobStatus.valueOf(row.getStatus()),
                 optionalEnum(JobStage.class, row.getCurrentStage()),
                 row.getAttempt(),
+                row.getRetryCount(),
                 row.getVersion(),
                 row.getEventSequence(),
                 failure(row),
+                Optional.ofNullable(row.getNextRetryAt()),
+                Optional.ofNullable(row.getExecutionLeaseUntil()),
                 row.getCreatedAt(),
                 row.getUpdatedAt(),
                 Optional.ofNullable(row.getCompletedAt()));
