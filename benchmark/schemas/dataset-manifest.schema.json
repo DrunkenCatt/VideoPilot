@@ -19,11 +19,14 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["videoRef", "topic", "sourceRights", "mediaFingerprint", "durationSec", "language", "split"],
+        "required": ["videoRef", "topic", "sourceRights", "licenseId", "sourceUri", "authorization", "mediaFingerprint", "durationSec", "language", "split"],
         "properties": {
           "videoRef": { "type": "string", "minLength": 1 },
           "topic": { "type": "string", "minLength": 1 },
           "sourceRights": { "enum": ["owned", "licensed", "public_domain", "synthetic"] },
+          "licenseId": { "type": "string", "minLength": 2 },
+          "sourceUri": { "type": "string", "format": "uri" },
+          "authorization": { "type": "string", "minLength": 3 },
           "mediaFingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
           "durationSec": { "type": "number", "exclusiveMinimum": 0 },
           "language": { "type": "string", "minLength": 2 },

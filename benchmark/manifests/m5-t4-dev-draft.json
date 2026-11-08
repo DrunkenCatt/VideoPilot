@@ -1,16 +1,19 @@
 {
-  "datasetId": "8e5d9c83-5d2d-4af2-8ba1-1a5e0f61f4b5",
+  "datasetId": "aa08cce9-6a28-50ca-be01-58587eafe174",
   "dataVersion": "0.1.0",
   "schemaVersion": 1,
   "split": "dev",
   "status": "draft",
-  "datasetFingerprint": "c975455c80e7fc246cfd029b273862e951a6c632d17a62a007fb8202de4c06e8",
+  "datasetFingerprint": "1b6bcc19113bf7b9608ead08fe6d3482566b82205123bfd5f8c0f9a4957aae14",
   "frozenAt": null,
   "videos": [
     {
       "videoRef": "redis-p08",
       "topic": "Redis data structures",
       "sourceRights": "licensed",
+      "licenseId": "project-owner-local-evaluation",
+      "sourceUri": "https://www.bilibili.com/video/BV1cr4y1671t/?p=8",
+      "authorization": "project_owner_authorized_for_local_evaluation; redistribution_not_authorized",
       "mediaFingerprint": "a80b60825e04b95c6647ec8107b72e21fba3b32019f702fdbb96c83d92812d23",
       "split": "dev",
       "durationSec": 434.746,
@@ -20,6 +23,9 @@
       "videoRef": "audacity-amplify",
       "topic": "Audacity audio amplification",
       "sourceRights": "licensed",
+      "licenseId": "CC0-1.0",
+      "sourceUri": "https://commons.wikimedia.org/wiki/File:Amplify_with_Audacity.ogv",
+      "authorization": "Wikimedia Commons source page marks the file CC0",
       "mediaFingerprint": "0089389345d06e012c54f29e3e1a24a13d7cc13fcd03baa2dae3d7f333cad1d4",
       "split": "dev",
       "durationSec": 36.133,
@@ -29,35 +35,20 @@
       "videoRef": "free-media-licenses",
       "topic": "Finding freely licensed media",
       "sourceRights": "licensed",
+      "licenseId": "CC-BY-SA-4.0",
+      "sourceUri": "https://commons.wikimedia.org/wiki/File:Como_encontrar_m%C3%ADdias_em_licen%C3%A7as_livres.webm",
+      "authorization": "Wikimedia Commons source page marks the file CC BY-SA 4.0",
       "mediaFingerprint": "8804a237fde202573a05daf3360d6703df1a7c0afe3163cf3873c6fbad5c3259",
       "split": "dev",
       "durationSec": 122.367,
       "language": "pt-BR"
-    },
-    {
-      "videoRef": "garbage-disposal-safety",
-      "topic": "Clearing a jammed garbage disposal safely",
-      "sourceRights": "licensed",
-      "mediaFingerprint": "a4d4cc3cabd67418ee46b0685bca2ab2ac254fe1c3abbf7ec20250d31f6a83d7",
-      "split": "test",
-      "durationSec": 151.1,
-      "language": "en"
-    },
-    {
-      "videoRef": "asl-microwaving-safety",
-      "topic": "Microwaving convenience foods safely",
-      "sourceRights": "public_domain",
-      "mediaFingerprint": "14d5e07426694367156458f81d26269ca11842cb3413a03f12740be501176d5b",
-      "split": "test",
-      "durationSec": 180.147,
-      "language": "en-ASL"
     }
   ],
   "caseCounts": {
-    "retrieval": 120,
-    "answer": 30,
+    "retrieval": 72,
+    "answer": 18,
     "reliability": 0,
     "approved": 0,
-    "total": 150
+    "total": 90
   }
 }

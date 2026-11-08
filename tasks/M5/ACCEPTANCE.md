@@ -157,3 +157,9 @@ M5 必须补齐数据集/运行身份、dev/test 隔离、双人复核、发布�
 T0 没有迁移、Controller、Worker 或运行时装配变化，因此没有重复执行 `verify -Pintegration`；T1 引入 MySQL 表和 Worker 时必须执行定向及完整集成门。本轮未运行 OWASP/Gitleaks，它们属于每个实现任务提交前的安全检查和 T5 完整退出门，不将未运行记为通过。
 
 退出结论：合同、ADR-0009、数据集/报告 Schema、验收矩阵、前后端合同测试、完整快速门和真实浏览器基线均通过。没有新增依赖、Agent/插件框架、第二套 Job/MQ、suppression 或跳过测试；T0 可以提交并进入 T1。
+
+## T4 真实题目准备（尚未退出）
+
+已使用 5 条短时、权利字段明确的视频建立 dev/test 视频隔离，生成 120 条检索真实草稿（48/48/24）和 30 条答案真实草稿（25 可回答、5 拒答）。Audacity 与 ASL 原片无音轨，严格使用画面/OCR；其余样本使用既有复核上下文或少量 TeleSpeechASR 辅助标注。原视频、ASR、OCR、问题全文和人工工作表全部留在 Git 忽略的 `benchmark/local/`。
+
+两份独立 reviewer CSV 已生成。发布校验只剩 `approved double-reviewed cases 0/150`，因此 manifest 保持 `draft`，未运行 T5、未勾选 T4、未降低双审门。真实 headless Edge 登录后显示 9 个既有评测数据集，Console error/warning 为 0；CDP 320x720 下没有横向溢出。
