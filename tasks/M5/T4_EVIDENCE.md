@@ -21,3 +21,11 @@
 - 答案题：0/30，尚未生成正式计分题。
 - 双人复核：0，不能宣称通过。
 - test：已按视频隔离，但未解封。
+
+## 本次验证
+
+- `python benchmark/tools/validate_m5_dataset.py benchmark/manifests/m5-t4-draft.json benchmark/local/m5-t4/retrieval-cases.jsonl benchmark/local/m5-t4/answer-cases.jsonl`：按预期失败，唯一当前质量门失败为 `approved double-reviewed cases 0/150`。
+- `python` + `jsonschema`：manifest Schema 通过；`git diff --check` 通过。
+- `server\mvnw.cmd -q -Dtest=M5ContractTest test`：通过。
+- `client\npm.cmd run check`：18 个文件、115 个测试通过，覆盖率 87.31% statements / 82.19% branches，构建通过。
+- 本切片没有改动前端工作台；真实浏览器矩阵继续沿用已提交的 M5 T3 证据，未新增可交互页面。
