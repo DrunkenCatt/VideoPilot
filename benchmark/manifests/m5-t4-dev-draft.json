@@ -4,7 +4,7 @@
   "schemaVersion": 1,
   "split": "dev",
   "status": "draft",
-  "datasetFingerprint": "1b6bcc19113bf7b9608ead08fe6d3482566b82205123bfd5f8c0f9a4957aae14",
+  "datasetFingerprint": "47be16155a20ab403d3bb6da3cd5ac0098aaa03133e816dca72fc27dea88c843",
   "frozenAt": null,
   "videos": [
     {
@@ -48,7 +48,7 @@
     "retrieval": 72,
     "answer": 18,
     "reliability": 0,
-    "approved": 0,
+    "approved": 90,
     "total": 90
   }
 }

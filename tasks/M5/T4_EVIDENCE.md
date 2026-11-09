@@ -1,6 +1,6 @@
 # M5 T4 草稿准备证据
 
-状态：真实题目与双审工作表已准备，T4 发布退出门尚未通过。
+状态：150 条真实题目已完成双审；T4 冻结前运行时真实性门未通过。
 
 ## 素材
 
@@ -12,21 +12,34 @@
 
 `benchmark/tools/validate_m5_dataset.py` 是无第三方运行依赖的最小校验器，覆盖重复 case/question、题量、精确/模糊/OCR 目标数量、证据窗、双人批准、视频 split 泄漏、manifest 计数和由 manifest + cases + review index 共同计算的指纹。`benchmark/tools/apply_m5_reviews.py` 只在两名不同 reviewer 都批准时标为 approved；分歧保持 `in_review`。
 
-本地真实题目位于 `benchmark/local/m5-t4/{dev,test}-{retrieval,answer}-cases.jsonl`，双审表为 `reviewer-1.csv` 和 `reviewer-2.csv`。题目来自 Redis 已复核上下文、TeleSpeechASR 转写或每 10 秒关键帧 OCR；无音轨的 Audacity/ASL 样本没有伪造 ASR。正式数据仍待两名真人逐题核对，自动生成题不得直接计入分母。
+本地真实题目位于 `benchmark/local/m5-t4/{dev,test}-{retrieval,answer}-cases.jsonl`，双审表为 `reviewer-1.csv` 和 `reviewer-2.csv`。题目来自 Redis 已复核上下文、TeleSpeechASR 转写或每 10 秒关键帧 OCR；无音轨的 Audacity/ASL 样本没有伪造 ASR。`zzm` 与 `qq` 分别逐题完成 150/150 复核，全部批准；合并器验证 reviewer 身份不同后才写入 `reviewerCount=2`。
 
 ## 当前门状态
 
 - 视频数量：5/5，权利字段已记录。
-- 检索题：120 条真实草稿；48 exact / 48 fuzzy / 24 OCR，0 条进入正式计分。
-- 答案题：30 条真实草稿；25 answerable / 5 unanswerable，0 条进入正式计分。
-- 双人复核：0，不能宣称通过。
-- test：已按视频隔离，但未解封。
+- 检索题：120 条已审核草稿；48 exact / 48 fuzzy / 24 OCR，尚未进入正式计分。
+- 答案题：30 条已审核草稿；25 answerable / 5 unanswerable，尚未进入正式计分。
+- 双人复核：`zzm` 150/150、`qq` 150/150；无分歧题。
+- split：dev 3 条视频、72 retrieval + 18 answer；test 2 条视频、48 retrieval + 12 answer，视频无交叉。
+- manifest：保持 `draft`，待真实解析产物绑定后重算指纹并冻结。
+- M4 可靠性集：继续复用 `scripts/run-m4-reliability-gate.ps1` 的 20/20 恢复样本，不复制成视频题或改变其固定分母。
 
 ## 本次验证
 
-- dev/test 两组 manifest + cases + review index 的发布校验：Schema、题量、比例、重复、证据窗、split 和 fingerprint 均通过；按预期只剩双审失败（dev 0/90、test 0/60、合计 0/150）。
+- dev/test 两组 manifest + cases + review index 的结构校验输出 `VALID`：Schema、题量、比例、重复、证据窗、split、双审和 fingerprint 全部通过。该校验不能替代运行时段 ID 存在性校验。
 - `python -m unittest -v test_apply_m5_reviews.py test_validate_m5_dataset.py`：7/7 通过；先观察到新合同测试失败，再完成最小实现。提交前反转“reviewer 必须不同”的判断，相关 3/3 测试均失败，恢复后 mutation 未存活。
 - `python` + `jsonschema`：manifest Schema 通过；`git diff --check` 通过。
-- `server\mvnw.cmd -q -Dtest=M5ContractTest test`：通过。
+- `server\mvnw.cmd test`：383 个测试，0 failure / 0 error，1 个既有 skip，JaCoCo 通过。
 - `client\npm.cmd run check`：18 个文件、115 个测试通过，覆盖率 87.31% statements / 82.19% branches，构建通过。
-- 本切片没有改动前端工作台；额外使用真实 headless Edge 登录 `m1-reviewer` 并打开评测工作台：9 个既有数据集可见；登录后的 Console error/warning 为 0；CDP 320x720 下 `innerWidth=clientWidth=scrollWidth=320`。
+- `scripts/run-m4-reliability-gate.ps1`：独立 `videopilot_m4_gate` 数据库的 20/20 恢复、并发、Redis、RabbitMQ、Outbox 和 Qdrant 矩阵通过。
+- 本切片没有改动前端工作台；额外使用真实 headless Edge 登录并打开评测工作台：9 个既有数据集可见；登录后的 Console error/warning 为 0；CDP 320px 下 `innerWidth=clientWidth=scrollWidth=320`。
+
+## 人工复核与抽检
+
+两位 reviewer 对全部 150 条题逐题检查，因此同时覆盖每类题和每条视频，样本量不是抽样估计：`zzm` 150 条、`qq` 150 条。两份工作表均无空 decision/reviewer，全部为 `approved`，无 disputed/rejected。工作表、问题全文、转录和 OCR 留在 Git 忽略目录；Git 只提交计数、指纹和权利元数据。
+
+## 冻结阻断项
+
+- `ffprobe` 实测 Audacity 只有 Theora video/data，ASL 只有 VP9 video，两者均无 audio stream。
+- `VideoContextPipelineApplicationService` 在 transcript 为空时返回不可重试的 `ASR_EMPTY`；`VideoContextStore.ContextPublication` 也要求 ready context 的 ASR 状态为 `AVAILABLE`。
+- `author_real_cases.py` 使用 UUID5 从视频/时间窗生成 `expectedHits.segmentId`。这些 ID 尚未与 MySQL/Qdrant 中实际发布的 `VideoSegment` 绑定，不能作为真实检索基线冻结。
