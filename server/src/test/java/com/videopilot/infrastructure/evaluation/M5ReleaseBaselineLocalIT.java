@@ -80,14 +80,14 @@ class M5ReleaseBaselineLocalIT {
         EvaluationDataset dev = importDataset(owner, loader, repository, local, "dev", jobs, segments);
         assertThat(dev.fingerprint()).isEqualTo("98667e464bd7099736b91c32ee2ca1013df3d330c7d136bc3a7777be9e8c31ca");
         if (!Boolean.getBoolean("m5.release.execute")) return;
-        List<EvaluationRun> devRuns = runSeries(owner, dev, candidate, "m5-release-v0.2.0-dev");
+        List<EvaluationRun> devRuns = runSeries(owner, dev, candidate, "m5-release-v0.2.0-dev-" + candidate);
         assertThat(devRuns).allMatch(run -> run.status() == RunStatus.COMPLETED);
         writeReports(owner, devRuns, reports, "dev");
 
         EvaluationDataset test = importDataset(owner, loader, repository, local, "test", jobs, segments);
         assertThat(test.createdAt()).isAfterOrEqualTo(devRuns.stream()
                 .map(EvaluationRun::completedAt).max(Instant::compareTo).orElseThrow());
-        List<EvaluationRun> testRuns = runSeries(owner, test, candidate, "m5-release-v0.2.0-test");
+        List<EvaluationRun> testRuns = runSeries(owner, test, candidate, "m5-release-v0.2.0-test-" + candidate);
         assertThat(testRuns).allMatch(run -> run.status() == RunStatus.COMPLETED);
         writeReports(owner, testRuns, reports, "test");
     }

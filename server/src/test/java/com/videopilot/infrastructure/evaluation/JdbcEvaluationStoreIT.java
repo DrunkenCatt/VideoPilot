@@ -1,6 +1,7 @@
 package com.videopilot.infrastructure.evaluation;
 
 import static com.videopilot.evaluation.domain.EvaluationModels.CaseOutcome.COMPLETED;
+import static com.videopilot.evaluation.domain.EvaluationModels.CaseType.ANSWER;
 import static com.videopilot.evaluation.domain.EvaluationModels.CaseType.RETRIEVAL;
 import static com.videopilot.evaluation.domain.EvaluationModels.DatasetSplit.DEV;
 import static com.videopilot.evaluation.domain.EvaluationModels.DatasetStatus.FROZEN;
@@ -10,6 +11,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.videopilot.evaluation.application.EvaluationException;
 import com.videopilot.evaluation.domain.EvaluationModels.CaseResult;
+import com.videopilot.evaluation.domain.EvaluationModels.CaseType;
 import com.videopilot.evaluation.domain.EvaluationModels.EvaluationCase;
 import com.videopilot.evaluation.domain.EvaluationModels.EvaluationDataset;
 import com.videopilot.evaluation.domain.EvaluationModels.EvaluationRun;
@@ -36,6 +38,7 @@ class JdbcEvaluationStoreIT {
     private final UUID mediaId = UUID.randomUUID();
     private final UUID jobId = UUID.randomUUID();
     private final UUID datasetId = UUID.randomUUID();
+    private final UUID answerId = UUID.randomUUID();
 
     @Autowired
     private JdbcEvaluationStore store;
@@ -60,6 +63,14 @@ class JdbcEvaluationStoreIT {
                 """).param("jobId", jobId.toString()).param("owner", ownerId.value().toString())
                 .param("mediaId", mediaId.toString()).param("analysisKey", "evaluation-" + jobId)
                 .param("key", "evaluation-" + jobId).update();
+        jdbc.sql("""
+                INSERT INTO answer_record (
+                    answer_id, job_id, owner_id, idempotency_key, input_fingerprint, question,
+                    status, degraded_channels, prompt_version, model_version, created_at, published_at
+                ) VALUES (:answerId,:jobId,:owner,'evaluation-answer',REPEAT('c',64),'question',
+                    'REFUSED',JSON_ARRAY(),'prompt-v1','model-v1',CURRENT_TIMESTAMP(6),CURRENT_TIMESTAMP(6))
+                """).param("answerId", answerId.toString()).param("jobId", jobId.toString())
+                .param("owner", ownerId.value().toString()).update();
     }
 
     @AfterEach
@@ -72,6 +83,8 @@ class JdbcEvaluationStoreIT {
                 .param("datasetId", datasetId.toString()).update();
         jdbc.sql("DELETE FROM evaluation_dataset WHERE dataset_id = :datasetId")
                 .param("datasetId", datasetId.toString()).update();
+        jdbc.sql("DELETE FROM answer_record WHERE answer_id = :answerId")
+                .param("answerId", answerId.toString()).update();
         jdbc.sql("DELETE FROM analysis_job WHERE job_id = :jobId")
                 .param("jobId", jobId.toString()).update();
         jdbc.sql("DELETE FROM media_asset WHERE media_id = :mediaId")
@@ -116,7 +129,7 @@ class JdbcEvaluationStoreIT {
                 now.plusSeconds(60), now).orElseThrow();
         EvaluationCase firstCase = firstClaim.cases().getFirst();
         store.saveResult("lease-000000000000000000000000000001",
-                result(firstClaim.run().runId(), firstCase.caseId(), now));
+                result(firstClaim.run().runId(), firstCase, now));
         jdbc.sql("UPDATE evaluation_run SET lease_until = :expired WHERE run_id = :runId")
                 .param("expired", now.minusSeconds(1)).param("runId", firstClaim.run().runId().toString())
                 .update();
@@ -128,7 +141,7 @@ class JdbcEvaluationStoreIT {
                 .containsExactly(firstCase.caseId());
         EvaluationCase secondCase = resumed.cases().get(1);
         store.saveResult("lease-000000000000000000000000000002",
-                result(resumed.run().runId(), secondCase.caseId(), now));
+                result(resumed.run().runId(), secondCase, now));
         store.completeRun("lease-000000000000000000000000000002", resumed.run().runId(), now);
 
         EvaluationRun completed = store.findRun(ownerId, resumed.run().runId()).orElseThrow();
@@ -140,13 +153,14 @@ class JdbcEvaluationStoreIT {
     private EvaluationDataset dataset(Instant now) {
         return new EvaluationDataset(
                 datasetId, "m5-dev-" + datasetId, "e".repeat(64), DEV, FROZEN, 1,
-                List.of(evaluationCase("case-1", 1, "f".repeat(64)),
-                        evaluationCase("case-2", 2, "0".repeat(64))), now, now);
+                List.of(evaluationCase("case-1", 1, RETRIEVAL, "f".repeat(64)),
+                        evaluationCase("case-2", 2, ANSWER, "0".repeat(64))), now, now);
     }
 
-    private EvaluationCase evaluationCase(String caseId, int ordinal, String fingerprint) {
+    private EvaluationCase evaluationCase(
+            String caseId, int ordinal, CaseType type, String fingerprint) {
         return new EvaluationCase(
-                caseId, ordinal, RETRIEVAL, jobId, "question " + ordinal,
+                caseId, ordinal, type, jobId, "question " + ordinal,
                 List.of(UUID.randomUUID()), "APPROVED", 1, fingerprint);
     }
 
@@ -156,9 +170,10 @@ class JdbcEvaluationStoreIT {
                 "1".repeat(64), versions(), REQUESTED, repetition, 2, 0, 2, null, now, null);
     }
 
-    private CaseResult result(UUID runId, String caseId, Instant now) {
+    private CaseResult result(UUID runId, EvaluationCase evaluationCase, Instant now) {
         return new CaseResult(
-                runId, caseId, RETRIEVAL, COMPLETED, 1, 0, 0, 10, 0, null, null, now);
+                runId, evaluationCase.caseId(), evaluationCase.type(), COMPLETED, 1, 0, 0, 0, 0,
+                evaluationCase.type() == ANSWER ? answerId : null, 10, 0, null, null, now);
     }
 
     private ExecutionVersions versions() {

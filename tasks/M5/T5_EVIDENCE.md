@@ -9,6 +9,14 @@
 - `server\mvnw.cmd test-compile -Pintegration "-Dit.test=M5ReleaseBaselineLocalIT" "-Dm5.release=true" "-Dm5.candidate.commit=20a1664" failsafe:integration-test failsafe:verify`：1/1 通过，最终耗时 32.112 秒；未设置 `m5.release.execute`，外部模型调用为 0，TEST 尚未导入或解封。运行入口在每轮结束后立即检查失败状态，不会在当前退出门失败后继续下一轮。
 - 浏览器无回归检查使用独立应用内浏览器打开 `http://localhost:5173/`：公开登录面可访问，账号/密码控件和安全 Cookie 说明可见，Console error/warning 为 0。本切片不改前端；登录后的正式 dataset/run/trace/export 验收保留到基线运行完成后执行。
 
+## 首次 DEV 运行阻断与恢复修复
+
+- 候选 `a9af8d5` 的首次 DEV 正式运行在答案结果落库时失败：`CaseResult.answerId` 以 Java `UUID` 直接绑定到 MySQL `CHAR(36)`，Connector/J 将其序列化为二进制，MySQL 以错误 1366 拒绝。TEST 没有导入或运行，失败没有被记为拒答或成功。
+- 独立 Compose server 的 Evaluation Worker 同时领取了另外两轮，因此三个 DEV Run 都保留为 `FAILED/EVALUATION_EXECUTION_FAILED`，每轮已完成 72/90 个检索题并关联 74 条调用审计；合计 222 条调用，其中 3 次回答模型调用。失败历史不删除、不覆盖。
+- RED：真实 `JdbcEvaluationStoreIT` 给答案结果绑定已存在的非空 answer UUID 后，以相同 MySQL 错误 1366 失败。GREEN：存储 Adapter 在 JDBC 边界把非空 UUID 显式转换为字符串，并同时覆盖检索结果的 `NULL`；同一真实 MySQL 测试 1/1 通过，最终耗时 32.705 秒。
+- 定向回归：`server\mvnw.cmd "-Dtest=JdbcEvaluationStoreTest,EvaluationApplicationServiceTest" test` 共 12/12 通过，JaCoCo 门通过，耗时 27.272 秒。独立应用内浏览器刷新后登录面正常，Console error/warning 为 0；本修复不改变前端合同。
+- 新候选 commit 进入正式运行幂等键，失败后的重跑会创建新的 series，同时保留旧 Run；正式运行前临时停止 Compose server，避免两个 Worker 竞争，运行和浏览器验收结束后再恢复服务。
+
 ## 冻结身份导入
 
 - `EvaluationApplicationService.ImportDataset` 增加可选 `sourceFingerprint`；只接受小写 64 位 SHA-256。未提供时保留既有草稿/Smoke 的服务端计算行为，避免破坏已有调用方。
