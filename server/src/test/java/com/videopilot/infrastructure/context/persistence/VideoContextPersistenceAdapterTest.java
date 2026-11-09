@@ -101,7 +101,7 @@ class VideoContextPersistenceAdapterTest {
         adapter.startModelCall(new VideoContextStore.ModelCallStart(
                 "call-asr", JOB.toString(), "request", "SiliconFlow", "TeleSpeech-v1", DIGEST, 1, 60_000, NOW));
         adapter.completeAsr(owner, new VideoContextStore.AsrCompletion(
-                completion(), "call-asr", "provider-trace", 60_000, 100, NOW));
+                completion(), "call-asr", "provider-trace", 60_000, 12, 100, NOW));
         adapter.failAsr(owner, new VideoContextStore.AsrFailure(
                 failure(), "call-asr-failed", "FAILED", 100, NOW));
         adapter.startOcrCall(new VideoContextStore.OcrModelCallStart(

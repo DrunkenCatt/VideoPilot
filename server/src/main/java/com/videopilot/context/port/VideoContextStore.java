@@ -184,6 +184,7 @@ public interface VideoContextStore {
             String modelCallId,
             String providerTraceId,
             long providerDurationMs,
+            long outputCharacters,
             long latencyMs,
             Instant completedAt) {
     }

@@ -165,3 +165,19 @@ T0 没有迁移、Controller、Worker 或运行时装配变化，因此没有重
 `zzm` 与 `qq` 分别完成全部 150 条题的独立复核，全部批准且无空项。合并后结构校验输出 `VALID`，但冻结前运行时预检发现两个不能降低的真实性门：Audacity 和 ASL 视频无音轨，而现有管线对无 transcript 明确返回 `ASR_EMPTY`；题目中的 `expectedHits.segmentId` 仍是生成器的稳定 UUID5 占位符，不是 MySQL 中已发布的 `VideoSegment`。因此 manifest 保持 `draft`，T4 未退出，T5 未运行。
 
 真实 headless Edge 登录后显示 9 个既有评测数据集，Console error/warning 为 0；CDP 320px 下 `innerWidth=clientWidth=scrollWidth=320`。双审子任务没有修改前端运行时代码，浏览器检查用于证明工作台无回归。
+
+## T4 替代素材与预算计量硬门
+
+2026-11-09 以两条短时中文 Wikidata 教学视频替换无音轨素材，并通过真实 Vite 工作台提交分析。156466 ms 图书素材和 276637 ms 限定符素材均进入 `READY`，分别发布 3/5 个 Segment；限定符素材 5 次 ASR 的 `input_units=276637 ms`、`output_units=524 Unicode 字符`，10 次 OCR 的 `input_units=4099200 像素`、`output_units=360 字符`，不同量纲未相加裁决。页面时间轴可见，Console warning/error 为 0。
+
+ASR 默认单次输出率门为 1200 字符/分钟，因此单个 120 秒输入最多 2400 字符；边界单元测试证明 2400 通过，超限响应以不可重试 `OUTPUT_LIMIT` 失败。全局执行限制升级为 `m4-limits-v3`，ASR、OCR、Embedding、Answer 分别聚合输入/输出计量。真实验收同时覆盖后续 Job 完成复用中 Context：发布保留 owner、media、pipeline 和 Context version CAS，不再错误要求当前 Job 必须等于 `source_job_id`。
+
+| 验证 | 实际结果 |
+| --- | --- |
+| `server\mvnw.cmd test` | 387 tests，0 failure/error，1 个既有条件 skip；JaCoCo 与 ArchUnit 通过 |
+| `VideoContextPersistenceAdapterIT` | 9/9 通过；包含后续 Job 发布复用中 Context 的持久化回归 |
+| `JdbcExecutionBudgetStoreIT,AsrRecoveryIT` | 4/4 通过；operation 聚合与 ASR 审计恢复通过 |
+| `client\npm.cmd run check` | 18 files / 115 tests，typecheck、零 warning lint、coverage、生产构建通过 |
+| Compose + 真实浏览器 | 两条替代素材 READY；3/5 Segments；Console warning/error 为 0 |
+
+本门仅解除替代素材解析和预算计量阻断。相关题目仍须绑定上述实际 Segment 并重算冻结 fingerprint，T4 尚未退出，T5 不得启动。

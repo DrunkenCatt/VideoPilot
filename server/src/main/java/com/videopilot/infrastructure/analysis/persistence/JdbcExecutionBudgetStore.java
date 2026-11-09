@@ -20,8 +20,6 @@ final class JdbcExecutionBudgetStore implements ExecutionBudgetStore {
     public Usage load(UUID jobId) {
         Aggregate aggregate = jdbc.sql("""
                 SELECT job.created_at,
-                       COALESCE(SUM(call_record.input_units), 0) AS input_units,
-                       COALESCE(SUM(call_record.output_units), 0) AS output_units,
                        COALESCE(SUM(CASE WHEN call_record.price_status = 'AVAILABLE'
                                          THEN call_record.estimated_cost ELSE 0 END), 0) AS known_cost,
                        COALESCE(MAX(CASE WHEN call_record.model_call_id IS NOT NULL
@@ -35,21 +33,24 @@ final class JdbcExecutionBudgetStore implements ExecutionBudgetStore {
                 GROUP BY job.job_id, job.created_at
                 """).param("jobId", jobId.toString()).query((row, ignored) -> new Aggregate(
                         row.getTimestamp("created_at").toInstant(),
-                        row.getLong("input_units"), row.getLong("output_units"),
                         row.getBigDecimal("known_cost"), row.getInt("unknown_price") == 1))
                 .optional().orElseThrow(() -> new IllegalArgumentException("analysis job does not exist"));
-        Map<String, Long> calls = new LinkedHashMap<>();
+        Map<String, OperationUsage> operations = new LinkedHashMap<>();
         jdbc.sql("""
-                SELECT operation_type, COUNT(*) AS call_count
-                FROM model_call WHERE job_id = :jobId GROUP BY operation_type
+                SELECT CASE WHEN operation_type = 'RETRIEVAL_EMBEDDING' THEN 'EMBEDDING'
+                            ELSE operation_type END AS budget_operation,
+                       COUNT(*) AS call_count,
+                       COALESCE(SUM(input_units), 0) AS input_units,
+                       COALESCE(SUM(output_units), 0) AS output_units
+                FROM model_call WHERE job_id = :jobId GROUP BY budget_operation
                 """).param("jobId", jobId.toString()).query((row, ignored) -> Map.entry(
-                        row.getString("operation_type"), row.getLong("call_count")))
-                .list().forEach(entry -> calls.put(entry.getKey(), entry.getValue()));
-        return new Usage(aggregate.createdAt(), calls, aggregate.inputUnits(), aggregate.outputUnits(),
-                aggregate.knownCost(), aggregate.unknownPrice());
+                        row.getString("budget_operation"), new OperationUsage(
+                                row.getLong("call_count"), row.getLong("input_units"),
+                                row.getLong("output_units"))))
+                .list().forEach(entry -> operations.put(entry.getKey(), entry.getValue()));
+        return new Usage(aggregate.createdAt(), operations, aggregate.knownCost(), aggregate.unknownPrice());
     }
 
     private record Aggregate(
-            Instant createdAt, long inputUnits, long outputUnits,
-            BigDecimal knownCost, boolean unknownPrice) { }
+            Instant createdAt, BigDecimal knownCost, boolean unknownPrice) { }
 }

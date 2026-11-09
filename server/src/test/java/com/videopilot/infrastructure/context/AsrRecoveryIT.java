@@ -141,7 +141,7 @@ class AsrRecoveryIT {
                 SELECT CONCAT(status, '|', input_units, '|', output_units, '|', price_status, '|', provider_trace_id)
                 FROM model_call WHERE job_id = :jobId
                 """).param("jobId", jobId.toString()).query(String.class).single())
-                .isEqualTo("SUCCEEDED|2500|2000|UNAVAILABLE|provider-trace-1");
+                .isEqualTo("SUCCEEDED|2500|18|UNAVAILABLE|provider-trace-1");
         assertThat(jdbcClient.sql("""
                 SELECT JSON_UNQUOTE(JSON_EXTRACT(checkpoint_payload, '$.text'))
                 FROM context_work_item

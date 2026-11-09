@@ -184,6 +184,24 @@ class VideoContextPersistenceAdapterIT {
     }
 
     @Test
+    void reusedBuildingContextCanBePublishedByTheCurrentJobWithTheSameMediaAndPipeline() {
+        var original = prepare();
+        UUID repeatedJobId = UUID.randomUUID();
+        insertAnalysisJob(repeatedJobId, "Complete reused context");
+        var reused = service.prepare(owner(), command(repeatedJobId, "extract-v1"));
+        insertContextStage(repeatedJobId, reused.context().inputFingerprint());
+
+        service.publish(owner(), publication(
+                repeatedJobId, reused.context().contextId(), reused.context().inputFingerprint(),
+                List.of(segment(UUID.randomUUID(), 0))));
+
+        assertThat(reused.context().contextId()).isEqualTo(original.context().contextId());
+        assertThat(contextValue(original.context().contextId(), "status", String.class)).isEqualTo("READY");
+        assertThat(jdbcClient.sql("SELECT status FROM job_stage_attempt WHERE job_id = :jobId")
+                .param("jobId", repeatedJobId.toString()).query(String.class).single()).isEqualTo("COMPLETED");
+    }
+
+    @Test
     void segmentConflictRollsBackContextAndCheckpointPublication() {
         var plan = prepare();
         insertContextStage(plan.context().inputFingerprint());
@@ -243,8 +261,12 @@ class VideoContextPersistenceAdapterIT {
     }
 
     private PrepareCommand command(String extractionVersion) {
+        return command(jobId, extractionVersion);
+    }
+
+    private PrepareCommand command(UUID commandJobId, String extractionVersion) {
         return new PrepareCommand(
-                jobId, mediaId, "a".repeat(64), "m2-v1", extractionVersion,
+                commandJobId, mediaId, "a".repeat(64), "m2-v1", extractionVersion,
                 "align-v1", "ffmpeg-v1", 60_000,
                 List.of(new WorkWindow(
                         ContextWorkItemKind.AUDIO_SLICE, 0, 0, 30_000,
@@ -280,8 +302,13 @@ class VideoContextPersistenceAdapterIT {
     }
 
     private PublishCommand publication(UUID contextId, String fingerprint, List<VideoSegment> segments) {
+        return publication(jobId, contextId, fingerprint, segments);
+    }
+
+    private PublishCommand publication(
+            UUID publicationJobId, UUID contextId, String fingerprint, List<VideoSegment> segments) {
         return new PublishCommand(
-                contextId, jobId, 0, fingerprint, 1, "{\"segments\":1}",
+                contextId, publicationJobId, 0, fingerprint, 1, "{\"segments\":1}",
                 "context/manifest.json", "e".repeat(64), ContextChannelState.AVAILABLE,
                 ContextChannelState.DEGRADED, segments);
     }
@@ -293,12 +320,16 @@ class VideoContextPersistenceAdapterIT {
     }
 
     private void insertContextStage(String fingerprint) {
+        insertContextStage(jobId, fingerprint);
+    }
+
+    private void insertContextStage(UUID stageJobId, String fingerprint) {
         jdbcClient.sql("""
                 INSERT INTO job_stage_attempt (
                     job_id, stage, input_fingerprint, checkpoint_schema_version, status
                 ) VALUES (:jobId, 'CONTEXT_BUILDING', :fingerprint, 1, 'STARTED')
                 """)
-                .param("jobId", jobId.toString())
+                .param("jobId", stageJobId.toString())
                 .param("fingerprint", fingerprint)
                 .update();
     }

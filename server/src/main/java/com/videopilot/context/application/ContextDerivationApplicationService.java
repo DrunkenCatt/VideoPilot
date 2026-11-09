@@ -9,6 +9,7 @@ import com.videopilot.context.application.VideoContextApplicationService.WorkWin
 import com.videopilot.context.domain.ContextWorkItem;
 import com.videopilot.context.domain.ContextWorkItemKind;
 import com.videopilot.context.domain.ContextWorkItemStatus;
+import com.videopilot.context.domain.VideoContext;
 import com.videopilot.context.port.DerivedMediaStore;
 import com.videopilot.context.port.MediaDerivationException;
 import com.videopilot.context.port.MediaDeriver;
@@ -75,7 +76,7 @@ public final class ContextDerivationApplicationService {
         this.fallbackFrameMs = fallbackFrameMs;
     }
 
-    public DerivationOutcome derive(OwnerContext owner, UUID jobId, UUID mediaId) {
+    public DerivationResult derive(OwnerContext owner, UUID jobId, UUID mediaId) {
         MediaAsset asset = media.findById(owner.ownerId(), mediaId)
                 .filter(value -> value.status() == MediaStatus.READY && value.durationMs().isPresent())
                 .orElseThrow(() -> new MediaDerivationException(MediaDerivationException.Reason.INVALID_MEDIA));
@@ -87,10 +88,14 @@ public final class ContextDerivationApplicationService {
         ContextWorkItem coordinator = plan.workItems().stream()
                 .filter(item -> item.kind() == ContextWorkItemKind.KEYFRAME)
                 .findFirst().orElseThrow();
-        if (coordinator.status() == ContextWorkItemStatus.COMPLETED) return DerivationOutcome.REUSED;
+        if (coordinator.status() == ContextWorkItemStatus.COMPLETED) {
+            return new DerivationResult(DerivationOutcome.REUSED, plan.context());
+        }
 
         var coordinatorClaim = contexts.recover(owner, coordinator.workItemId());
-        if (coordinatorClaim.outcome() != RecoveryOutcome.CLAIMED) return DerivationOutcome.BUSY;
+        if (coordinatorClaim.outcome() != RecoveryOutcome.CLAIMED) {
+            return new DerivationResult(DerivationOutcome.BUSY, plan.context());
+        }
         List<ClaimedItem> claimed = new ArrayList<>();
         claimed.add(new ClaimedItem(coordinator, coordinatorClaim.claimId().orElseThrow()));
         for (ContextWorkItem item : plan.workItems()) {
@@ -98,7 +103,7 @@ public final class ContextDerivationApplicationService {
             var claim = contexts.recover(owner, item.workItemId());
             if (claim.outcome() != RecoveryOutcome.CLAIMED) {
                 fail(owner, claimed, "CLAIM_CONFLICT", true);
-                return DerivationOutcome.BUSY;
+                return new DerivationResult(DerivationOutcome.BUSY, plan.context());
             }
             claimed.add(new ClaimedItem(item, claim.claimId().orElseThrow()));
         }
@@ -111,7 +116,7 @@ public final class ContextDerivationApplicationService {
             var result = deriver.derive(localSource, workspace.resolve("output"), durationMs);
             completeAudio(owner, claimed, result.audioSlices());
             completeKeyframes(owner, claimed.getFirst(), result.keyframes(), workspace);
-            return DerivationOutcome.COMPLETED;
+            return new DerivationResult(DerivationOutcome.COMPLETED, plan.context());
         } catch (MediaDerivationException exception) {
             fail(owner, claimed, exception.reason().name(), exception.reason() != MediaDerivationException.Reason.INVALID_MEDIA);
             throw exception;
@@ -244,6 +249,12 @@ public final class ContextDerivationApplicationService {
     }
 
     public enum DerivationOutcome { COMPLETED, REUSED, BUSY }
+
+    public record DerivationResult(DerivationOutcome outcome, VideoContext context) {
+        public DerivationResult {
+            if (outcome == null || context == null) throw new IllegalArgumentException("derivation result is required");
+        }
+    }
 
     private record ClaimedItem(ContextWorkItem item, UUID claimId) {
     }

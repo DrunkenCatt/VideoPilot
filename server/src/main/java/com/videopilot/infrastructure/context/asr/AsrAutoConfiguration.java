@@ -59,7 +59,8 @@ public class AsrAutoConfiguration {
         return new AsrExecutionApplicationService(
                 store, objects, speech, json, executor, Path.of(properties.getTemporaryDirectory()),
                 properties.getProvider(), properties.getModelVersion(), properties.getMaxAttempts(),
-                Clock.systemUTC(), UUID::randomUUID, budgets.getIfAvailable());
+                Clock.systemUTC(), UUID::randomUUID, budgets.getIfAvailable(),
+                properties.getMaxOutputCharactersPerMinute());
     }
 
     private void validate(AsrProperties properties) {
@@ -76,7 +77,7 @@ public class AsrAutoConfiguration {
     private void validateLimits(AsrProperties properties) {
         if (properties.getMaxAudioBytes() < 1 || properties.getMaxResponseBytes() < 1
                 || properties.getMaxConcurrency() < 1 || properties.getQueueCapacity() < 1
-                || properties.getMaxAttempts() < 1) {
+                || properties.getMaxAttempts() < 1 || properties.getMaxOutputCharactersPerMinute() < 1) {
             throw new IllegalArgumentException("enabled ASR requires positive resource limits");
         }
     }

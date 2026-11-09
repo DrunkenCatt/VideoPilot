@@ -60,7 +60,8 @@ class VideoContextPipelineApplicationServiceTest {
                 derivation, asr, ocr, contexts, store, transitions,
                 new VideoContextAligner(new ObjectMapper(), 60_000), new ObjectMapper(), indexing);
         when(derivation.derive(any(), any(), any()))
-                .thenReturn(ContextDerivationApplicationService.DerivationOutcome.COMPLETED);
+                .thenReturn(new ContextDerivationApplicationService.DerivationResult(
+                        ContextDerivationApplicationService.DerivationOutcome.COMPLETED, context()));
         when(asr.transcribe(any(), any(), any()))
                 .thenReturn(AsrExecutionApplicationService.AsrOutcome.COMPLETED);
         when(ocr.recognize(any(), any(), any()))
@@ -93,6 +94,40 @@ class VideoContextPipelineApplicationServiceTest {
         verify(transitions).transition(transition.capture());
         assertThat(transition.getValue().expectedStatus()).isEqualTo(JobStatus.CONTEXT_BUILDING);
         assertThat(transition.getValue().targetStatus()).isEqualTo(JobStatus.READY);
+    }
+
+    @Test
+    void publishesAReusedBuildingContextThatStillBelongsToItsSourceJob() {
+        ContextDerivationApplicationService derivation = mock(ContextDerivationApplicationService.class);
+        AsrExecutionApplicationService asr = mock(AsrExecutionApplicationService.class);
+        OcrExecutionApplicationService ocr = mock(OcrExecutionApplicationService.class);
+        VideoContextApplicationService contexts = mock(VideoContextApplicationService.class);
+        VideoContextStore store = mock(VideoContextStore.class);
+        JobTransitionService transitions = mock(JobTransitionService.class);
+        var pipeline = new VideoContextPipelineApplicationService(
+                derivation, asr, ocr, contexts, store, transitions,
+                new VideoContextAligner(new ObjectMapper(), 60_000), new ObjectMapper(),
+                mock(VideoIndexApplicationService.class));
+        when(derivation.derive(any(), any(), any()))
+                .thenReturn(new ContextDerivationApplicationService.DerivationResult(
+                        ContextDerivationApplicationService.DerivationOutcome.REUSED, context()));
+        when(asr.transcribe(any(), any(), any())).thenReturn(AsrExecutionApplicationService.AsrOutcome.REUSED);
+        when(ocr.recognize(any(), any(), any())).thenReturn(OcrExecutionApplicationService.OcrOutcome.COMPLETED);
+        when(store.findContextByJob(any(), any()))
+                .thenReturn(Optional.empty(), Optional.of(context()));
+        when(store.findStartedContextStageFingerprint(any(), any())).thenReturn(Optional.of("a".repeat(64)));
+        when(store.findCompletedArtifacts(any(), any(), any())).thenAnswer(invocation -> switch ((String) invocation.getArgument(2)) {
+            case "ASR_SLICE" -> List.of(artifact(ContextWorkItemKind.ASR_SLICE,
+                    "{\"startMs\":0,\"endMs\":60000,\"text\":\"lesson\"}", "asr.json"));
+            case "KEYFRAME" -> List.of(artifact(ContextWorkItemKind.KEYFRAME,
+                    "{\"frames\":[{\"timestampMs\":0,\"objectKey\":\"frame.jpg\",\"sha256\":\""
+                            + "b".repeat(64) + "\"}]}", "frames.json"));
+            default -> List.of();
+        });
+
+        assertThat(pipeline.execute(job(), "request-reuse").state())
+                .isEqualTo(AnalysisJobPipeline.State.COMPLETED);
+        verify(contexts).publish(any(), any());
     }
 
     @Test

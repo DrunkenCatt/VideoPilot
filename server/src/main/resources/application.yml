@@ -103,6 +103,7 @@ videopilot:
       max-concurrency: ${ASR_MAX_CONCURRENCY:1}
       queue-capacity: ${ASR_QUEUE_CAPACITY:2}
       max-attempts: ${ASR_MAX_ATTEMPTS:3}
+      max-output-characters-per-minute: ${ASR_MAX_OUTPUT_CHARACTERS_PER_MINUTE:1200}
     derivation:
       enabled: ${CONTEXT_DERIVATION_ENABLED:false}
       executable: ${FFMPEG_EXECUTABLE:ffmpeg}
@@ -160,15 +161,21 @@ videopilot:
   analysis:
     pipeline-version: ${ANALYSIS_PIPELINE_VERSION:m3-evidence-qa-v1}
     limits:
-      version: ${EXECUTION_LIMIT_VERSION:m4-limits-v1}
+      version: ${EXECUTION_LIMIT_VERSION:m4-limits-v3}
       job-deadline: ${ANALYSIS_JOB_DEADLINE:6h}
       provider-wait: ${PROVIDER_CAPACITY_WAIT:250ms}
       max-asr-calls: ${BUDGET_MAX_ASR_CALLS:240}
       max-ocr-calls: ${BUDGET_MAX_OCR_CALLS:2000}
       max-embedding-calls: ${BUDGET_MAX_EMBEDDING_CALLS:1000}
       max-answer-calls: ${BUDGET_MAX_ANSWER_CALLS:20}
-      max-input-units: ${BUDGET_MAX_INPUT_UNITS:1000000}
-      max-output-units: ${BUDGET_MAX_OUTPUT_UNITS:100000}
+      max-asr-input-units: ${BUDGET_MAX_ASR_INPUT_UNITS:5400000}
+      max-asr-output-units: ${BUDGET_MAX_ASR_OUTPUT_UNITS:108000}
+      max-ocr-input-units: ${BUDGET_MAX_OCR_INPUT_UNITS:21600000000}
+      max-ocr-output-units: ${BUDGET_MAX_OCR_OUTPUT_UNITS:54000000}
+      max-embedding-input-units: ${BUDGET_MAX_EMBEDDING_INPUT_UNITS:1000000}
+      max-embedding-output-units: ${BUDGET_MAX_EMBEDDING_OUTPUT_UNITS:1}
+      max-answer-input-units: ${BUDGET_MAX_ANSWER_INPUT_UNITS:100000}
+      max-answer-output-units: ${BUDGET_MAX_ANSWER_OUTPUT_UNITS:24000}
       max-known-cost: ${BUDGET_MAX_KNOWN_COST:10.00}
     recovery:
       max-retries: ${ANALYSIS_RECOVERY_MAX_RETRIES:3}

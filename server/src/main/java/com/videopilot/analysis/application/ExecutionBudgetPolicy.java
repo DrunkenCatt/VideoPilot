@@ -24,14 +24,14 @@ public final class ExecutionBudgetPolicy {
         commonChecks(usage);
         Integer maxCalls = limits.maxCallsByOperation().get(operation);
         if (maxCalls == null) throw new IllegalArgumentException("unknown budget operation: " + operation);
-        long calls = usage.callsByOperation().getOrDefault(operation, 0L);
-        if ("EMBEDDING".equals(operation)) {
-            calls += usage.callsByOperation().getOrDefault("RETRIEVAL_EMBEDDING", 0L);
-        }
+        ExecutionBudgetStore.OperationUsage operationUsage = usage.usageByOperation().getOrDefault(
+                operation, new ExecutionBudgetStore.OperationUsage(0, 0, 0));
+        long calls = operationUsage.calls();
         if (calls >= maxCalls) {
             exceeded(ExecutionBudgetExceededException.Reason.CALL_COUNT);
         }
-        if (usage.inputUnits() + projectedInputUnits > limits.maxInputUnits()) {
+        if (operationUsage.inputUnits() + projectedInputUnits
+                > limits.maxInputUnitsByOperation().get(operation)) {
             exceeded(ExecutionBudgetExceededException.Reason.INPUT_UNITS);
         }
     }
@@ -44,16 +44,24 @@ public final class ExecutionBudgetPolicy {
         commonChecks(store.load(jobId));
     }
 
-    public void afterCall(UUID jobId, long addedInputUnits, long addedOutputUnits, BigDecimal addedKnownCost) {
+    public void afterCall(
+            UUID jobId, String operation, long addedInputUnits, long addedOutputUnits, BigDecimal addedKnownCost) {
         if (addedInputUnits < 0 || addedOutputUnits < 0 || addedKnownCost == null || addedKnownCost.signum() < 0) {
             throw new IllegalArgumentException("completed call usage is invalid");
         }
         ExecutionBudgetStore.Usage usage = store.load(jobId);
         commonChecks(usage);
-        if (usage.inputUnits() + addedInputUnits > limits.maxInputUnits()) {
+        if (!limits.maxCallsByOperation().containsKey(operation)) {
+            throw new IllegalArgumentException("unknown budget operation: " + operation);
+        }
+        ExecutionBudgetStore.OperationUsage operationUsage = usage.usageByOperation().getOrDefault(
+                operation, new ExecutionBudgetStore.OperationUsage(0, 0, 0));
+        if (operationUsage.inputUnits() + addedInputUnits
+                > limits.maxInputUnitsByOperation().get(operation)) {
             exceeded(ExecutionBudgetExceededException.Reason.INPUT_UNITS);
         }
-        if (usage.outputUnits() + addedOutputUnits > limits.maxOutputUnits()) {
+        if (operationUsage.outputUnits() + addedOutputUnits
+                > limits.maxOutputUnitsByOperation().get(operation)) {
             exceeded(ExecutionBudgetExceededException.Reason.OUTPUT_UNITS);
         }
         if (usage.knownCost().add(addedKnownCost).compareTo(limits.maxKnownCost()) > 0) {
@@ -67,11 +75,18 @@ public final class ExecutionBudgetPolicy {
         if (!now.get().isBefore(usage.jobCreatedAt().plus(limits.jobDeadline()))) {
             exceeded(ExecutionBudgetExceededException.Reason.DEADLINE);
         }
-        if (usage.inputUnits() > limits.maxInputUnits()) {
-            exceeded(ExecutionBudgetExceededException.Reason.INPUT_UNITS);
-        }
-        if (usage.outputUnits() > limits.maxOutputUnits()) {
-            exceeded(ExecutionBudgetExceededException.Reason.OUTPUT_UNITS);
+        for (var entry : usage.usageByOperation().entrySet()) {
+            Long maxInput = limits.maxInputUnitsByOperation().get(entry.getKey());
+            Long maxOutput = limits.maxOutputUnitsByOperation().get(entry.getKey());
+            if (maxInput == null || maxOutput == null) {
+                throw new IllegalArgumentException("unknown budget operation: " + entry.getKey());
+            }
+            if (entry.getValue().inputUnits() > maxInput) {
+                exceeded(ExecutionBudgetExceededException.Reason.INPUT_UNITS);
+            }
+            if (entry.getValue().outputUnits() > maxOutput) {
+                exceeded(ExecutionBudgetExceededException.Reason.OUTPUT_UNITS);
+            }
         }
         if (usage.knownCost().compareTo(limits.maxKnownCost()) > 0) {
             exceeded(ExecutionBudgetExceededException.Reason.KNOWN_COST);

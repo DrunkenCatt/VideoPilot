@@ -75,9 +75,70 @@ class AsrExecutionApplicationServiceTest {
                 ArgumentCaptor.forClass(VideoContextStore.AsrCompletion.class);
         verify(store).completeAsr(eq(OWNER.ownerId()), completion.capture());
         assertThat(completion.getValue().providerDurationMs()).isEqualTo(2_000);
+        assertThat(completion.getValue().outputCharacters()).isEqualTo(6);
         assertThat(completion.getValue().providerTraceId()).isEqualTo("provider-trace");
         assertThat(completion.getValue().workItem().checkpointPayload()).contains("lesson", "60000", "62500");
         verify(objects).put(any(), any(), org.mockito.ArgumentMatchers.eq("application/json"), any());
+    }
+
+    @Test
+    void rejectsTranscriptThatExceedsTheDurationBasedOutputLimit() throws Exception {
+        VideoContextStore store = mock(VideoContextStore.class);
+        DerivedMediaStore objects = mock(DerivedMediaStore.class);
+        var source = audioArtifact();
+        var pending = asrItem(ContextWorkItemStatus.PENDING, 0, 0);
+        when(store.findCompletedArtifacts(OWNER.ownerId(), MEDIA_ID, "AUDIO_SLICE")).thenReturn(List.of(source));
+        when(store.createOrReuseWorkItem(eq(OWNER.ownerId()), any())).thenReturn(pending);
+        when(store.claim(any(), any(), anyLong(), any(), any(), any())).thenReturn(true);
+        doAnswer(invocation -> {
+            Files.write(invocation.getArgument(1), new byte[] {1});
+            return null;
+        }).when(objects).copyTo(any(), any());
+        SpeechRecognitionPort speech = request -> new SpeechRecognitionPort.Result(
+                List.of(new SpeechRecognitionPort.TranscriptSegment(
+                        request.sliceStartMs(), request.sliceEndMs(), "x".repeat(51))),
+                2_500, Optional.empty());
+
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            assertThat(service(store, objects, speech, executor).transcribe(OWNER, JOB_ID, MEDIA_ID))
+                    .isEqualTo(AsrExecutionApplicationService.AsrOutcome.FAILED);
+        }
+
+        verify(store, never()).completeAsr(any(), any());
+        ArgumentCaptor<VideoContextStore.AsrFailure> failure =
+                ArgumentCaptor.forClass(VideoContextStore.AsrFailure.class);
+        verify(store).failAsr(eq(OWNER.ownerId()), failure.capture());
+        assertThat(failure.getValue().workItem().errorCode()).isEqualTo("OUTPUT_LIMIT");
+        assertThat(failure.getValue().workItem().retryable()).isFalse();
+    }
+
+    @Test
+    void acceptsExactlyTwoMinutesOfConfiguredOutputBudget() throws Exception {
+        VideoContextStore store = mock(VideoContextStore.class);
+        DerivedMediaStore objects = mock(DerivedMediaStore.class);
+        var source = audioArtifact(0, 120_000);
+        var pending = asrItem(ContextWorkItemStatus.PENDING, 0, 0, 0, 120_000);
+        when(store.findCompletedArtifacts(OWNER.ownerId(), MEDIA_ID, "AUDIO_SLICE")).thenReturn(List.of(source));
+        when(store.createOrReuseWorkItem(eq(OWNER.ownerId()), any())).thenReturn(pending);
+        when(store.findWorkItem(OWNER.ownerId(), pending.workItemId())).thenReturn(Optional.of(pending));
+        when(store.claim(any(), any(), anyLong(), any(), any(), any())).thenReturn(true);
+        doAnswer(invocation -> {
+            Files.write(invocation.getArgument(1), new byte[] {1});
+            return null;
+        }).when(objects).copyTo(any(), any());
+        SpeechRecognitionPort speech = request -> new SpeechRecognitionPort.Result(
+                List.of(new SpeechRecognitionPort.TranscriptSegment(0, 120_000, "字".repeat(2_400))),
+                120_000, Optional.empty());
+
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            assertThat(service(store, objects, speech, executor).transcribe(OWNER, JOB_ID, MEDIA_ID))
+                    .isEqualTo(AsrExecutionApplicationService.AsrOutcome.COMPLETED);
+        }
+
+        ArgumentCaptor<VideoContextStore.AsrCompletion> completion =
+                ArgumentCaptor.forClass(VideoContextStore.AsrCompletion.class);
+        verify(store).completeAsr(eq(OWNER.ownerId()), completion.capture());
+        assertThat(completion.getValue().outputCharacters()).isEqualTo(2_400);
     }
 
     @Test
@@ -214,16 +275,25 @@ class AsrExecutionApplicationServiceTest {
     }
 
     private VideoContextStore.CompletedWorkArtifact audioArtifact() {
+        return audioArtifact(60_000, 62_500);
+    }
+
+    private VideoContextStore.CompletedWorkArtifact audioArtifact(long startMs, long endMs) {
         return new VideoContextStore.CompletedWorkArtifact(
                 new ContextWorkItem(UUID.randomUUID(), MEDIA_ID, JOB_ID, ContextWorkItemKind.AUDIO_SLICE,
-                        0, 60_000, 62_500, FINGERPRINT, ContextWorkItemStatus.COMPLETED,
+                        0, startMs, endMs, FINGERPRINT, ContextWorkItemStatus.COMPLETED,
                         1, Optional.empty(), false, 2, NOW),
                 "derived/audio-0.wav", "b".repeat(64), "{}");
     }
 
     private ContextWorkItem asrItem(ContextWorkItemStatus status, int attempt, long version) {
+        return asrItem(status, attempt, version, 60_000, 62_500);
+    }
+
+    private ContextWorkItem asrItem(
+            ContextWorkItemStatus status, int attempt, long version, long startMs, long endMs) {
         return new ContextWorkItem(UUID.randomUUID(), MEDIA_ID, JOB_ID, ContextWorkItemKind.ASR_SLICE,
-                0, 60_000, 62_500, FINGERPRINT, status, attempt,
+                0, startMs, endMs, FINGERPRINT, status, attempt,
                 Optional.empty(), false, version, NOW);
     }
 }

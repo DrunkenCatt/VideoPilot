@@ -1,6 +1,6 @@
 # M5 T4 草稿准备证据
 
-状态：150 条真实题目已完成双审；T4 冻结前运行时真实性门未通过。
+状态：150 条真实题目已完成双审；两条无音轨素材已替换并通过真实解析，待将相关题目的 expected hit 绑定到已发布 Segment 后冻结。
 
 ## 素材
 
@@ -38,8 +38,17 @@
 
 两位 reviewer 对全部 150 条题逐题检查，因此同时覆盖每类题和每条视频，样本量不是抽样估计：`zzm` 150 条、`qq` 150 条。两份工作表均无空 decision/reviewer，全部为 `approved`，无 disputed/rejected。工作表、问题全文、转录和 OCR 留在 Git 忽略目录；Git 只提交计数、指纹和权利元数据。
 
-## 冻结阻断项
+## 原阻断与替代素材验证
 
 - `ffprobe` 实测 Audacity 只有 Theora video/data，ASL 只有 VP9 video，两者均无 audio stream。
 - `VideoContextPipelineApplicationService` 在 transcript 为空时返回不可重试的 `ASR_EMPTY`；`VideoContextStore.ContextPublication` 也要求 ready context 的 ASR 状态为 `AVAILABLE`。
 - `author_real_cases.py` 使用 UUID5 从视频/时间窗生成 `expectedHits.segmentId`。这些 ID 尚未与 MySQL/Qdrant 中实际发布的 `VideoSegment` 绑定，不能作为真实检索基线冻结。
+
+2026-11-09 使用两条短时中文 Wikidata 教学视频替换无音轨素材：
+
+- `wikidata-book-zh.webm`：156466 ms，真实浏览器 Job `bc1cec42-50b9-45b2-8361-891d8f07a040` 进入 `READY`，发布 3 个 Segment。
+- `wikidata-qualifiers-zh.webm`：276637 ms，真实浏览器 Job `8f29953e-c507-4b00-b7ac-66a6dea88b37` 进入 `READY`，发布 5 个 Segment；5 次 ASR 输入合计 276637 ms、输出合计 524 Unicode 字符，10 次 OCR 输入合计 4099200 像素、输出合计 360 字符。
+
+解析过程中发现并修复两项运行时硬门问题：ASR `output_units` 曾误写时长，以及全局预算曾混加毫秒、像素、字符和 Token。当前 `m4-limits-v3` 按 operation 分别聚合；ASR 另有 1200 字符/分钟单次上限，120 秒输入上限为 2400 字符。复用中的 Context 由后续 Job 发布时仍校验 owner、media、pipeline 和 version CAS。真实浏览器两条任务均 READY，限定符页面时间轴可见，Console warning/error 为 0。
+
+剩余阻断只有数据集绑定：必须用上述 8 个实际 Segment 重写相关题目并重新完成结构校验、双审索引一致性和冻结 fingerprint；不得沿用 UUID5 占位 ID。

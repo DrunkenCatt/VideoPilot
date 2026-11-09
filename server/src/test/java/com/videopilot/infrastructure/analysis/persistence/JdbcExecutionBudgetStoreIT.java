@@ -43,6 +43,8 @@ class JdbcExecutionBudgetStoreIT {
         var usage = new JdbcExecutionBudgetStore(jdbc).load(job);
 
         assertThat(usage.callsByOperation()).containsEntry("ASR", 1L).containsEntry("ANSWER", 1L);
+        assertThat(usage.usageByOperation().get("ASR"))
+                .isEqualTo(new com.videopilot.analysis.port.ExecutionBudgetStore.OperationUsage(1, 60, 10));
         assertThat(usage.inputUnits()).isEqualTo(100);
         assertThat(usage.outputUnits()).isEqualTo(15);
         assertThat(usage.knownCost()).isEqualByComparingTo("0.25");

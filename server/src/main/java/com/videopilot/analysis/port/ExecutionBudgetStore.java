@@ -11,13 +11,21 @@ public interface ExecutionBudgetStore {
 
     record Usage(
             Instant jobCreatedAt,
-            Map<String, Long> callsByOperation,
-            long inputUnits,
-            long outputUnits,
+            Map<String, OperationUsage> usageByOperation,
             BigDecimal knownCost,
             boolean unknownPrice) {
         public Usage {
-            callsByOperation = Map.copyOf(callsByOperation);
+            usageByOperation = Map.copyOf(usageByOperation);
         }
+
+        public Map<String, Long> callsByOperation() {
+            return usageByOperation.entrySet().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(
+                    Map.Entry::getKey, entry -> entry.getValue().calls()));
+        }
+
+        public long inputUnits() { return usageByOperation.values().stream().mapToLong(OperationUsage::inputUnits).sum(); }
+        public long outputUnits() { return usageByOperation.values().stream().mapToLong(OperationUsage::outputUnits).sum(); }
     }
+
+    record OperationUsage(long calls, long inputUnits, long outputUnits) { }
 }

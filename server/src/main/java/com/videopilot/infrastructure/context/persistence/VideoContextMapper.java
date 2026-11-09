@@ -207,7 +207,7 @@ interface VideoContextMapper {
             SET status = 'SUCCEEDED',
                 provider_trace_id = #{completion.providerTraceId},
                 output_artifact_ref = #{completion.workItem.artifactRef},
-                output_units = #{completion.providerDurationMs},
+                output_units = #{completion.outputCharacters},
                 latency_ms = #{completion.latencyMs},
                 completed_at = #{completion.completedAt},
                 updated_at = #{completion.completedAt}
@@ -446,6 +446,11 @@ interface VideoContextMapper {
     @Update("""
             UPDATE video_context context
             INNER JOIN media_asset media ON media.media_id = context.media_id
+            INNER JOIN analysis_job publisher
+                ON publisher.job_id = #{publication.jobId}
+               AND publisher.owner_id = media.owner_id
+               AND publisher.media_id = context.media_id
+               AND publisher.pipeline_version = context.pipeline_version
             SET context.status = 'READY',
                 context.asr_state = #{publication.asrState},
                 context.ocr_state = #{publication.ocrState},
@@ -455,7 +460,6 @@ interface VideoContextMapper {
                 context.updated_at = #{publication.completedAt}
             WHERE context.context_id = #{publication.contextId}
               AND media.owner_id = #{ownerId}
-              AND context.source_job_id = #{publication.jobId}
               AND context.status = 'BUILDING'
               AND context.version = #{publication.expectedContextVersion}
             """)

@@ -121,11 +121,13 @@ public class VideoContextPipelineApplicationService implements AnalysisJobPipeli
             return Outcome.completed();
         }
 
+        VideoContext derivedContext;
         try {
-            var derivationOutcome = derivation.derive(owner, job.jobId(), job.mediaId());
-            if (derivationOutcome == ContextDerivationApplicationService.DerivationOutcome.BUSY) {
+            var derivationResult = derivation.derive(owner, job.jobId(), job.mediaId());
+            if (derivationResult.outcome() == ContextDerivationApplicationService.DerivationOutcome.BUSY) {
                 return Outcome.retry();
             }
+            derivedContext = derivationResult.context();
         } catch (MediaDerivationException exception) {
             if (exception.reason() == MediaDerivationException.Reason.INVALID_MEDIA
                     || exception.reason() == MediaDerivationException.Reason.OUTPUT_LIMIT) {
@@ -168,8 +170,7 @@ public class VideoContextPipelineApplicationService implements AnalysisJobPipeli
             return Outcome.retry();
         }
 
-        VideoContext context = store.findContextByJob(owner.ownerId(), job.jobId()).orElse(null);
-        if (context == null) return Outcome.retry();
+        VideoContext context = derivedContext;
         try {
             List<VideoContextAligner.Transcript> transcripts = transcripts(owner, job);
             if (transcripts.isEmpty()) {

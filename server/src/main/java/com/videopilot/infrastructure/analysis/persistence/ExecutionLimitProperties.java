@@ -9,15 +9,21 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties("videopilot.analysis.limits")
 public class ExecutionLimitProperties {
 
-    private String version = "m4-limits-v1";
+    private String version = "m4-limits-v3";
     private Duration jobDeadline = Duration.ofHours(6);
     private Duration providerWait = Duration.ofMillis(250);
     private int maxAsrCalls = 240;
     private int maxOcrCalls = 2_000;
     private int maxEmbeddingCalls = 1_000;
     private int maxAnswerCalls = 20;
-    private long maxInputUnits = 1_000_000;
-    private long maxOutputUnits = 100_000;
+    private long maxAsrInputUnits = 5_400_000;
+    private long maxAsrOutputUnits = 108_000;
+    private long maxOcrInputUnits = 21_600_000_000L;
+    private long maxOcrOutputUnits = 54_000_000;
+    private long maxEmbeddingInputUnits = 1_000_000;
+    private long maxEmbeddingOutputUnits = 1;
+    private long maxAnswerInputUnits = 100_000;
+    private long maxAnswerOutputUnits = 24_000;
     private BigDecimal maxKnownCost = new BigDecimal("10.00");
 
     public ExecutionLimits toLimits() {
@@ -28,7 +34,15 @@ public class ExecutionLimitProperties {
                 "ASR", maxAsrCalls,
                 "OCR", maxOcrCalls,
                 "EMBEDDING", maxEmbeddingCalls,
-                "ANSWER", maxAnswerCalls), maxInputUnits, maxOutputUnits, maxKnownCost);
+                "ANSWER", maxAnswerCalls), Map.of(
+                "ASR", maxAsrInputUnits,
+                "OCR", maxOcrInputUnits,
+                "EMBEDDING", maxEmbeddingInputUnits,
+                "ANSWER", maxAnswerInputUnits), Map.of(
+                "ASR", maxAsrOutputUnits,
+                "OCR", maxOcrOutputUnits,
+                "EMBEDDING", maxEmbeddingOutputUnits,
+                "ANSWER", maxAnswerOutputUnits), maxKnownCost);
     }
 
     public String getVersion() { return version; }
@@ -45,10 +59,22 @@ public class ExecutionLimitProperties {
     public void setMaxEmbeddingCalls(int maxEmbeddingCalls) { this.maxEmbeddingCalls = maxEmbeddingCalls; }
     public int getMaxAnswerCalls() { return maxAnswerCalls; }
     public void setMaxAnswerCalls(int maxAnswerCalls) { this.maxAnswerCalls = maxAnswerCalls; }
-    public long getMaxInputUnits() { return maxInputUnits; }
-    public void setMaxInputUnits(long maxInputUnits) { this.maxInputUnits = maxInputUnits; }
-    public long getMaxOutputUnits() { return maxOutputUnits; }
-    public void setMaxOutputUnits(long maxOutputUnits) { this.maxOutputUnits = maxOutputUnits; }
+    public long getMaxAsrInputUnits() { return maxAsrInputUnits; }
+    public void setMaxAsrInputUnits(long value) { this.maxAsrInputUnits = value; }
+    public long getMaxAsrOutputUnits() { return maxAsrOutputUnits; }
+    public void setMaxAsrOutputUnits(long value) { this.maxAsrOutputUnits = value; }
+    public long getMaxOcrInputUnits() { return maxOcrInputUnits; }
+    public void setMaxOcrInputUnits(long value) { this.maxOcrInputUnits = value; }
+    public long getMaxOcrOutputUnits() { return maxOcrOutputUnits; }
+    public void setMaxOcrOutputUnits(long value) { this.maxOcrOutputUnits = value; }
+    public long getMaxEmbeddingInputUnits() { return maxEmbeddingInputUnits; }
+    public void setMaxEmbeddingInputUnits(long value) { this.maxEmbeddingInputUnits = value; }
+    public long getMaxEmbeddingOutputUnits() { return maxEmbeddingOutputUnits; }
+    public void setMaxEmbeddingOutputUnits(long value) { this.maxEmbeddingOutputUnits = value; }
+    public long getMaxAnswerInputUnits() { return maxAnswerInputUnits; }
+    public void setMaxAnswerInputUnits(long value) { this.maxAnswerInputUnits = value; }
+    public long getMaxAnswerOutputUnits() { return maxAnswerOutputUnits; }
+    public void setMaxAnswerOutputUnits(long value) { this.maxAnswerOutputUnits = value; }
     public BigDecimal getMaxKnownCost() { return maxKnownCost; }
     public void setMaxKnownCost(BigDecimal maxKnownCost) { this.maxKnownCost = maxKnownCost; }
 }

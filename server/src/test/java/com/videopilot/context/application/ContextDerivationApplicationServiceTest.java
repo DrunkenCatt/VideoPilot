@@ -84,10 +84,11 @@ class ContextDerivationApplicationServiceTest {
                     List.of(new MediaDeriver.Keyframe(frame, 0, 0, DIGEST)));
         });
 
-        DerivationOutcome outcome = service(contexts, media, source, deriver, artifacts)
+        var result = service(contexts, media, source, deriver, artifacts)
                 .derive(OWNER, JOB_ID, MEDIA_ID);
 
-        assertThat(outcome).isEqualTo(DerivationOutcome.COMPLETED);
+        assertThat(result.outcome()).isEqualTo(DerivationOutcome.COMPLETED);
+        assertThat(result.context().status()).isEqualTo(VideoContextStatus.BUILDING);
         ArgumentCaptor<String> keys = ArgumentCaptor.forClass(String.class);
         verify(artifacts, org.mockito.Mockito.times(3))
                 .put(keys.capture(), any(), any(), any());
@@ -111,6 +112,7 @@ class ContextDerivationApplicationServiceTest {
         when(contexts.prepare(any(), any())).thenReturn(new PlanResult(videoContext(), List.of(coordinator)));
 
         assertThat(service(contexts, media, source, deriver, artifacts).derive(OWNER, JOB_ID, MEDIA_ID))
+                .extracting(ContextDerivationApplicationService.DerivationResult::outcome)
                 .isEqualTo(DerivationOutcome.REUSED);
 
         verifyNoInteractions(source, deriver, artifacts);

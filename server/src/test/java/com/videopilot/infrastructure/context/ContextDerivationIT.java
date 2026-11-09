@@ -132,7 +132,7 @@ class ContextDerivationIT {
 
     @Test
     void derivesRealMediaPersistsArtifactsAndReusesCompletedVersion() throws Exception {
-        assertThat(derivation.derive(OWNER, jobId, mediaId)).isEqualTo(DerivationOutcome.COMPLETED);
+        assertThat(derivation.derive(OWNER, jobId, mediaId).outcome()).isEqualTo(DerivationOutcome.COMPLETED);
         List<String> artifactRefs = jdbc.sql("""
                 SELECT artifact_ref FROM context_work_item
                 WHERE media_id = :mediaId AND status = 'COMPLETED'
@@ -158,7 +158,7 @@ class ContextDerivationIT {
             assertThat(derivedObjects).anyMatch(key -> key.endsWith("frame-000000.jpg"));
         }
 
-        assertThat(derivation.derive(OWNER, jobId, mediaId)).isEqualTo(DerivationOutcome.REUSED);
+        assertThat(derivation.derive(OWNER, jobId, mediaId).outcome()).isEqualTo(DerivationOutcome.REUSED);
         assertThat(jdbc.sql("SELECT MAX(attempt) FROM context_work_item WHERE media_id = :mediaId")
                 .param("mediaId", mediaId.toString()).query(Integer.class).single()).isOne();
         Path root = Path.of("target/context-derivation-it");

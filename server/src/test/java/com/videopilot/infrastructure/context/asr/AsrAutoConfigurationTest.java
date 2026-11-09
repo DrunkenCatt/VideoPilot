@@ -36,7 +36,8 @@ class AsrAutoConfigurationTest {
                         "videopilot.context.asr.base-url=http://127.0.0.1:9/v1",
                         "videopilot.context.asr.max-concurrency=2",
                         "videopilot.context.asr.queue-capacity=3",
-                        "videopilot.context.asr.max-attempts=4")
+                        "videopilot.context.asr.max-attempts=4",
+                        "videopilot.context.asr.max-output-characters-per-minute=900")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(SiliconFlowSpeechRecognitionAdapter.class);
@@ -45,6 +46,7 @@ class AsrAutoConfigurationTest {
                     assertThat(properties.getMaxConcurrency()).isEqualTo(2);
                     assertThat(properties.getQueueCapacity()).isEqualTo(3);
                     assertThat(properties.getMaxAttempts()).isEqualTo(4);
+                    assertThat(properties.getMaxOutputCharactersPerMinute()).isEqualTo(900);
                     assertThat(properties.getProvider()).isEqualTo("SiliconFlow");
                     assertThat(properties.getTemporaryDirectory()).contains("videopilot-asr");
                     assertThat(properties.getMaxAudioBytes()).isPositive();

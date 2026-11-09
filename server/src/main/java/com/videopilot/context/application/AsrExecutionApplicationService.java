@@ -36,6 +36,7 @@ import org.slf4j.LoggerFactory;
 public final class AsrExecutionApplicationService {
 
     private static final Duration STALE_AFTER = Duration.ofMinutes(5);
+    private static final int DEFAULT_MAX_OUTPUT_CHARACTERS_PER_MINUTE = 1_200;
     private static final Logger LOGGER = LoggerFactory.getLogger(AsrExecutionApplicationService.class);
     private final VideoContextStore store;
     private final DerivedMediaStore objects;
@@ -49,6 +50,7 @@ public final class AsrExecutionApplicationService {
     private final Clock clock;
     private final Supplier<UUID> ids;
     private final ExecutionBudgetPolicy budget;
+    private final int maxOutputCharactersPerMinute;
 
     public AsrExecutionApplicationService(
             VideoContextStore store,
@@ -63,7 +65,7 @@ public final class AsrExecutionApplicationService {
             Clock clock,
             Supplier<UUID> ids) {
         this(store, objects, speech, json, executor, temporaryRoot, provider, modelVersion,
-                maxAttempts, clock, ids, null);
+                maxAttempts, clock, ids, null, DEFAULT_MAX_OUTPUT_CHARACTERS_PER_MINUTE);
     }
 
     public AsrExecutionApplicationService(
@@ -79,6 +81,24 @@ public final class AsrExecutionApplicationService {
             Clock clock,
             Supplier<UUID> ids,
             ExecutionBudgetPolicy budget) {
+        this(store, objects, speech, json, executor, temporaryRoot, provider, modelVersion,
+                maxAttempts, clock, ids, budget, DEFAULT_MAX_OUTPUT_CHARACTERS_PER_MINUTE);
+    }
+
+    public AsrExecutionApplicationService(
+            VideoContextStore store,
+            DerivedMediaStore objects,
+            SpeechRecognitionPort speech,
+            ObjectMapper json,
+            ExecutorService executor,
+            Path temporaryRoot,
+            String provider,
+            String modelVersion,
+            int maxAttempts,
+            Clock clock,
+            Supplier<UUID> ids,
+            ExecutionBudgetPolicy budget,
+            int maxOutputCharactersPerMinute) {
         this.store = java.util.Objects.requireNonNull(store, "store");
         this.objects = java.util.Objects.requireNonNull(objects, "objects");
         this.speech = java.util.Objects.requireNonNull(speech, "speech");
@@ -92,6 +112,10 @@ public final class AsrExecutionApplicationService {
         this.clock = java.util.Objects.requireNonNull(clock, "clock");
         this.ids = java.util.Objects.requireNonNull(ids, "ids");
         this.budget = budget;
+        if (maxOutputCharactersPerMinute < 1) {
+            throw new IllegalArgumentException("ASR output character rate must be positive");
+        }
+        this.maxOutputCharactersPerMinute = maxOutputCharactersPerMinute;
     }
 
     public AsrOutcome transcribe(OwnerContext owner, UUID jobId, UUID mediaId) {
@@ -176,7 +200,7 @@ public final class AsrExecutionApplicationService {
                     artifactRef, digest, completedAt);
             store.completeAsr(owner.ownerId(), new VideoContextStore.AsrCompletion(
                     work, callId.toString(), result.providerTraceId().orElse(null), result.billedDurationMs(),
-                    latency(startedAt, completedAt), completedAt));
+                    outputCharacters(result), latency(startedAt, completedAt), completedAt));
             if (budget != null) budget.afterCall(initial.createdByJobId());
             return AsrOutcome.COMPLETED;
         } catch (SpeechRecognitionException exception) {
@@ -258,6 +282,18 @@ public final class AsrExecutionApplicationService {
         if (segment.startMs() != item.startMs() || segment.endMs() != item.endMs()
                 || segment.text() == null || segment.text().isBlank()
                 || result.billedDurationMs() < 0) throw invalidResponse();
+        long durationMs = item.endMs() - item.startMs();
+        long allowedCharacters = Math.max(1L,
+                Math.ceilDiv(Math.multiplyExact(durationMs, maxOutputCharactersPerMinute), 60_000L));
+        if (outputCharacters(result) > allowedCharacters) {
+            throw new SpeechRecognitionException(
+                    SpeechRecognitionException.Reason.NON_RETRYABLE, "OUTPUT_LIMIT");
+        }
+    }
+
+    private long outputCharacters(SpeechRecognitionPort.Result result) {
+        String text = result.segments().getFirst().text();
+        return text.codePointCount(0, text.length());
     }
 
     private SpeechRecognitionException invalidResponse() {

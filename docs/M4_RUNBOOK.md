@@ -80,7 +80,9 @@ Recovery worker 默认每 10 秒扫描一次，批量读取到期的 `RETRY_WAIT
 
 ## 6. 预算、资源池与积压
 
-执行限制版本默认为 `m4-limits-v1`。Job deadline、operation 调用数、输入/输出计量、已知成本和供应商等待上限在每次高成本调用前后由 Java 检查。价格未知显示为 unknown，不得当作 0。
+执行限制版本默认为 `m4-limits-v3`。Job deadline、operation 调用数、已知成本和供应商等待上限由 Job 级硬门控制；输入/输出计量按 ASR、OCR、Embedding、Answer 分别聚合和限额，禁止把毫秒、像素、字符和 Token 直接相加裁决。价格未知显示为 unknown，不得当作 0。`m4-limits-v1/v2` 的历史 Trace 保持原样；自 v2 起 ASR `input_units` 是音频窗口毫秒，`output_units` 是 Unicode 字符数，并额外受默认 1200 字符/分钟的单次输出率硬门约束。
+
+输入指纹一致时，后续 Job 可以继续完成前一 Job 创建但尚未发布的 Context。此时 `source_job_id` 保留原创建者，当前 Job 的 Context stage 记录完成事实；发布仍校验 owner、media、pipeline 和 Context version CAS。若日志出现 `PublicationConflictException`，先检查这些事实，禁止改写 `source_job_id` 或放宽 CAS。
 
 - 单个 Job 预算耗尽：保持失败事实，核对限制版本和 `model_call` 聚合。不要通过重启清零。
 - 大量 provider timeout/429：降低进入量并等待 `Retry-After`；不要扩大无界线程池或自动重发 UNKNOWN。

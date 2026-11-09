@@ -18,6 +18,7 @@ public class AsrProperties {
     private int maxConcurrency = 1;
     private int queueCapacity = 2;
     private int maxAttempts = 3;
+    private int maxOutputCharactersPerMinute = 1_200;
 
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
@@ -43,4 +44,6 @@ public class AsrProperties {
     public void setQueueCapacity(int queueCapacity) { this.queueCapacity = queueCapacity; }
     public int getMaxAttempts() { return maxAttempts; }
     public void setMaxAttempts(int maxAttempts) { this.maxAttempts = maxAttempts; }
+    public int getMaxOutputCharactersPerMinute() { return maxOutputCharactersPerMinute; }
+    public void setMaxOutputCharactersPerMinute(int value) { this.maxOutputCharactersPerMinute = value; }
 }

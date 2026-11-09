@@ -191,7 +191,7 @@ public final class AnswerApplicationService {
 
         try {
             if (budget != null) budget.afterCall(
-                    jobId, response.usage().inputTokens(), response.usage().outputTokens(), BigDecimal.ZERO);
+                    jobId, "ANSWER", response.usage().inputTokens(), response.usage().outputTokens(), BigDecimal.ZERO);
         } catch (ExecutionBudgetExceededException exception) {
             store.fail(answerId, callId, "FAILED", "BUDGET_EXHAUSTED",
                     exception.limitVersion() + ':' + exception.reason().name(), now.get());
