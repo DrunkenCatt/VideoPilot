@@ -1,11 +1,11 @@
 {
-  "datasetId": "aa08cce9-6a28-50ca-be01-58587eafe174",
-  "dataVersion": "0.1.0",
+  "datasetId": "a6829e55-ccd2-504f-ae78-347156c50a2b",
+  "dataVersion": "0.2.0",
   "schemaVersion": 1,
   "split": "dev",
-  "status": "draft",
-  "datasetFingerprint": "47be16155a20ab403d3bb6da3cd5ac0098aaa03133e816dca72fc27dea88c843",
-  "frozenAt": null,
+  "status": "frozen",
+  "datasetFingerprint": "98667e464bd7099736b91c32ee2ca1013df3d330c7d136bc3a7777be9e8c31ca",
+  "frozenAt": "2026-11-09T13:30:45Z",
   "videos": [
     {
       "videoRef": "redis-p08",
@@ -16,20 +16,20 @@
       "authorization": "project_owner_authorized_for_local_evaluation; redistribution_not_authorized",
       "mediaFingerprint": "a80b60825e04b95c6647ec8107b72e21fba3b32019f702fdbb96c83d92812d23",
       "split": "dev",
-      "durationSec": 434.746,
+      "durationSec": 434.747,
       "language": "zh-CN"
     },
     {
-      "videoRef": "audacity-amplify",
-      "topic": "Audacity audio amplification",
+      "videoRef": "wikidata-book-zh",
+      "topic": "Editing a book item in Wikidata",
       "sourceRights": "licensed",
-      "licenseId": "CC0-1.0",
-      "sourceUri": "https://commons.wikimedia.org/wiki/File:Amplify_with_Audacity.ogv",
-      "authorization": "Wikimedia Commons source page marks the file CC0",
-      "mediaFingerprint": "0089389345d06e012c54f29e3e1a24a13d7cc13fcd03baa2dae3d7f333cad1d4",
+      "licenseId": "CC-BY-4.0",
+      "sourceUri": "https://commons.wikimedia.org/wiki/File:Learnwikidata-01-Book-Chinese.webm",
+      "authorization": "Wikimedia Commons source page marks the file CC BY 4.0",
+      "mediaFingerprint": "cbecfd0ee467c8aa691da4e4dee005b2d76e3252101faff4ae08812ec274c740",
       "split": "dev",
-      "durationSec": 36.133,
-      "language": "en"
+      "durationSec": 156.466,
+      "language": "zh-CN"
     },
     {
       "videoRef": "free-media-licenses",

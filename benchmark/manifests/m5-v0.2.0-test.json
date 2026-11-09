@@ -1,0 +1,42 @@
+{
+  "datasetId": "544f6ad2-24e1-5cf5-acdb-7bd38954cf1a",
+  "dataVersion": "0.2.0",
+  "schemaVersion": 1,
+  "split": "test",
+  "status": "frozen",
+  "datasetFingerprint": "d190636e0efaabd3cc9cb16a68854c2033a4079ca8e6feb1eeb4e9a36167e502",
+  "frozenAt": "2026-11-09T13:30:45Z",
+  "videos": [
+    {
+      "videoRef": "garbage-disposal-safety",
+      "topic": "Clearing a jammed garbage disposal safely",
+      "sourceRights": "licensed",
+      "licenseId": "CC-BY-3.0",
+      "sourceUri": "https://commons.wikimedia.org/wiki/File:How_to_clear_a_Jammed_Garbage_Disposal.webm",
+      "authorization": "Wikimedia Commons source page marks the file CC BY 3.0",
+      "mediaFingerprint": "a4d4cc3cabd67418ee46b0685bca2ab2ac254fe1c3abbf7ec20250d31f6a83d7",
+      "split": "test",
+      "durationSec": 151.101,
+      "language": "en"
+    },
+    {
+      "videoRef": "wikidata-qualifiers-zh",
+      "topic": "Adding qualifiers to Wikidata statements",
+      "sourceRights": "licensed",
+      "licenseId": "CC-BY-4.0",
+      "sourceUri": "https://commons.wikimedia.org/wiki/File:Learnwikidata-10-Qualifiers-Chinese.webm",
+      "authorization": "Wikimedia Commons source page marks the file CC BY 4.0",
+      "mediaFingerprint": "42004a462a1d29fe1ba48b83a7d30d94dc4c11ac9a2842e7cc492607f64d64ee",
+      "split": "test",
+      "durationSec": 276.637,
+      "language": "zh-CN"
+    }
+  ],
+  "caseCounts": {
+    "retrieval": 48,
+    "answer": 12,
+    "reliability": 0,
+    "approved": 60,
+    "total": 60
+  }
+}

@@ -8,6 +8,22 @@ from validate_m5_dataset import canonical, validate
 
 
 class ValidateM5DatasetTest(unittest.TestCase):
+    def test_rejects_frozen_manifest_without_frozen_at(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = self._manifest()
+            manifest["status"] = "frozen"
+            manifest["frozenAt"] = None
+            retrieval = [self._retrieval("r-1")]
+            answers = [self._answer("a-1")]
+            index = [self._index("r-1", "exact"), self._index("a-1", "answer")]
+            manifest["datasetFingerprint"] = self._fingerprint(manifest, retrieval, answers, index)
+            self._write(root, manifest, retrieval, answers, index)
+
+            errors = validate(root / "manifest.json", root / "retrieval.jsonl", root / "answer.jsonl", root / "index.jsonl", minimum_counts=False)
+
+            self.assertIn("frozen manifest requires frozenAt", errors)
+
     def test_fingerprint_covers_cases_and_review_index(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -72,7 +88,8 @@ class ValidateM5DatasetTest(unittest.TestCase):
 
     @staticmethod
     def _manifest():
-        return {"datasetFingerprint": "", "split": "dev", "videos": [{"videoRef": "video-a", "split": "dev"}], "caseCounts": {"retrieval": 1, "answer": 1}}
+        return {"datasetFingerprint": "", "split": "dev", "status": "draft", "frozenAt": None,
+                "videos": [{"videoRef": "video-a", "split": "dev"}], "caseCounts": {"retrieval": 1, "answer": 1}}
 
     @staticmethod
     def _retrieval(case_id):

@@ -49,6 +49,6 @@ cd server
 
 M5 使用 `dataset-manifest.schema.json` 固定数据版本、split、冻结状态、权利信息和内容指纹，使用 `evaluation-report.schema.json` 固定可提交的脱敏报告。正式 `test` 只接受冻结、按视频或主题与 `dev` 隔离且全部计分题双人批准的数据；工作标注仍只保存在 `benchmark/local/`。
 
-M5 T4 的 120 条检索题、30 条答案题已由两名 reviewer 逐题批准，但 manifest 在真实解析产物绑定完成前保持 `draft`。可提交 manifest 只记录权利、主题、语言、时长、审核计数和内容指纹；问题全文、两份人工复核表及媒体/转录/OCR 均保留在 `benchmark/local/m5-t4/`，不进入 Git。
+M5 T4 的 `0.2.0` 数据集包含 120 条检索题和 30 条答案题，已由两名 reviewer 逐题批准，并按视频隔离为冻结的 dev/test manifest。全部 `expectedHits.segmentId` 已绑定到真实解析发布的 `VideoSegment`。可提交 manifest 只记录权利、主题、语言、时长、审核计数和内容指纹；问题全文、两份人工复核表及媒体/转录/OCR 均保留在 `benchmark/local/m5-t4/`，不进入 Git。
 
 报告只允许包含 case ID、状态、计数、指标、延迟、计量、已知/未知成本和版本指纹。问题、答案、引用原文、Prompt、完整转录/OCR、模型原始响应、对象 key、向量和凭据不得进入 Git 报告。

@@ -30,6 +30,10 @@ def validate(
     answers = load_jsonl(answer_path)
     review_index = load_jsonl(review_index_path)
     errors: list[str] = []
+    if manifest.get("status") == "frozen" and not manifest.get("frozenAt"):
+        errors.append("frozen manifest requires frozenAt")
+    if manifest.get("status") == "draft" and manifest.get("frozenAt") is not None:
+        errors.append("draft manifest must not have frozenAt")
     all_cases = retrieval + answers
     ids = [case.get("caseId") for case in all_cases]
     if len(ids) != len(set(ids)):

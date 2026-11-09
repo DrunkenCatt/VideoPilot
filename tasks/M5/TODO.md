@@ -91,15 +91,15 @@
 **验收标准**
 
 - [x] 使用至少 5 条权利明确、主题足以隔离 dev/test 的教学视频；本地 manifest 记录指纹、授权、时长、语言、主题和 split，原视频/完整转录不入 Git。
-- [ ] 完成至少 120 道检索题，精确/模糊/OCR 目标比例约 40%/40%/20%；每题有证据窗、通道、expected hits、可回答性和稳定 case ID。
-- [ ] 完成至少 30 道覆盖可回答/不可回答的答案题，以及复用 M4 的可靠性集；答案题包含 required facts、forbidden claims、required citations。
+- [x] 完成至少 120 道检索题，精确/模糊/OCR 目标比例约 40%/40%/20%；每题有证据窗、通道、expected hits、可回答性和稳定 case ID。
+- [x] 完成至少 30 道覆盖可回答/不可回答的答案题，以及复用 M4 的可靠性集；答案题包含 required facts、forbidden claims、required citations。
 - [x] 正式计分题全部双人复核；分歧题保持 disputed 不计分，不为凑数量强制批准；自动生成题必须逐题人工核对。
-- [ ] dev/test 按视频或主题隔离，生成不可变 dataset manifest/fingerprint 并冻结；冻结后变更必须产生新 dataVersion，不原地覆盖。
+- [x] dev/test 按视频或主题隔离，生成不可变 dataset manifest/fingerprint 并冻结；冻结后变更必须产生新 dataVersion，不原地覆盖。
 
 **验证**
 
 - [x] Schema、重复 case、跨 split 泄漏、比例、复核数、证据窗和 fingerprint 校验全部通过。
-- [ ] 冻结前确认全部素材可走通现有解析链，且 `expectedHits.segmentId` 均对应已发布的真实 `VideoSegment`。
+- [x] 冻结前确认全部素材可走通现有解析链，且 `expectedHits.segmentId` 均对应已发布的真实 `VideoSegment`。
 - [x] 人工抽查每类题和每条视频；记录抽检人、样本量、问题和裁决，不把未复核题计入分母。
 
 **预计改动区域**：忽略的 `benchmark/local/` 工作标注、可提交的脱敏 manifest/report、数据校验器和任务证据。

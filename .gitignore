@@ -47,6 +47,8 @@ test-results/
 playwright-report/
 .scannerwork/
 dependency-check-report.*
+__pycache__/
+*.pyc
 
 # Raw media and generated transcript/provider payloads
 *.mp4
