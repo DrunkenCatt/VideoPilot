@@ -2,6 +2,13 @@
 
 状态：准备正式运行；冻结数据集导入身份薄切片已完成，尚未触发发布规模的外部模型调用。
 
+## 正式运行入口预检
+
+- 新增默认关闭的 `M5ReleaseBaselineLocalIT`。只有同时提供 `m5.release=true`、候选 commit，并额外提供 `m5.release.execute=true` 时才会执行外部模型调用；缺少执行开关时只校验 5 条来源、owner、READY Job、已发布 Segment、DEV 导入和冻结 fingerprint。
+- 预检首次在 Spring 启动阶段因 integration profile 启用但未配置完整 Tesseract 而失败；夹具随后只关闭不参与本评测的 ASR/OCR 启动项，保留真实 MySQL、MinIO、Qdrant、Embedding、回答与证据门。直接调用 Failsafe 不会自动重新编译测试，因此正式命令显式包含 `test-compile`。
+- `server\mvnw.cmd test-compile -Pintegration "-Dit.test=M5ReleaseBaselineLocalIT" "-Dm5.release=true" "-Dm5.candidate.commit=20a1664" failsafe:integration-test failsafe:verify`：1/1 通过，最终耗时 32.112 秒；未设置 `m5.release.execute`，外部模型调用为 0，TEST 尚未导入或解封。运行入口在每轮结束后立即检查失败状态，不会在当前退出门失败后继续下一轮。
+- 浏览器无回归检查使用独立应用内浏览器打开 `http://localhost:5173/`：公开登录面可访问，账号/密码控件和安全 Cookie 说明可见，Console error/warning 为 0。本切片不改前端；登录后的正式 dataset/run/trace/export 验收保留到基线运行完成后执行。
+
 ## 冻结身份导入
 
 - `EvaluationApplicationService.ImportDataset` 增加可选 `sourceFingerprint`；只接受小写 64 位 SHA-256。未提供时保留既有草稿/Smoke 的服务端计算行为，避免破坏已有调用方。

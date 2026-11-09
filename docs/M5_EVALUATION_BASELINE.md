@@ -47,3 +47,5 @@ MySQL 迁移与续跑验证需先把仓库 `.env` 的端口/凭据加载到当�
 真实小样本 smoke 由 `EvaluationBaselineLocalIT` 提供，默认跳过，避免无意触发外部模型费用。显式设置 `evaluation.smoke=true` 和候选 commit 后，它会复用一条本地已索引教学视频，新建有预算的新 Job，并执行一题检索和一题回答。
 
 正式发布集由测试侧 `M5ReleaseDatasetLoader` 读取 Git 忽略目录中的题目与 review index，将冻结 manifest fingerprint、真实 READY Job 和已发布 Segment 显式绑定为运行时 JSONL。该加载器不进入生产部署、不复制检索或问答实现，也不会把问题、答案或转录写入可提交报告。
+
+正式基线入口 `M5ReleaseBaselineLocalIT` 默认只执行 DEV 导入预检。命令必须先运行 `test-compile`，避免 Failsafe 复用旧的测试 class；只有显式增加 `-Dm5.release.execute=true` 才会按 DEV 三轮、TEST 首次解封三轮的顺序调用外部 Embedding/LLM，并把脱敏报告写入 `benchmark/reports/`。该夹具关闭无关的 ASR/OCR 和消息消费者，但保留生产检索、回答、版本漂移、确定性重复和证据硬门。
