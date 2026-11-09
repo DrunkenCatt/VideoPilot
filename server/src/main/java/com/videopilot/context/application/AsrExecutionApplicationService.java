@@ -148,7 +148,7 @@ public final class AsrExecutionApplicationService {
             OwnerContext owner, UUID jobId, VideoContextStore.CompletedWorkArtifact source) {
         ContextWorkItem audio = source.workItem();
         String fingerprint = ContextInputFingerprint.sha256(new ContextWorkSpec(
-                source.artifactDigest(), "asr-v1", "trusted-slice-window-v1", modelVersion,
+                source.artifactDigest(), "asr-v2", "trusted-slice-window-v1", modelVersion,
                 ContextWorkItemKind.ASR_SLICE, audio.startMs(), audio.endMs(),
                 Map.of("sourceFingerprint", audio.inputFingerprint())));
         return store.createOrReuseWorkItem(owner.ownerId(), new VideoContextStore.WorkItemPlan(
@@ -280,7 +280,7 @@ public final class AsrExecutionApplicationService {
         if (result.segments().size() != 1) throw invalidResponse();
         var segment = result.segments().getFirst();
         if (segment.startMs() != item.startMs() || segment.endMs() != item.endMs()
-                || segment.text() == null || segment.text().isBlank()
+                || segment.text() == null
                 || result.billedDurationMs() < 0) throw invalidResponse();
         long durationMs = item.endMs() - item.startMs();
         long allowedCharacters = Math.max(1L,

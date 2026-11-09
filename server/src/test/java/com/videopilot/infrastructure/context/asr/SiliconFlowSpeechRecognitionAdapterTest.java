@@ -74,13 +74,26 @@ class SiliconFlowSpeechRecognitionAdapterTest {
     }
 
     @Test
-    void rejectsOversizedAudioAndEmptyResponsesWithoutCallingThemRetryable() throws Exception {
+    void rejectsOversizedAudioButAcceptsAnExplicitEmptyTranscriptForSilence() throws Exception {
         Path audio = Files.write(temporaryDirectory.resolve("slice.wav"), new byte[] {1, 2, 3, 4});
-        startServer(exchange -> respond(exchange, 200, "{\"text\":\"   \"}"));
+        startServer(exchange -> respond(exchange, 200, "{\"text\":\"   \",\"usage\":{\"seconds\":2.5}}"));
 
         assertThatThrownBy(() -> adapter(Duration.ofSeconds(2), 3).transcribe(request(audio)))
                 .isInstanceOfSatisfying(SpeechRecognitionException.class,
                         failure -> assertThat(failure.errorCode()).isEqualTo("AUDIO_LIMIT"));
+
+        assertThat(adapter(Duration.ofSeconds(2), 1024).transcribe(request(audio)))
+                .satisfies(result -> {
+                    assertThat(result.billedDurationMs()).isEqualTo(2_500);
+                    assertThat(result.segments()).containsExactly(
+                            new SpeechRecognitionPort.TranscriptSegment(60_000, 62_500, ""));
+                });
+    }
+
+    @Test
+    void rejectsAResponseThatDoesNotDeclareTheTranscriptField() throws Exception {
+        Path audio = Files.write(temporaryDirectory.resolve("slice.wav"), new byte[] {1});
+        startServer(exchange -> respond(exchange, 200, "{\"usage\":{\"seconds\":2.5}}"));
 
         assertThatThrownBy(() -> adapter(Duration.ofSeconds(2), 1024).transcribe(request(audio)))
                 .isInstanceOfSatisfying(SpeechRecognitionException.class,

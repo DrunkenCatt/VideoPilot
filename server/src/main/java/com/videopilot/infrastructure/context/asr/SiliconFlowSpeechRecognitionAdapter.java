@@ -92,8 +92,10 @@ public final class SiliconFlowSpeechRecognitionAdapter implements SpeechRecognit
     private Result parse(Request request, byte[] responseBody, HttpHeaders headers) {
         try {
             JsonNode root = json.readTree(responseBody);
+            if (!root.has("text") || !root.path("text").isTextual()) {
+                throw failure(SpeechRecognitionException.Reason.NON_RETRYABLE, "INVALID_RESPONSE");
+            }
             String text = root.path("text").asText("").trim();
-            if (text.isEmpty()) throw failure(SpeechRecognitionException.Reason.NON_RETRYABLE, "INVALID_RESPONSE");
             double seconds = root.path("usage").path("seconds").asDouble(
                     root.path("duration").asDouble((request.sliceEndMs() - request.sliceStartMs()) / 1000.0));
             if (!Double.isFinite(seconds) || seconds < 0) {

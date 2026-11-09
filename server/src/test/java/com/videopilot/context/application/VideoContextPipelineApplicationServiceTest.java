@@ -131,6 +131,38 @@ class VideoContextPipelineApplicationServiceTest {
     }
 
     @Test
+    void keepsTheWholeVideoAsrEmptyGateWhenEverySliceIsSilent() {
+        ContextDerivationApplicationService derivation = mock(ContextDerivationApplicationService.class);
+        AsrExecutionApplicationService asr = mock(AsrExecutionApplicationService.class);
+        OcrExecutionApplicationService ocr = mock(OcrExecutionApplicationService.class);
+        VideoContextApplicationService contexts = mock(VideoContextApplicationService.class);
+        VideoContextStore store = mock(VideoContextStore.class);
+        var pipeline = new VideoContextPipelineApplicationService(
+                derivation, asr, ocr, contexts, store, mock(JobTransitionService.class),
+                new VideoContextAligner(new ObjectMapper(), 60_000), new ObjectMapper(),
+                mock(VideoIndexApplicationService.class));
+        when(derivation.derive(any(), any(), any()))
+                .thenReturn(new ContextDerivationApplicationService.DerivationResult(
+                        ContextDerivationApplicationService.DerivationOutcome.COMPLETED, context()));
+        when(asr.transcribe(any(), any(), any())).thenReturn(AsrExecutionApplicationService.AsrOutcome.COMPLETED);
+        when(ocr.recognize(any(), any(), any())).thenReturn(OcrExecutionApplicationService.OcrOutcome.COMPLETED);
+        when(store.findCompletedArtifacts(any(), any(), any())).thenAnswer(invocation ->
+                "ASR_SLICE".equals(invocation.getArgument(2))
+                        ? List.of(artifact(ContextWorkItemKind.ASR_SLICE,
+                                "{\"startMs\":0,\"endMs\":60000,\"text\":\"\"}", "silent.json"))
+                        : List.of());
+
+        AnalysisJobPipeline.Outcome outcome = pipeline.execute(job(), "request-silent");
+
+        assertThat(outcome.state()).isEqualTo(AnalysisJobPipeline.State.FAILED);
+        assertThat(outcome.failure()).get().satisfies(failure -> {
+            assertThat(failure.code()).isEqualTo("ASR_EMPTY");
+            assertThat(failure.retryable()).isFalse();
+        });
+        verify(contexts, org.mockito.Mockito.never()).publish(any(), any());
+    }
+
+    @Test
     void sendsM3ContextThroughRealIndexingBeforeReady() {
         VideoContextStore store = mock(VideoContextStore.class);
         JobTransitionService transitions = mock(JobTransitionService.class);

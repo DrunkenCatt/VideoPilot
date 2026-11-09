@@ -185,7 +185,7 @@ class AsrRecoveryIT {
     @Test
     void staleStartedCallBecomesUnknownInsteadOfCallingProviderAgain() {
         String fingerprint = ContextInputFingerprint.sha256(new ContextWorkSpec(
-                "d".repeat(64), "asr-v1", "trusted-slice-window-v1", "TeleAI/TeleSpeechASR",
+                "d".repeat(64), "asr-v2", "trusted-slice-window-v1", "TeleAI/TeleSpeechASR",
                 ContextWorkItemKind.ASR_SLICE, 60_000, 62_500,
                 Map.of("sourceFingerprint", "c".repeat(64))));
         UUID workItemId = UUID.randomUUID();

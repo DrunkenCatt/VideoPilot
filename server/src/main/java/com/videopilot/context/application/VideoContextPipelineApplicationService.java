@@ -207,9 +207,12 @@ public class VideoContextPipelineApplicationService implements AnalysisJobPipeli
         for (var artifact : store.findCompletedArtifacts(
                 owner.ownerId(), job.mediaId(), ContextWorkItemKind.ASR_SLICE.name())) {
             JsonNode value = json.readTree(artifact.checkpointPayload());
-            result.add(new VideoContextAligner.Transcript(
-                    value.path("startMs").asLong(), value.path("endMs").asLong(),
-                    value.path("text").asText(), artifact.artifactRef()));
+            String text = value.path("text").asText().trim();
+            if (!text.isEmpty()) {
+                result.add(new VideoContextAligner.Transcript(
+                        value.path("startMs").asLong(), value.path("endMs").asLong(),
+                        text, artifact.artifactRef()));
+            }
         }
         return List.copyOf(result);
     }

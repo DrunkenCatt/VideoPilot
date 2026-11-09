@@ -51,4 +51,8 @@
 
 解析过程中发现并修复两项运行时硬门问题：ASR `output_units` 曾误写时长，以及全局预算曾混加毫秒、像素、字符和 Token。当前 `m4-limits-v3` 按 operation 分别聚合；ASR 另有 1200 字符/分钟单次上限，120 秒输入上限为 2400 字符。复用中的 Context 由后续 Job 发布时仍校验 owner、media、pipeline 和 version CAS。真实浏览器两条任务均 READY，限定符页面时间轴可见，Console warning/error 为 0。
 
+补跑 `free-media-licenses.webm` 时，前两个 60 秒切片已得到有效转写，但最后 2367 ms 静音尾段由供应商以 HTTP 200 和空 `text` 返回，旧 `asr-v1` 将其误判为永久 `INVALID_RESPONSE`。`asr-v2` 现把显式空文本持久化为 `output_units=0` 的成功静音片段，并在对齐前过滤；全片无任何非空转写时仍由 `ASR_EMPTY` 拒绝。失败 Job `3f78e78c-c0de-49c4-b265-9db0d864e10a` 保留审计，修复后的 Job `b872daf1-306c-4988-a44e-c9c658aa7b53` 进入 `READY`；`jammed-garbage-disposal.webm` Job `1b3c5384-61b4-4723-ac7e-958c71e6def3` 也进入 `READY`。
+
+静音尾段切片先新增失败测试，再完成最小实现；相关 19/19 定向单元测试和后端完整 390 个测试通过，1 个既有条件 skip，JaCoCo 与 ArchUnit 通过。真实 headless Edge 登录后打开修复 Job，页面显示 READY 和时间线，刷新后的 Console warning/error 为 0，桌面视口无横向溢出。
+
 剩余阻断只有数据集绑定：必须用上述 8 个实际 Segment 重写相关题目并重新完成结构校验、双审索引一致性和冻结 fingerprint；不得沿用 UUID5 占位 ID。

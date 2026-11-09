@@ -142,6 +142,36 @@ class AsrExecutionApplicationServiceTest {
     }
 
     @Test
+    void completesASilentSliceWithZeroOutputUnits() throws Exception {
+        VideoContextStore store = mock(VideoContextStore.class);
+        DerivedMediaStore objects = mock(DerivedMediaStore.class);
+        var source = audioArtifact();
+        var pending = asrItem(ContextWorkItemStatus.PENDING, 0, 0);
+        when(store.findCompletedArtifacts(OWNER.ownerId(), MEDIA_ID, "AUDIO_SLICE")).thenReturn(List.of(source));
+        when(store.createOrReuseWorkItem(eq(OWNER.ownerId()), any())).thenReturn(pending);
+        when(store.claim(any(), any(), anyLong(), any(), any(), any())).thenReturn(true);
+        doAnswer(invocation -> {
+            Files.write(invocation.getArgument(1), new byte[] {1});
+            return null;
+        }).when(objects).copyTo(any(), any());
+        SpeechRecognitionPort speech = request -> new SpeechRecognitionPort.Result(
+                List.of(new SpeechRecognitionPort.TranscriptSegment(
+                        request.sliceStartMs(), request.sliceEndMs(), "")),
+                2_500, Optional.empty());
+
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            assertThat(service(store, objects, speech, executor).transcribe(OWNER, JOB_ID, MEDIA_ID))
+                    .isEqualTo(AsrExecutionApplicationService.AsrOutcome.COMPLETED);
+        }
+
+        ArgumentCaptor<VideoContextStore.AsrCompletion> completion =
+                ArgumentCaptor.forClass(VideoContextStore.AsrCompletion.class);
+        verify(store).completeAsr(eq(OWNER.ownerId()), completion.capture());
+        assertThat(completion.getValue().outputCharacters()).isZero();
+        assertThat(completion.getValue().workItem().checkpointPayload()).contains("\"text\":\"\"");
+    }
+
+    @Test
     void completedSliceIsReusedWithoutCallingProviderOrAudit() {
         VideoContextStore store = mock(VideoContextStore.class);
         SpeechRecognitionPort speech = mock(SpeechRecognitionPort.class);
