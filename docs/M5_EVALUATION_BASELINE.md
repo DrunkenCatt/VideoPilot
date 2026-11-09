@@ -5,7 +5,7 @@
 ## 数据流
 
 1. 受控本地调用把 JSONL 行交给 `EvaluationApplicationService.importJsonLines`。
-2. 服务端规范化 case 顺序并计算 case/dataset fingerprint；只有当前 owner 的 `READY` AnalysisJob 能成为 case 输入。
+2. 服务端规范化 case 顺序并计算 case fingerprint；工作草稿仍由服务计算 dataset fingerprint，正式冻结集则显式携带经离线校验的 64 位 source fingerprint，运行时原样保存以回指不可变 manifest。只有当前 owner 的 `READY` AnalysisJob 能成为 case 输入。
 3. 创建运行只写 MySQL 并立即返回。`Idempotency-Key` 与请求指纹共同防止重复运行和重复高成本调用。
 4. Worker 通过 MySQL 行锁和 lease 领取一个 run，按 ordinal 直接调用现有检索/回答 application service。
 5. 每题结果先落 `evaluation_case_result`；进程中断或 lease 过期后只执行缺失 case。完成数、终态和版本指纹均从 MySQL 读取。
@@ -45,3 +45,5 @@ MySQL 迁移与续跑验证需先把仓库 `.env` 的端口/凭据加载到当�
 ```
 
 真实小样本 smoke 由 `EvaluationBaselineLocalIT` 提供，默认跳过，避免无意触发外部模型费用。显式设置 `evaluation.smoke=true` 和候选 commit 后，它会复用一条本地已索引教学视频，新建有预算的新 Job，并执行一题检索和一题回答。
+
+正式发布集由测试侧 `M5ReleaseDatasetLoader` 读取 Git 忽略目录中的题目与 review index，将冻结 manifest fingerprint、真实 READY Job 和已发布 Segment 显式绑定为运行时 JSONL。该加载器不进入生产部署、不复制检索或问答实现，也不会把问题、答案或转录写入可提交报告。

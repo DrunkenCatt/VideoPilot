@@ -46,6 +46,56 @@ class EvaluationApplicationServiceTest {
             new OwnerId(UUID.fromString("00000000-0000-0000-0000-000000000501")));
 
     @Test
+    void preservesValidatedFrozenDatasetFingerprintForRuntimeTraceability() {
+        EvaluationStore store = mock(EvaluationStore.class);
+        EvaluationBaselineRunner runner = mock(EvaluationBaselineRunner.class);
+        when(store.saveDataset(eq(OWNER.ownerId()), any())).thenAnswer(invocation -> invocation.getArgument(1));
+        EvaluationApplicationService service = service(store, runner, UUID.randomUUID().toString());
+        String frozenFingerprint = "9".repeat(64);
+
+        EvaluationDataset dataset = service.importJsonLines(OWNER, new EvaluationApplicationService.ImportDataset(
+                UUID.randomUUID(), "0.2.0", DEV, FROZEN, 1, NOW, frozenFingerprint), List.of("""
+                {"caseId":"retrieval-frozen","caseType":"RETRIEVAL","jobId":"%s",
+                 "question":"冻结问题","expectedHits":[],
+                 "review":{"status":"APPROVED","reviewerCount":2}}
+                """.formatted(UUID.randomUUID())));
+
+        assertThat(dataset.fingerprint()).isEqualTo(frozenFingerprint);
+    }
+
+    @Test
+    void rejectsMalformedDeclaredDatasetFingerprint() {
+        EvaluationStore store = mock(EvaluationStore.class);
+        EvaluationBaselineRunner runner = mock(EvaluationBaselineRunner.class);
+        EvaluationApplicationService service = service(store, runner, UUID.randomUUID().toString());
+
+        assertThatThrownBy(() -> service.importJsonLines(OWNER,
+                new EvaluationApplicationService.ImportDataset(
+                        UUID.randomUUID(), "0.2.0", DEV, FROZEN, 1, NOW, "not-a-fingerprint"),
+                List.of("{}")))
+                .isInstanceOf(EvaluationException.class)
+                .extracting(exception -> ((EvaluationException) exception).reason())
+                .isEqualTo(EvaluationException.Reason.INVALID_REQUEST);
+        verify(store, never()).saveDataset(any(), any());
+    }
+
+    @Test
+    void rejectsDeclaredFingerprintForMutableDraft() {
+        EvaluationStore store = mock(EvaluationStore.class);
+        EvaluationApplicationService service = service(store, mock(EvaluationBaselineRunner.class),
+                UUID.randomUUID().toString());
+
+        assertThatThrownBy(() -> service.importJsonLines(OWNER,
+                new EvaluationApplicationService.ImportDataset(
+                        UUID.randomUUID(), "0.2.0", DEV, DRAFT, 1, null, "9".repeat(64)),
+                List.of("{}")))
+                .isInstanceOf(EvaluationException.class)
+                .extracting(exception -> ((EvaluationException) exception).reason())
+                .isEqualTo(EvaluationException.Reason.INVALID_REQUEST);
+        verify(store, never()).saveDataset(any(), any());
+    }
+
+    @Test
     void importsApprovedJsonlAndCreatesThreeIndependentRepetitions() {
         EvaluationStore store = mock(EvaluationStore.class);
         EvaluationBaselineRunner runner = mock(EvaluationBaselineRunner.class);

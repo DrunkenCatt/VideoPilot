@@ -38,6 +38,7 @@ import java.util.regex.Pattern;
 public final class EvaluationApplicationService {
 
     private static final Pattern IDEMPOTENCY_KEY = Pattern.compile("[A-Za-z0-9._:-]{1,128}");
+    private static final Pattern FINGERPRINT = Pattern.compile("[a-f0-9]{64}");
     private static final Duration LEASE_DURATION = Duration.ofMinutes(10);
     private static final int MAX_REPETITIONS = 3;
 
@@ -65,6 +66,9 @@ public final class EvaluationApplicationService {
             OwnerContext owner, ImportDataset command, List<String> jsonLines) {
         if (command == null || command.datasetId() == null || !hasText(command.dataVersion())
                 || command.split() == null || command.status() == null || command.videoCount() < 1
+                || command.sourceFingerprint() != null
+                && (command.status() != DatasetStatus.FROZEN
+                || !FINGERPRINT.matcher(command.sourceFingerprint()).matches())
                 || jsonLines == null || jsonLines.isEmpty()) {
             throw new EvaluationException(EvaluationException.Reason.INVALID_REQUEST);
         }
@@ -282,6 +286,7 @@ public final class EvaluationApplicationService {
     }
 
     private String datasetFingerprint(ImportDataset command, List<EvaluationCase> cases) {
+        if (command.sourceFingerprint() != null) return command.sourceFingerprint();
         String values = cases.stream().sorted(Comparator.comparingInt(EvaluationCase::ordinal))
                 .map(EvaluationCase::fingerprint).collect(java.util.stream.Collectors.joining("|"));
         return sha256(command.dataVersion().trim() + '|' + command.split() + '|' + command.status()
@@ -322,7 +327,14 @@ public final class EvaluationApplicationService {
             DatasetSplit split,
             DatasetStatus status,
             int videoCount,
-            Instant frozenAt) {
+            Instant frozenAt,
+            String sourceFingerprint) {
+
+        public ImportDataset(
+                UUID datasetId, String dataVersion, DatasetSplit split, DatasetStatus status,
+                int videoCount, Instant frozenAt) {
+            this(datasetId, dataVersion, split, status, videoCount, frozenAt, null);
+        }
     }
 
     public record StartRun(int repetitions, ExecutionVersions versions) {
