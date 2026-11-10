@@ -34,6 +34,8 @@ class DatabaseMigrationIT {
                 FROM information_schema.tables
                 WHERE table_schema = DATABASE()
                   AND table_name IN (
+                    'agent_run',
+                    'agent_step',
                     'media_asset',
                     'media_upload_session',
                     'analysis_job',
@@ -51,7 +53,8 @@ class DatabaseMigrationIT {
                     'evaluation_dataset',
                     'evaluation_case',
                     'evaluation_run',
-                    'evaluation_case_result'
+                    'evaluation_case_result',
+                    'tool_call'
                   )
                 ORDER BY table_name
                 """)
@@ -59,6 +62,8 @@ class DatabaseMigrationIT {
                 .list();
 
         assertThat(tables).containsExactly(
+                "agent_run",
+                "agent_step",
                 "analysis_job",
                 "analysis_message_failure",
                 "context_work_item",
@@ -72,11 +77,47 @@ class DatabaseMigrationIT {
                 "media_asset",
                 "media_upload_session",
                 "model_call",
+                "tool_call",
                 "user_session",
                 "video_chunk",
                 "video_context",
                 "video_index",
                 "video_segment");
+    }
+
+    @Test
+    void addsOwnerScopedAgentStateAndDeterministicConstraints() {
+        List<String> checks = jdbcClient.sql("""
+                SELECT constraint_name
+                FROM information_schema.table_constraints
+                WHERE table_schema = DATABASE()
+                  AND table_name IN ('agent_run', 'agent_step', 'tool_call')
+                  AND constraint_type = 'CHECK'
+                ORDER BY constraint_name
+                """).query(String.class).list();
+        List<String> uniqueIndexes = jdbcClient.sql("""
+                SELECT DISTINCT index_name
+                FROM information_schema.statistics
+                WHERE table_schema = DATABASE()
+                  AND table_name IN ('agent_run', 'tool_call')
+                  AND index_name IN ('uk_agent_run_intent', 'uk_tool_call_intent')
+                ORDER BY index_name
+                """).query(String.class).list();
+
+        assertThat(checks).contains(
+                "chk_agent_run_counts", "chk_agent_run_status", "chk_agent_run_terminal",
+                "chk_agent_step_number", "chk_tool_call_completion", "chk_tool_call_status",
+                "chk_tool_call_step_number");
+        assertThat(uniqueIndexes).containsExactly("uk_agent_run_intent", "uk_tool_call_intent");
+
+        List<String> stepForeignKeys = jdbcClient.sql("""
+                SELECT constraint_name
+                FROM information_schema.referential_constraints
+                WHERE constraint_schema = DATABASE()
+                  AND table_name = 'tool_call'
+                  AND referenced_table_name = 'agent_step'
+                """).query(String.class).list();
+        assertThat(stepForeignKeys).as("ToolCall must be persisted before a Step completes").isEmpty();
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.videopilot.infrastructure.web;
 
 import com.videopilot.analysis.application.AnalysisJobException;
+import com.videopilot.agent.application.AgentException;
 import com.videopilot.answer.application.AnswerException;
 import com.videopilot.context.application.VideoContextQueryException;
 import com.videopilot.evaluation.application.EvaluationException;
@@ -98,6 +99,18 @@ public final class GlobalExceptionHandler {
             case DEPENDENCY_UNAVAILABLE -> ErrorCode.DEPENDENCY_UNAVAILABLE;
         };
         LOGGER.warn("Answer request failed code={}", errorCode);
+        return response(errorCode, statusFor(errorCode));
+    }
+
+    @ExceptionHandler(AgentException.class)
+    ResponseEntity<ApiErrorResponse> handleAgentFailure(AgentException exception) {
+        ErrorCode errorCode = switch (exception.reason()) {
+            case INVALID_REQUEST -> ErrorCode.INVALID_REQUEST;
+            case NOT_FOUND -> ErrorCode.RESOURCE_NOT_FOUND;
+            case IDEMPOTENCY_KEY_REUSED -> ErrorCode.IDEMPOTENCY_KEY_REUSED;
+            case CONFLICT -> ErrorCode.CONFLICT;
+        };
+        LOGGER.warn("Agent request failed code={}", errorCode);
         return response(errorCode, statusFor(errorCode));
     }
 

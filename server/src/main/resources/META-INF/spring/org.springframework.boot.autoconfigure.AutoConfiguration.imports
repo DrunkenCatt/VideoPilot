@@ -7,5 +7,6 @@ com.videopilot.infrastructure.context.persistence.VideoContextPipelineAutoConfig
 com.videopilot.infrastructure.retrieval.persistence.VideoIndexAutoConfiguration
 com.videopilot.infrastructure.answer.AnswerAutoConfiguration
 com.videopilot.infrastructure.evaluation.EvaluationAutoConfiguration
+com.videopilot.infrastructure.agent.AgentAutoConfiguration
 com.videopilot.infrastructure.web.VideoContextWebAutoConfiguration
 com.videopilot.infrastructure.media.persistence.MediaUploadAutoConfiguration

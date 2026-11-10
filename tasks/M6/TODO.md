@@ -1,6 +1,6 @@
 # M6 任务清单：最小动态工具型 Agent Loop
 
-> 状态：T0 已完成，下一步 T1。M5 未退出；M6 依据 `EX-2026-11-10-M6` 仅以本地实验能力推进。按 T0 -> T4 顺序执行；每个任务先完成失败测试/验收，再实现和验证。只有用户可见的 T3/T4 强制真实浏览器证据；上一个退出门失败即停止。
+> 状态：T1 已完成，下一步 T2。M5 未退出；M6 依据 `EX-2026-11-10-M6` 仅以本地实验能力推进。按 T0 -> T4 顺序执行；每个任务先完成失败测试/验收，再实现和验证。只有用户可见的 T3/T4 强制真实浏览器证据；上一个退出门失败即停止。
 
 ## T0：冻结 M5 缺口与 M6 最小合同
 
@@ -14,11 +14,11 @@
 
 ## T1：建立 MySQL Run 真源与无费用生命周期
 
-- [ ] 先写迁移约束、Run 状态/CAS、请求幂等、owner 隔离、去敏 Trace 和 API 合同失败测试。
-- [ ] 用一份前进迁移建立最小 `agent_run`、`agent_step`、`tool_call`；Observation 保存为 Step/ToolCall 的去敏摘要和结果引用，不另建通用事件系统。
-- [ ] 只用一个 Agent store Port/Adapter 和一个 `AgentApplicationService` 完成创建、领取、追加、终止及 owner-scoped 读取；Run 冻结 policy、模型/Prompt/检索/证据门版本和完整预算快照。
-- [ ] 只增加创建 Run 与读取 Run/轨迹两个 owner API，不增加暂停/改单步/重放等控制 API；本任务不执行 Tool/模型调用、不增加前端入口，外部调用增量必须为 0。
-- [ ] 完成定向测试、`server\mvnw.cmd test`、迁移集成测试、文档和独立提交；记录耗时与未执行项。
+- [x] 先写迁移约束、Run 状态/CAS、请求幂等、owner 隔离、去敏 Trace 和 API 合同失败测试。
+- [x] 用一份前进迁移建立最小 `agent_run`、`agent_step`、`tool_call`；Observation 保存为 Step/ToolCall 的去敏摘要和结果引用，不另建通用事件系统。
+- [x] 只用一个 Agent store Port/Adapter 和一个 `AgentApplicationService` 完成创建、领取、追加、终止及 owner-scoped 读取；Run 冻结 policy、模型/Prompt/检索/证据门版本和完整预算快照。
+- [x] 只增加创建 Run 与读取 Run/轨迹两个 owner API，不增加暂停/改单步/重放等控制 API；本任务不执行 Tool/模型调用、不增加前端入口，外部调用增量必须为 0。
+- [x] 完成定向测试、`server\mvnw.cmd test`、迁移集成测试、文档和独立提交；记录耗时与未执行项。
 
 **退出门**：MySQL 可完整回放无费用生命周期；重复创建返回同一 Run；Redis 清空无影响；跨 owner、非法状态和敏感字段均被拒绝；没有 Tool/模型调用。
 
