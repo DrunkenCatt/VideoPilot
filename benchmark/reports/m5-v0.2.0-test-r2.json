@@ -1,0 +1,151 @@
+{
+  "runId" : "43bb5513-e421-4dd8-8e87-c7352fd855e3",
+  "datasetId" : "544f6ad2-24e1-5cf5-acdb-7bd38954cf1a",
+  "datasetFingerprint" : "d190636e0efaabd3cc9cb16a68854c2033a4079ca8e6feb1eeb4e9a36167e502",
+  "executionFingerprint" : "15342a7f88f1a893fdcb8696c4c24587bf971bd38360e611052d67c12026dd71",
+  "versions" : {
+    "codeCommit" : "07dfb15",
+    "pipelineVersion" : "m3-evidence-qa-v1",
+    "promptVersion" : "answer-evidence-v1",
+    "modelVersion" : "deepseek-ai/DeepSeek-V4-Flash",
+    "embeddingVersion" : "siliconflow-bge-m3-1024-v1",
+    "chunkVersion" : "chunk-5m-v1",
+    "retrievalFormulaVersion" : "hybrid-0.60-0.25-0.15-v1",
+    "evidenceGateVersion" : "answer-evidence-gate-v1",
+    "limitsVersion" : "m4-limits-v3",
+    "configurationVersion" : "m5-release-v0.2.0"
+  },
+  "metrics" : [ {
+    "name" : "recallAt3",
+    "numerator" : 48.0,
+    "denominator" : 48,
+    "value" : 1.0,
+    "exclusions" : { }
+  }, {
+    "name" : "hitAt1",
+    "numerator" : 48.0,
+    "denominator" : 48,
+    "value" : 1.0,
+    "exclusions" : { }
+  }, {
+    "name" : "mrrAt3",
+    "numerator" : 48.0,
+    "denominator" : 48,
+    "value" : 1.0,
+    "exclusions" : { }
+  }, {
+    "name" : "strictClaimEvidenceSupport",
+    "numerator" : 0.0,
+    "denominator" : 5,
+    "value" : 0.0,
+    "exclusions" : {
+      "NO_PUBLISHED_CLAIM" : 9
+    }
+  }, {
+    "name" : "citationLocalization",
+    "numerator" : 6.0,
+    "denominator" : 6,
+    "value" : 1.0,
+    "exclusions" : { }
+  }, {
+    "name" : "refusalAccuracy",
+    "numerator" : 2.0,
+    "denominator" : 2,
+    "value" : 1.0,
+    "exclusions" : { }
+  }, {
+    "name" : "answerableStatusAccuracy",
+    "numerator" : 2.0,
+    "denominator" : 10,
+    "value" : 0.2,
+    "exclusions" : {
+      "UNKNOWN" : 1
+    }
+  } ],
+  "usage" : {
+    "totalCalls" : 72,
+    "inputUnits" : 5549,
+    "outputUnits" : 2050,
+    "latencyMs" : 73828,
+    "estimatedCost" : null,
+    "currency" : null,
+    "unavailablePriceCalls" : 72,
+    "callOutcomes" : {
+      "SUCCEEDED" : 71,
+      "UNKNOWN_OUTCOME" : 1
+    }
+  },
+  "series" : {
+    "hitAt1" : {
+      "repetitions" : 3,
+      "mean" : 1.0,
+      "sampleStandardDeviation" : 0.0,
+      "outcomeDistribution" : {
+        "REFUSED" : 27,
+        "COMPLETED" : 150,
+        "UNKNOWN" : 3
+      }
+    },
+    "mrrAt3" : {
+      "repetitions" : 3,
+      "mean" : 1.0,
+      "sampleStandardDeviation" : 0.0,
+      "outcomeDistribution" : {
+        "REFUSED" : 27,
+        "COMPLETED" : 150,
+        "UNKNOWN" : 3
+      }
+    },
+    "refusalAccuracy" : {
+      "repetitions" : 3,
+      "mean" : 1.0,
+      "sampleStandardDeviation" : 0.0,
+      "outcomeDistribution" : {
+        "REFUSED" : 27,
+        "COMPLETED" : 150,
+        "UNKNOWN" : 3
+      }
+    },
+    "strictClaimEvidenceSupport" : {
+      "repetitions" : 3,
+      "mean" : 0.0,
+      "sampleStandardDeviation" : 0.0,
+      "outcomeDistribution" : {
+        "REFUSED" : 27,
+        "COMPLETED" : 150,
+        "UNKNOWN" : 3
+      }
+    },
+    "citationLocalization" : {
+      "repetitions" : 3,
+      "mean" : 1.0,
+      "sampleStandardDeviation" : 0.0,
+      "outcomeDistribution" : {
+        "REFUSED" : 27,
+        "COMPLETED" : 150,
+        "UNKNOWN" : 3
+      }
+    },
+    "answerableStatusAccuracy" : {
+      "repetitions" : 3,
+      "mean" : 0.20000000000000004,
+      "sampleStandardDeviation" : 3.3993498887762956E-17,
+      "outcomeDistribution" : {
+        "REFUSED" : 27,
+        "COMPLETED" : 150,
+        "UNKNOWN" : 3
+      }
+    },
+    "recallAt3" : {
+      "repetitions" : 3,
+      "mean" : 1.0,
+      "sampleStandardDeviation" : 0.0,
+      "outcomeDistribution" : {
+        "REFUSED" : 27,
+        "COMPLETED" : 150,
+        "UNKNOWN" : 3
+      }
+    }
+  },
+  "generatedAt" : "2026-11-09T16:38:53.447235400Z"
+}

@@ -1,0 +1,157 @@
+{
+  "runId" : "3dd2a9f1-7c06-451e-bdbb-96f39eb554a5",
+  "datasetId" : "a6829e55-ccd2-504f-ae78-347156c50a2b",
+  "datasetFingerprint" : "98667e464bd7099736b91c32ee2ca1013df3d330c7d136bc3a7777be9e8c31ca",
+  "executionFingerprint" : "15342a7f88f1a893fdcb8696c4c24587bf971bd38360e611052d67c12026dd71",
+  "versions" : {
+    "codeCommit" : "07dfb15",
+    "pipelineVersion" : "m3-evidence-qa-v1",
+    "promptVersion" : "answer-evidence-v1",
+    "modelVersion" : "deepseek-ai/DeepSeek-V4-Flash",
+    "embeddingVersion" : "siliconflow-bge-m3-1024-v1",
+    "chunkVersion" : "chunk-5m-v1",
+    "retrievalFormulaVersion" : "hybrid-0.60-0.25-0.15-v1",
+    "evidenceGateVersion" : "answer-evidence-gate-v1",
+    "limitsVersion" : "m4-limits-v3",
+    "configurationVersion" : "m5-release-v0.2.0"
+  },
+  "metrics" : [ {
+    "name" : "recallAt3",
+    "numerator" : 72.0,
+    "denominator" : 72,
+    "value" : 1.0,
+    "exclusions" : { }
+  }, {
+    "name" : "hitAt1",
+    "numerator" : 69.0,
+    "denominator" : 72,
+    "value" : 0.9583333333333334,
+    "exclusions" : { }
+  }, {
+    "name" : "mrrAt3",
+    "numerator" : 70.5,
+    "denominator" : 72,
+    "value" : 0.9791666666666666,
+    "exclusions" : { }
+  }, {
+    "name" : "strictClaimEvidenceSupport",
+    "numerator" : 0.0,
+    "denominator" : 0,
+    "value" : null,
+    "exclusions" : {
+      "NO_PUBLISHED_CLAIM" : 16
+    }
+  }, {
+    "name" : "citationLocalization",
+    "numerator" : 0.0,
+    "denominator" : 0,
+    "value" : null,
+    "exclusions" : { }
+  }, {
+    "name" : "refusalAccuracy",
+    "numerator" : 3.0,
+    "denominator" : 3,
+    "value" : 1.0,
+    "exclusions" : { }
+  }, {
+    "name" : "answerableStatusAccuracy",
+    "numerator" : 0.0,
+    "denominator" : 15,
+    "value" : 0.0,
+    "exclusions" : {
+      "UNKNOWN" : 2
+    }
+  } ],
+  "usage" : {
+    "totalCalls" : 108,
+    "inputUnits" : 11026,
+    "outputUnits" : 2471,
+    "latencyMs" : 114106,
+    "estimatedCost" : null,
+    "currency" : null,
+    "unavailablePriceCalls" : 108,
+    "callOutcomes" : {
+      "UNKNOWN_OUTCOME" : 1,
+      "SUCCEEDED" : 106,
+      "FAILED" : 1
+    }
+  },
+  "series" : {
+    "hitAt1" : {
+      "repetitions" : 3,
+      "mean" : 0.9583333333333334,
+      "sampleStandardDeviation" : 0.0,
+      "outcomeDistribution" : {
+        "UNKNOWN" : 6,
+        "COMPLETED" : 217,
+        "REFUSED" : 46,
+        "ERROR" : 1
+      }
+    },
+    "mrrAt3" : {
+      "repetitions" : 3,
+      "mean" : 0.9791666666666666,
+      "sampleStandardDeviation" : 0.0,
+      "outcomeDistribution" : {
+        "UNKNOWN" : 6,
+        "COMPLETED" : 217,
+        "REFUSED" : 46,
+        "ERROR" : 1
+      }
+    },
+    "refusalAccuracy" : {
+      "repetitions" : 3,
+      "mean" : 0.8888888888888888,
+      "sampleStandardDeviation" : 0.1924500897298753,
+      "outcomeDistribution" : {
+        "UNKNOWN" : 6,
+        "COMPLETED" : 217,
+        "REFUSED" : 46,
+        "ERROR" : 1
+      }
+    },
+    "strictClaimEvidenceSupport" : {
+      "repetitions" : 1,
+      "mean" : 0.0,
+      "sampleStandardDeviation" : null,
+      "outcomeDistribution" : {
+        "REFUSED" : 15,
+        "COMPLETED" : 73,
+        "UNKNOWN" : 2
+      }
+    },
+    "citationLocalization" : {
+      "repetitions" : 1,
+      "mean" : 1.0,
+      "sampleStandardDeviation" : null,
+      "outcomeDistribution" : {
+        "REFUSED" : 15,
+        "COMPLETED" : 73,
+        "UNKNOWN" : 2
+      }
+    },
+    "answerableStatusAccuracy" : {
+      "repetitions" : 3,
+      "mean" : 0.022222222222222223,
+      "sampleStandardDeviation" : 0.03849001794597505,
+      "outcomeDistribution" : {
+        "UNKNOWN" : 6,
+        "COMPLETED" : 217,
+        "REFUSED" : 46,
+        "ERROR" : 1
+      }
+    },
+    "recallAt3" : {
+      "repetitions" : 3,
+      "mean" : 1.0,
+      "sampleStandardDeviation" : 0.0,
+      "outcomeDistribution" : {
+        "UNKNOWN" : 6,
+        "COMPLETED" : 217,
+        "REFUSED" : 46,
+        "ERROR" : 1
+      }
+    }
+  },
+  "generatedAt" : "2026-11-09T16:34:57.052370Z"
+}

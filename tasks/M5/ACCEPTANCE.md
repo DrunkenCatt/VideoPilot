@@ -1,6 +1,6 @@
 # M5 验收记录：冻结基线与最小评测流水线
 
-> 状态：T0-T3 已完成，T4 的双审子任务已完成但运行时真实性预检未通过，T5 未启动；本文按 T0-T5 持续追加实际命令、浏览器证据、候选 commit 和未执行项。没有通过当前任务退出门时不得进入下一任务。
+> 状态：T0-T4 已完成；T5 已生成正式 DEV/TEST 基线，但严格 Claim-Evidence 支持率未达到退出门，M5 阻断且不得进入 M6。本文按 T0-T5 持续追加实际命令、浏览器证据、候选 commit 和未执行项。没有通过当前任务退出门时不得进入下一任务。
 
 ## 1. 当前基线与 M5 缺口
 
@@ -181,3 +181,49 @@ ASR 默认单次输出率门为 1200 字符/分钟，因此单个 120 秒输入�
 | Compose + 真实浏览器 | 两条替代素材 READY；3/5 Segments；Console warning/error 为 0 |
 
 本门仅解除替代素材解析和预算计量阻断。相关题目仍须绑定上述实际 Segment 并重算冻结 fingerprint，T4 尚未退出，T5 不得启动。
+
+## T4 最终冻结结论
+
+替代素材完成真实解析后，全部题目重新绑定已发布 Segment 并由 `zzm`、`qq` 双人批准。`0.2.0` 于 2026-11-09 冻结：DEV 为 3 条视频、72 道检索题和 18 道答案题，fingerprint `98667e464bd7099736b91c32ee2ca1013df3d330c7d136bc3a7777be9e8c31ca`；TEST 为 2 条视频、48 道检索题和 12 道答案题，fingerprint `d190636e0efaabd3cc9cb16a68854c2033a4079ca8e6feb1eeb4e9a36167e502`。22 个唯一 expected Segment 全部存在于 MySQL，T4 阻断已解除并进入 T5。
+
+## T5 正式基线与效果门结论
+
+候选 `07dfb15` 使用 execution fingerprint `15342a7f88f1a893fdcb8696c4c24587bf971bd38360e611052d67c12026dd71`。2026-11-10 先完成 DEV 三轮，再首次导入并完成 TEST 三轮；正式命令 1/1 通过，六轮共 450 个 CaseResult，耗时 10 分 53 秒。TEST 没有参与此前候选调参。
+
+| Split | 指标 | 三轮结果 | 门槛/结论 |
+| --- | --- | --- | --- |
+| DEV | Recall@3 | 100%、100%、100% | 确定性一致 |
+| DEV | 严格 Claim-Evidence 支持率 | `null`、0%、`null` | 无 Claim 的轮次保留空分母；失败 |
+| DEV | 引用定位率 | `null`、100%、`null` | 不把空分母伪造为 0 |
+| TEST | Recall@3 / Hit@1 / MRR@3 | 三轮均 100% | 通过 85% 检索门 |
+| TEST | 严格 Claim-Evidence 支持率 | 三轮均 0% | **低于 85%，阻断 M5** |
+| TEST | 引用定位率 | 三轮均 100% | 通过 95% 门 |
+| TEST | 拒答正确率 | 三轮均 100% | 通过 |
+| TEST | 可回答状态命中率 | 三轮均 20% | 仅 2/10 可回答题每轮得到 ANSWERED |
+
+TEST 三轮 outcome 总计为 150 `COMPLETED`、27 `REFUSED`、3 `UNKNOWN`；其中答案题为 6 `COMPLETED`、27 `REFUSED`、3 `UNKNOWN`。稳定错误审计为 3 个 `ANSWER_DEPENDENCY_UNAVAILABLE`。这说明检索证据可定位，但非 Agent 回答基线大量拒答，且已发布 Claim 均未满足冻结 required facts；不得把检索通过等同于回答通过。
+
+正式六轮共记录 450 次成功查询 Embedding。答案调用中，DEV 为 47 次成功、5 次 UNKNOWN、1 次失败且 1 题在调用前预算耗尽；TEST 为 33 次成功、2 次 UNKNOWN、1 次失败。成功 DeepSeek 调用合计输入 40532 tokens、输出 17041 tokens；按用户提供的普通时段单价估算约 ¥0.27，BGE-M3 因未提供单价继续标记 unknown。正式报告的价格注册表状态保持 `UNAVAILABLE`，没有写成 0。
+
+六份 `benchmark/reports/m5-v0.2.0-{dev,test}-r{1,2,3}.json` 均通过 `evaluation-report.schema.json`；敏感键扫描未发现 question、answer、Prompt、transcript、ownerId、quote、raw response、object key 或 Embedding。失败候选 `a9af8d5` 的三个 DEV Run 因 answer UUID JDBC 绑定缺陷保留为 FAILED，没有删除或覆盖；修复和新 series 证据见 `tasks/M5/T5_EVIDENCE.md`。
+
+2026-11-10 使用同一系统账号 `m1-reviewer` 在真实应用内浏览器完成最终验收。页面分别显示冻结 DEV `90/90 approved` 与 TEST `60/60 approved`、各自 fingerprint、候选 `07dfb15`、完整十项执行版本和相同 execution fingerprint；DEV 三个成功 Run 与三个历史失败 Run、TEST 三个成功 Run 均可追溯。人工展开检索成功、可回答、拒答和 `UNKNOWN / ANSWER_DEPENDENCY_UNAVAILABLE` 样本，报告显示聚合分子/分母；两个 TEST Run 对比能计算指标、延迟、Token、调用和成本差值。导出的 `0708583a-5c43-4989-ab1c-754d008117c2` JSON 含 60 个去敏结果，dataset/execution fingerprint 与页面一致，敏感键扫描通过。刷新后运行事实恢复；320×720 视口下 `innerWidth=320`、文档 `scrollWidth=clientWidth=305`，数据集导航使用局部横向滚动而页面无横向溢出；Console warning/error 为 0。浏览器未发起新的评测或产生额外模型费用。
+
+可靠性维度按已冻结合同复用 M4 版本化摘要，不复制故障执行器：20/20 样本恢复成功，任务丢失、重复高成本调用和非法推进均为 0；原始分母、命令和环境边界保留在 `tasks/M4/ACCEPTANCE.md`。
+
+## T5 完整质量门
+
+| 命令/检查 | 实际结果 | 耗时/结论 |
+| --- | --- | --- |
+| `server\mvnw.cmd test` | 394 项，0 failure/error，1 项既有环境条件 skip；6 项 ArchUnit 和 JaCoCo 门通过 | 1 分 29 秒，通过 |
+| `client\npm.cmd run check` | typecheck、零 warning lint、18 files / 115 tests、coverage 和生产构建通过 | 约 23 秒，通过 |
+| M5 数据工具与冻结校验 | 11/11 unittest；DEV/TEST 必须作为同一 release 一起校验，输出 `VALID` | 通过 |
+| 容器化 `mvn verify -Pintegration -Dbenchmark.commit=07dfb15` | 394/394 单元测试；90 项集成测试 0 failure/error、2 项需显式付费发布开关而 skip；M4 样本 20/20 | 10 分 37 秒，通过 |
+| `git diff --check` | 无 whitespace error；仅 Git 的 LF/CRLF 提示 | 通过 |
+| `npm audit --audit-level=high` | 退出码 0；无 high/critical，仍有 10 个 moderate 开发工具链漏洞 | high 门通过，moderate 保留 |
+| OWASP Dependency-Check 12.2.2 | NVD 首分页连续 31 次以上请求失败，未取得漏洞库；为避免无上限重试后中断 | **未形成通过结论** |
+| Gitleaks 8.30.1 `detect --redact` | 104 commits 中命中 1 个 `generic-api-key`：`JdbcEvaluationStoreIT` 的固定文件名夹具；人工核对不是凭据，但未增加 suppression，也未改写历史 | **工具门未通过，保留假阳性结论** |
+
+宿主机裸 `verify -Pintegration` 首次因未加载 `.env` 端口/凭据失败；加载配置后仅剩宿主机缺少 FFmpeg/FFprobe、健康探针映射和候选 commit 前置条件。Winget 下载 FFmpeg 两次被网络中断，因此最终使用项目已有 `videopilot-maven-ffmpeg` 镜像，在 `videopilot_m5_verify` 隔离库和 Compose 内网中重跑完整集合并通过；没有跳过失败测试或触碰正式评测库。完整门按用户确认保留重新生成的两份 M3 报告。
+
+退出结论：正式评测流水线与数据治理可复现，但回答效果硬门失败。M5 不能退出，M6 不能开始；不得修改已使用的 TEST、删除失败题或降低 85% Claim 支持门。

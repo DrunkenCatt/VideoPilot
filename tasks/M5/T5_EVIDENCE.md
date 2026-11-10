@@ -1,6 +1,6 @@
 # M5 T5 正式基线证据
 
-状态：准备正式运行；冻结数据集导入身份薄切片已完成，尚未触发发布规模的外部模型调用。
+状态：正式 DEV/TEST 基线、完整质量门和真实浏览器验收已完成；回答效果硬门失败，M5 阻断。
 
 ## 正式运行入口预检
 
@@ -35,3 +35,21 @@
 ## 费用门
 
 正式 dev/test 均含答案题，合同要求各运行 3 次：共 450 个逐题执行，其中 90 次回答模型调用。正式运行工具默认关闭，必须显式提供候选 commit 和发布开关，避免普通测试意外产生费用。
+
+## `0.2.0` 正式运行结果
+
+- 候选 `07dfb15`、execution fingerprint `15342a7f88f1a893fdcb8696c4c24587bf971bd38360e611052d67c12026dd71` 顺序完成 DEV/TEST 各三轮；正式命令 1/1 通过，总耗时 10 分 53 秒。
+- DEV 90 ×3、TEST 60 ×3 全部形成 CaseResult；检索 rank 在三轮间一致，没有 `NON_DETERMINISTIC_RETRIEVAL` 或 `VERSION_DRIFT`。
+- TEST 三轮 `Recall@3/Hit@1/MRR@3=100%`、引用定位率 100%、拒答正确率 100%；严格 Claim-Evidence 支持率三轮均 0%，可回答状态命中率三轮均 20%。回答效果门失败，M5 阻断。
+- TEST outcome 总计 150 `COMPLETED`、27 `REFUSED`、3 `UNKNOWN`；三轮统计包含均值、样本标准差和完整 outcome distribution。
+- 六份报告均通过 JSON Schema；敏感字段键扫描通过。价格缺失保留 `estimatedCost=null` 和 `unavailablePriceCalls`，未伪造零成本。
+- 可靠性报告复用 `tasks/M4/ACCEPTANCE.md` 的冻结 20/20 样本摘要：恢复成功率 100%，任务丢失、重复高成本调用和非法推进均为 0；M5 没有复制第二套故障编排。
+- 完整容器化质量门为 394/394 单元测试、90 项集成测试 0 failure/error（2 项显式付费开关 skip）、JaCoCo/ArchUnit 通过；前端 115/115。OWASP 因 NVD 网络重试未形成结论，Gitleaks 对历史测试文件名夹具报 1 个假阳性且工具门保持未通过，详见 `tasks/M5/ACCEPTANCE.md`。
+
+## 最终浏览器验收
+
+- 同一系统账号 `m1-reviewer` 登录真实 Vite/Compose 环境；DEV `90/90 approved` 与 TEST `60/60 approved` 分开显示并回指冻结 fingerprint，未读取 Cookie 或浏览器存储。
+- DEV 三个成功 Run 和三个保留的失败 Run、TEST 三个成功 Run 均可展开；人工抽检覆盖检索成功、可回答、拒答和 `UNKNOWN / ANSWER_DEPENDENCY_UNAVAILABLE`，逐题 Trace 只显示 case ID、状态、计数、延迟和稳定错误码。
+- 报告展示 Recall、Claim 支持、引用定位、拒答、可回答状态的分子/分母，以及全部执行版本；两个 TEST Run 的 compare 正常计算差值。
+- 导出 Run `0708583a-5c43-4989-ab1c-754d008117c2` 得到 60 个结果，dataset fingerprint 和 execution fingerprint 与页面一致；精确敏感键扫描无命中。
+- 刷新后状态恢复；320×720 下页面无横向溢出且局部数据集导航可滚动；Console warning/error 为 0。验收期间未发起新 Run。

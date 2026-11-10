@@ -109,24 +109,24 @@
 
 **验收标准**
 
-- [ ] 在候选 commit、配置和版本指纹冻结后运行 dev 基线，再首次解封运行 test；记录 test 未用于此前调参的审计事实。
-- [ ] 生成检索、答案/拒答、引用/Claim 支持、可靠性、延迟/Token/调用/成本的版本化报告；随机性指标包含至少 3 次运行的均值/标准差。
-- [ ] 人工抽检逐题 Trace 和报告导出，浏览器可追溯 dataset fingerprint、候选 commit、全部执行版本、case ID 和聚合分子/分母。
-- [ ] 新增 `docs/M5_RUNBOOK.md`，记录导入、冻结、运行、失败恢复、test 使用纪律、报告导出、脱敏和回滚；README/Roadmap 只声明实际结果。
-- [ ] 达不到 `Recall@3 >= 85%`、严格 Claim-Evidence 支持率 `>= 85%` 或引用定位率 `>= 95%` 时如实阻断效果宣称；不得删除失败题、修改 test 或降低硬门。
+- [x] 在候选 commit、配置和版本指纹冻结后运行 dev 基线，再首次解封运行 test；记录 test 未用于此前调参的审计事实。
+- [x] 生成检索、答案/拒答、引用/Claim 支持、可靠性、延迟/Token/调用/成本的版本化报告；随机性指标包含至少 3 次运行的均值/标准差。
+- [x] 人工抽检逐题 Trace 和报告导出，浏览器可追溯 dataset fingerprint、候选 commit、全部执行版本、case ID 和聚合分子/分母。
+- [x] 新增 `docs/M5_RUNBOOK.md`，记录导入、冻结、运行、失败恢复、test 使用纪律、报告导出、脱敏和回滚；README/Roadmap 只声明实际结果。
+- [x] 达不到 `Recall@3 >= 85%`、严格 Claim-Evidence 支持率 `>= 85%` 或引用定位率 `>= 95%` 时如实阻断效果宣称；不得删除失败题、修改 test 或降低硬门。
 
 **验证**
 
-- [ ] `server\mvnw.cmd test`、`server\mvnw.cmd verify -Pintegration`、`client\npm.cmd run check`、`git diff --check` 全部记录结果与耗时。
-- [ ] 执行架构、状态机、changed-code coverage、Gitleaks、OWASP Dependency-Check、`npm audit --audit-level=high`；不可用项记录为未形成结论，不写成通过。
-- [ ] 真实浏览器复验 dataset、run、trace、compare、export、刷新、test 隔离、窄屏和敏感字段；Console error/warning 为 0。
+- [x] `server\mvnw.cmd test`、`server\mvnw.cmd verify -Pintegration`、`client\npm.cmd run check`、`git diff --check` 全部记录结果与耗时。
+- [x] 执行架构、状态机、changed-code coverage、Gitleaks、OWASP Dependency-Check、`npm audit --audit-level=high`；不可用项记录为未形成结论，不写成通过。
+- [x] 真实浏览器复验 dataset、run、trace、compare、export、刷新、test 隔离、窄屏和敏感字段；Console error/warning 为 0。
 
 **预计改动区域**：`benchmark/reports/` 脱敏产物、`docs/M5_RUNBOOK.md`、`tasks/M5/ACCEPTANCE.md`、README/Roadmap 完成记录。
 **依赖**：T4。
 
 ### Checkpoint C：M5 退出
 
-- [ ] 同一配置能重复生成一致的确定性指标；随机性指标报告均值、标准差和失败分布。
-- [ ] dev/test 隔离、双人复核、冻结/解封和人工抽检均有可审计证据。
-- [ ] 浏览器报告可追溯到 Dataset 与全部版本指纹；MySQL 真源、脱敏和 owner 边界通过验证。
+- [x] 同一配置能重复生成一致的确定性指标；随机性指标报告均值、标准差和失败分布。
+- [x] dev/test 隔离、双人复核、冻结/解封和人工抽检均有可审计证据。
+- [x] 浏览器报告可追溯到 Dataset 与全部版本指纹；MySQL 真源、脱敏和 owner 边界通过验证。
 - [ ] 项目负责人审阅指标、遗留风险和未执行项并明确批准后，才进入 M6 和 Agent 效果宣称。
