@@ -69,3 +69,12 @@
 - RED：两个 Claim 分别覆盖两个 required facts 的用例由预期 `2` 得到实际 `0`。GREEN：该用例得到 `2/2`；新增“遗漏一个 required fact”反例保持 `0/1`，防止以局部事实通过完整性门。
 - 定向测试 `EvaluationBaselineRunnerTest,EvaluationReportCalculatorTest` 为 9/9 通过；完整后端门为 396 tests、0 failure/error、1 个既有条件 skip，JaCoCo 与 ArchUnit 通过。
 - 重新打包并重建 Compose server 后，同一系统账号 `m1-reviewer` 可读取评测工作台、冻结 `0.2.0` 和 `strictClaimEvidenceSupport` 报告，Console warning/error 为 0；未重算已发布历史报告，也未发起新外部调用。
+
+## 正式基线后纠偏：宿主机 Qdrant 地址
+
+- 根因：正式夹具运行在宿主机，本机 Compose 发布 Qdrant 到 `16333`，但宿主机进程未配置 `QDRANT_BASE_URL` 时回落到 `localhost:6333`；Compose server 自身一直正确使用容器网络 `qdrant:6333`。因此正式基线的 `VECTOR_STORE` 降级来自地址错误，不代表 MySQL 是向量真源；MySQL 仅保存可重建的耐久向量事实和有界 fallback。
+- 修复：本机 `.env` 与受版本控制的 `.env.example` 均明确使用 `QDRANT_BASE_URL=http://localhost:16333`、`QDRANT_HEALTH_URL=http://localhost:16333/healthz` 和 `16333/16334` 发布端口；容器内地址保持不变。
+- RED / GREEN：`HostEnvironmentExampleTest` 先得到实际 `6333`、预期 `16333` 的失败，修复后 1/1 通过。宿主机 `/healthz` 返回健康，容器内实际环境仍为 `http://qdrant:6333`。
+- 真实 Qdrant `QdrantVectorIndexAdapterIT` 随机创建 collection、发布向量、按 owner/media/context 查询、删除后从耐久事实重建并再次查询，1/1 通过（31.770 秒），没有走 MySQL 相似度 fallback。
+- 完整后端门为 397 tests、0 failure/error、1 个既有条件 skip，JaCoCo 与 ArchUnit 通过。
+- 浏览器以 `m1-reviewer` 打开 READY Job 和问答区，Console warning/error 为 0。两次最小问答尝试均被既有 `BUDGET_EXHAUSTED` 硬门在外部调用前拒绝；未降低预算门、未产生费用，也未把该拒绝误记为 Qdrant 故障。

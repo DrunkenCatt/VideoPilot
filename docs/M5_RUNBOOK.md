@@ -31,6 +31,8 @@ python validate_m5_dataset.py `
 
 ## 3. 正式运行
 
+正式夹具运行在宿主机，必须使用宿主机发布端口：当前 Compose 的 Qdrant HTTP/gRPC 分别为 `16333/16334`，因此 `QDRANT_BASE_URL=http://localhost:16333`、`QDRANT_HEALTH_URL=http://localhost:16333/healthz`。Compose server 仍固定使用容器网络地址 `http://qdrant:6333`，不要把宿主机地址写入容器。运行命令前应把项目 `.env` 导入当前 PowerShell 进程；`.env.example` 保持相同的非敏感端口合同。
+
 先执行不产生外部费用的导入预检。Failsafe 命令必须包含 `test-compile`，否则可能复用旧测试 class：
 
 ```powershell
