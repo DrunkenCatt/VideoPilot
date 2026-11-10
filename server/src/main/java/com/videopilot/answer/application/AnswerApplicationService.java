@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
 
 public final class AnswerApplicationService {
 
-    public static final String PROMPT_VERSION = "answer-evidence-v1";
+    public static final String PROMPT_VERSION = "answer-evidence-v2";
     private static final Pattern IDEMPOTENCY_KEY = Pattern.compile("[A-Za-z0-9._:-]{1,128}");
     private static final int TOP_K = 5;
     private static final int MAX_PROMPT_EVIDENCE = 12;
@@ -277,9 +277,13 @@ public final class AnswerApplicationService {
                                 0, Math.min(source.text().length(), MAX_PROMPT_EVIDENCE_CHARACTERS))))
                 .toList();
         try {
-            return "Answer only from the evidence. Return JSON {answerable:boolean,claims:[{text:string,"
-                    + "citations:[{evidenceId:string,quote:string}]}]}. Maximum 8 claims and 4 citations per claim. "
-                    + "If evidence is insufficient return answerable=false and claims=[].\nQUESTION:\n"
+            return "Answer every part of the question using only the evidence. Return exactly one JSON object "
+                    + "{answerable:boolean,claims:[{text:string,citations:[{evidenceId:string,quote:string}]}]}. "
+                    + "Use one atomic fact per claim. Copy evidenceId exactly from EVIDENCE. Each quote must be a "
+                    + "contiguous verbatim substring of the text for that evidenceId; never paraphrase a quote. "
+                    + "Every claim must be directly supported by its quotes. Maximum 8 claims and 4 citations per "
+                    + "claim. If the evidence cannot support every requested part, return answerable=false and "
+                    + "claims=[].\nQUESTION:\n"
                     + question + "\nEVIDENCE:\n" + json.writeValueAsString(selectable);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("answer prompt could not be encoded", exception);

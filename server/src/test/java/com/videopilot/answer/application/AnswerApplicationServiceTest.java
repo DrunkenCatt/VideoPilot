@@ -182,6 +182,28 @@ class AnswerApplicationServiceTest {
     }
 
     @Test
+    void instructsTheModelToCopyEvidenceIdsAndVerbatimQuotesForEveryQuestionPart() {
+        when(retrieval.retrieve(owner, jobId, "Hash 和 List 有什么特点？", 5))
+                .thenReturn(result(List.of(hit(.85))));
+        when(store.loadEvidence(any(), any(), any(), any())).thenReturn(List.of(
+                new AnswerEvidenceGate.EvidenceSource(
+                        segmentId + "#ASR", chunkId, segmentId, 0, 0, 10_000,
+                        "ASR", "Hash 是哈希表，List 是有序链表。", true)));
+        when(model.generate(any())).thenReturn(new LanguageModelPort.Response(
+                "{\"answerable\":false,\"claims\":[]}", new LanguageModelPort.Usage(10, 5)));
+
+        service.ask(owner, jobId, "Hash 和 List 有什么特点？", "intent-prompt-contract");
+
+        ArgumentCaptor<LanguageModelPort.Request> request = ArgumentCaptor.forClass(LanguageModelPort.Request.class);
+        verify(model).generate(request.capture());
+        assertThat(request.getValue().prompt())
+                .contains("Answer every part of the question")
+                .contains("Copy evidenceId exactly")
+                .contains("contiguous verbatim substring")
+                .contains("one atomic fact");
+    }
+
+    @Test
     void recordsStableBudgetFailureWithoutCallingTheModelOrChangingTheJob() {
         when(retrieval.retrieve(owner, jobId, "String 是什么？", 5)).thenReturn(result(List.of(hit(.85))));
         when(store.loadEvidence(any(), any(), any(), any())).thenReturn(List.of(new AnswerEvidenceGate.EvidenceSource(

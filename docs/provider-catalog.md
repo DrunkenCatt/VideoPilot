@@ -28,7 +28,7 @@ MVP 固定下列四个能力实现，但业务代码只依赖项目 Port。供�
 - 单批最多 4 条、单条最多 6,000 字符/8,192 估算 Token、单次总字符 100,000、响应 8 MiB、并发 1、最多 3 次有界阶段尝试。调用前写 `model_call`；UNKNOWN 不在线程内冒险重发。
 - Qdrant collection 为 `videopilot_chunks_m3_bge_m3_1024_v1`，cosine 1024 维；point ID 使用稳定 Chunk UUID，payload 仅含 index/owner/media/context 与时间窗。MySQL 的 Chunk、向量事实和索引发布记录才是真源。
 - 检索固定 `hybrid-0.60-0.25-0.15-v1`。Qdrant 不可用时从 MySQL 向量执行有界内存 cosine；query Embedding 不可用时保留 keyword/OCR，并显式返回降级通道。
-- LLM 固定 SiliconFlow `deepseek-ai/DeepSeek-V4-Flash`、JSON mode、30 秒、最多 1,200 output tokens、20,000 Prompt 字符、64 KiB 响应、并发 1。候选 JSON 必须再经过 Java 引用硬门；timeout 为 UNKNOWN，不自动重发。
+- LLM 固定 SiliconFlow `deepseek-ai/DeepSeek-V4-Flash`、JSON mode、60 秒、最多 1,200 output tokens、20,000 Prompt 字符、64 KiB 响应、并发 1。候选 JSON 必须再经过 Java 引用硬门；timeout 为 UNKNOWN，不自动重发。60 秒只扩大单次有界等待，不增加重试次数。
 - SiliconFlow 响应未提供可核验价格时，`priceStatus=UNAVAILABLE` 且成本保持空值，不能写成 0 USD。
 
 实际启动、故障判断、collection 重建边界和基线命令见 `docs/M3_RUNBOOK.md`。

@@ -19,6 +19,14 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 class AnswerConfigurationTest {
 
     @Test
+    void usesTheVersionedMvpPromptAndBoundedProviderTimeoutByDefault() {
+        AnswerProperties properties = new AnswerProperties();
+
+        assertThat(properties.getPromptVersion()).isEqualTo("answer-evidence-v2");
+        assertThat(properties.getTimeout()).isEqualTo(Duration.ofSeconds(60));
+    }
+
+    @Test
     void bindsSafeDefaultsAndBuildsDisabledAndConfiguredAdapters() {
         AnswerProperties properties = new AnswerProperties();
         properties.setBaseUrl("http://localhost:9999/v1");
