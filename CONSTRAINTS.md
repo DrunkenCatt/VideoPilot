@@ -81,4 +81,4 @@ Last reviewed: 2026-10-27
 
 | ID | Rule | Path | Reason | Owner | Expires |
 | --- | --- | --- | --- | --- | --- |
-| - | - | - | 当前无例外 | - | - |
+| EX-2026-11-10-M6 | `AGENTS.md` / Roadmap 的“当前里程碑未退出不得进入下一阶段”流程顺序；不豁免任何工程或运行时质量门 | `tasks/M6/**`、`server/src/**/com/videopilot/agent/**`、`client/src/features/agent/**` 及其直接测试/迁移/文档 | M5 工程流水线已完成但效果门失败；负责人明确要求冻结该已知缺口并优先验证最小 M6 Agent Loop。M6 只能作为本地实验能力推进，不得默认启用、不得宣称 M5/M6 质量通过、不得读取或调参历史 TEST；M5 的 85% Claim 支持和 95% 引用定位门保持不变 | zzm | 2027-02-08 |
