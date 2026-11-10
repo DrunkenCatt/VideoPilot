@@ -1,6 +1,6 @@
 # M5 T5 正式基线证据
 
-状态：正式 DEV/TEST 基线、完整质量门和真实浏览器验收已完成；回答效果硬门失败，M5 阻断。
+状态：最新候选 `d9e1d51` 的正式 DEV 三轮已完成；严格 Claim-Evidence 支持率三轮均为 0%，分阶段硬门阻止 TEST 重跑，M5 阻断。
 
 ## 正式运行入口预检
 
@@ -94,3 +94,12 @@
 - RED 首先证明现有预算接口和 JDBC 聚合不认识评测系列；GREEN 覆盖历史 Job 已耗尽但新系列可用、普通交互仍被拦截、同系列跨 repetition 合并，以及其他系列和普通调用被排除。真实 MySQL `JdbcExecutionBudgetStoreIT` 2/2 通过。
 - 正式入口改为显式 `m5.release.phase=DEV|TEST`。DEV 完成三轮后逐轮检查 Recall@3、严格 Claim 支持和引用定位三项门；TEST 入口从 MySQL 重新读取同一候选的三个 DEV Run，任何 Run/指标缺失或低于门槛时，在 TEST 导入和调用前停止。
 - `M5ReleaseGateTest` 2/2 通过；不付费的 `M5ReleaseBaselineLocalIT` 预检 1/1 通过，确认五条来源、冻结 DEV fingerprint 和宿主机依赖可读取，外部模型调用为 0。
+
+## 候选 `d9e1d51` 正式 DEV 结果
+
+- 三个 Run `389a974b-c54b-4bcb-832a-23745b5db742`、`2e9bd463-996c-404f-aefc-00b52de32437`、`cd906e91-c44a-465c-a706-4e33814c0acb` 均完成 90/90 case，无 Run 级错误；正式命令耗时 13 分 03 秒。
+- 三轮 Recall@3 均 100%，Hit@1 均 95.83%，MRR@3 均 97.92%，引用定位率均 100%，拒答正确率均 100%。
+- 严格 Claim-Evidence 支持率分别为 `0/7`、`0/9`、`0/9`；可回答状态命中率分别为 20%、26.67%、26.67%。证据能正确定位，但已发布 Claim 仍不包含冻结 required facts 的精确完整覆盖。
+- 每轮 108 次调用且无 `BUDGET_EXHAUSTED`，证明新候选系列不再继承历史 Job 调用数；三轮 price status 均保持 unavailable。
+- 三份 DEV 报告 Schema 3/3 通过，敏感键命中 0。DEV 硬门以明确错误退出，TEST 阶段没有启动，历史 TEST 报告未覆盖。
+- Compose server 恢复健康后，以 `m1-reviewer` 在浏览器读取冻结 DEV：最新三轮均显示 `COMPLETED 90/90`，第一轮报告显示 `72/72`、`0/7`、`7/7`、108 calls、成本 unknown；展开版本可见 commit `d9e1d51`。Console warning/error 为 0，浏览器未发起写操作。

@@ -1,10 +1,10 @@
 {
-  "runId" : "3dd2a9f1-7c06-451e-bdbb-96f39eb554a5",
+  "runId" : "389a974b-c54b-4bcb-832a-23745b5db742",
   "datasetId" : "a6829e55-ccd2-504f-ae78-347156c50a2b",
   "datasetFingerprint" : "98667e464bd7099736b91c32ee2ca1013df3d330c7d136bc3a7777be9e8c31ca",
-  "executionFingerprint" : "15342a7f88f1a893fdcb8696c4c24587bf971bd38360e611052d67c12026dd71",
+  "executionFingerprint" : "469c5da377a911a026673b6ac9a78bce112569c95b4d0e4b35a54c840d862573",
   "versions" : {
-    "codeCommit" : "07dfb15",
+    "codeCommit" : "d9e1d51",
     "pipelineVersion" : "m3-evidence-qa-v1",
     "promptVersion" : "answer-evidence-v1",
     "modelVersion" : "deepseek-ai/DeepSeek-V4-Flash",
@@ -36,16 +36,16 @@
   }, {
     "name" : "strictClaimEvidenceSupport",
     "numerator" : 0.0,
-    "denominator" : 0,
-    "value" : null,
+    "denominator" : 7,
+    "value" : 0.0,
     "exclusions" : {
-      "NO_PUBLISHED_CLAIM" : 16
+      "NO_PUBLISHED_CLAIM" : 9
     }
   }, {
     "name" : "citationLocalization",
-    "numerator" : 0.0,
-    "denominator" : 0,
-    "value" : null,
+    "numerator" : 7.0,
+    "denominator" : 7,
+    "value" : 1.0,
     "exclusions" : { }
   }, {
     "name" : "refusalAccuracy",
@@ -55,90 +55,56 @@
     "exclusions" : { }
   }, {
     "name" : "answerableStatusAccuracy",
-    "numerator" : 0.0,
+    "numerator" : 3.0,
     "denominator" : 15,
-    "value" : 0.0,
+    "value" : 0.2,
     "exclusions" : {
-      "UNKNOWN" : 2
+      "UNKNOWN" : 6
     }
   } ],
   "usage" : {
     "totalCalls" : 108,
-    "inputUnits" : 11026,
-    "outputUnits" : 2471,
-    "latencyMs" : 114106,
+    "inputUnits" : 20536,
+    "outputUnits" : 3114,
+    "latencyMs" : 223993,
     "estimatedCost" : null,
     "currency" : null,
     "unavailablePriceCalls" : 108,
     "callOutcomes" : {
-      "UNKNOWN_OUTCOME" : 1,
-      "SUCCEEDED" : 106,
+      "UNKNOWN_OUTCOME" : 5,
+      "SUCCEEDED" : 102,
       "FAILED" : 1
     }
   },
   "series" : {
-    "hitAt1" : {
-      "repetitions" : 3,
-      "mean" : 0.9583333333333334,
-      "sampleStandardDeviation" : 0.0,
-      "outcomeDistribution" : {
-        "UNKNOWN" : 6,
-        "COMPLETED" : 217,
-        "REFUSED" : 46,
-        "ERROR" : 1
-      }
-    },
-    "mrrAt3" : {
-      "repetitions" : 3,
-      "mean" : 0.9791666666666666,
-      "sampleStandardDeviation" : 0.0,
-      "outcomeDistribution" : {
-        "UNKNOWN" : 6,
-        "COMPLETED" : 217,
-        "REFUSED" : 46,
-        "ERROR" : 1
-      }
-    },
-    "refusalAccuracy" : {
-      "repetitions" : 3,
-      "mean" : 0.8888888888888888,
-      "sampleStandardDeviation" : 0.1924500897298753,
-      "outcomeDistribution" : {
-        "UNKNOWN" : 6,
-        "COMPLETED" : 217,
-        "REFUSED" : 46,
-        "ERROR" : 1
-      }
-    },
     "strictClaimEvidenceSupport" : {
-      "repetitions" : 1,
+      "repetitions" : 3,
       "mean" : 0.0,
-      "sampleStandardDeviation" : null,
+      "sampleStandardDeviation" : 0.0,
       "outcomeDistribution" : {
-        "REFUSED" : 15,
-        "COMPLETED" : 73,
-        "UNKNOWN" : 2
+        "COMPLETED" : 227,
+        "REFUSED" : 24,
+        "UNKNOWN" : 19
       }
     },
     "citationLocalization" : {
-      "repetitions" : 1,
+      "repetitions" : 3,
       "mean" : 1.0,
-      "sampleStandardDeviation" : null,
+      "sampleStandardDeviation" : 0.0,
       "outcomeDistribution" : {
-        "REFUSED" : 15,
-        "COMPLETED" : 73,
-        "UNKNOWN" : 2
+        "COMPLETED" : 227,
+        "REFUSED" : 24,
+        "UNKNOWN" : 19
       }
     },
     "answerableStatusAccuracy" : {
       "repetitions" : 3,
-      "mean" : 0.022222222222222223,
-      "sampleStandardDeviation" : 0.03849001794597505,
+      "mean" : 0.24444444444444446,
+      "sampleStandardDeviation" : 0.03849001794597504,
       "outcomeDistribution" : {
-        "UNKNOWN" : 6,
-        "COMPLETED" : 217,
-        "REFUSED" : 46,
-        "ERROR" : 1
+        "COMPLETED" : 227,
+        "REFUSED" : 24,
+        "UNKNOWN" : 19
       }
     },
     "recallAt3" : {
@@ -146,12 +112,41 @@
       "mean" : 1.0,
       "sampleStandardDeviation" : 0.0,
       "outcomeDistribution" : {
-        "UNKNOWN" : 6,
-        "COMPLETED" : 217,
-        "REFUSED" : 46,
-        "ERROR" : 1
+        "COMPLETED" : 227,
+        "REFUSED" : 24,
+        "UNKNOWN" : 19
+      }
+    },
+    "hitAt1" : {
+      "repetitions" : 3,
+      "mean" : 0.9583333333333334,
+      "sampleStandardDeviation" : 0.0,
+      "outcomeDistribution" : {
+        "COMPLETED" : 227,
+        "REFUSED" : 24,
+        "UNKNOWN" : 19
+      }
+    },
+    "mrrAt3" : {
+      "repetitions" : 3,
+      "mean" : 0.9791666666666666,
+      "sampleStandardDeviation" : 0.0,
+      "outcomeDistribution" : {
+        "COMPLETED" : 227,
+        "REFUSED" : 24,
+        "UNKNOWN" : 19
+      }
+    },
+    "refusalAccuracy" : {
+      "repetitions" : 3,
+      "mean" : 1.0,
+      "sampleStandardDeviation" : 0.0,
+      "outcomeDistribution" : {
+        "COMPLETED" : 227,
+        "REFUSED" : 24,
+        "UNKNOWN" : 19
       }
     }
   },
-  "generatedAt" : "2026-11-09T16:34:57.052370Z"
+  "generatedAt" : "2026-11-10T10:56:30.993202300Z"
 }

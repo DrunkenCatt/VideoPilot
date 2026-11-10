@@ -1,6 +1,6 @@
 # M5 验收记录：冻结基线与最小评测流水线
 
-> 状态：T0-T4 已完成；T5 已生成正式 DEV/TEST 基线，但严格 Claim-Evidence 支持率未达到退出门，M5 阻断且不得进入 M6。本文按 T0-T5 持续追加实际命令、浏览器证据、候选 commit 和未执行项。没有通过当前任务退出门时不得进入下一任务。
+> 状态：T0-T4 已完成；最新候选 `d9e1d51` 已完成正式 DEV 三轮，但严格 Claim-Evidence 支持率未达到退出门，分阶段硬门阻止 TEST 重跑，M5 阻断且不得进入 M6。本文按 T0-T5 持续追加实际命令、浏览器证据、候选 commit 和未执行项。没有通过当前任务退出门时不得进入下一任务。
 
 ## 1. 当前基线与 M5 缺口
 
@@ -229,3 +229,22 @@ TEST 三轮 outcome 总计为 150 `COMPLETED`、27 `REFUSED`、3 `UNKNOWN`；其
 宿主机裸 `verify -Pintegration` 首次因未加载 `.env` 端口/凭据失败；加载配置后仅剩宿主机缺少 FFmpeg/FFprobe、健康探针映射和候选 commit 前置条件。Winget 下载 FFmpeg 两次被网络中断，因此最终使用项目已有 `videopilot-maven-ffmpeg` 镜像，在 `videopilot_m5_verify` 隔离库和 Compose 内网中重跑完整集合并通过；没有跳过失败测试或触碰正式评测库。完整门按用户确认保留重新生成的两份 M3 报告。
 
 退出结论：正式评测流水线与数据治理可复现，但回答效果硬门失败。M5 不能退出，M6 不能开始；不得修改已使用的 TEST、删除失败题或降低 85% Claim 支持门。
+
+## 10. 候选 `d9e1d51` 分阶段复评
+
+2026-11-10 在修复可选证据合并、Claim/Facts 计分、宿主机 Qdrant 地址、READY 查询期限和正式评测预算作用域后，以候选 `d9e1d51` 重新执行 DEV。Compose server 在运行期间停止，只有宿主机夹具领取 Run；三轮共 270/270 个 CaseResult，均为 `COMPLETED` Run，无 `VERSION_DRIFT`、`NON_DETERMINISTIC_RETRIEVAL` 或 Run 级错误。
+
+| 指标 | repetition 1 | repetition 2 | repetition 3 | 门槛/结论 |
+| --- | ---: | ---: | ---: | --- |
+| Recall@3 | 100% | 100% | 100% | 通过 85% |
+| Hit@1 / MRR@3 | 95.83% / 97.92% | 95.83% / 97.92% | 95.83% / 97.92% | 报告项 |
+| 严格 Claim-Evidence 支持率 | 0/7，0% | 0/9，0% | 0/9，0% | **低于 85%，失败** |
+| 引用定位率 | 7/7，100% | 9/9，100% | 9/9，100% | 通过 95% |
+| 拒答正确率 | 3/3，100% | 3/3，100% | 3/3，100% | 通过 |
+| 可回答状态命中率 | 3/15，20% | 4/15，26.67% | 4/15，26.67% | 报告项 |
+
+每轮均记录 108 次调用，即 90 次 Query Embedding 和 18 次 Answer；这证明旧 Job/旧候选调用未再消耗新系列预算。三轮价格均继续标记 `unavailable`，没有伪造为零。三份 DEV 报告通过 `evaluation-report.schema.json`，敏感键扫描 0 命中。
+
+正式命令耗时 13 分 03 秒，并以 `DEV repetition 1 strictClaimEvidenceSupport=0.0 is below 0.85` 退出。按新分阶段合同，TEST 命令未执行，现有三份 TEST 报告仍属于历史候选 `07dfb15`，没有被覆盖。该失败是效果硬门而非工程流程失败；不得降低阈值继续。
+
+恢复 Compose server 后，使用同一系统账号 `m1-reviewer` 在真实应用内浏览器选择冻结 DEV。页面显示最新三个 Run 均为 `COMPLETED 90/90`；展开第一轮报告可见 Recall `72/72`、严格 Claim 支持 `0/7`、引用定位 `7/7`、108 次调用和成本 `UNKNOWN`，执行版本 Commit 为 `d9e1d51`。浏览器 Console warning/error 为 0；验收只读，未创建 Run 或产生额外费用。

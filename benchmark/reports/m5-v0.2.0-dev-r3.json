@@ -1,10 +1,10 @@
 {
-  "runId" : "77418558-e1ae-410f-9833-ef74b58b9c04",
+  "runId" : "cd906e91-c44a-465c-a706-4e33814c0acb",
   "datasetId" : "a6829e55-ccd2-504f-ae78-347156c50a2b",
   "datasetFingerprint" : "98667e464bd7099736b91c32ee2ca1013df3d330c7d136bc3a7777be9e8c31ca",
-  "executionFingerprint" : "15342a7f88f1a893fdcb8696c4c24587bf971bd38360e611052d67c12026dd71",
+  "executionFingerprint" : "469c5da377a911a026673b6ac9a78bce112569c95b4d0e4b35a54c840d862573",
   "versions" : {
-    "codeCommit" : "07dfb15",
+    "codeCommit" : "d9e1d51",
     "pipelineVersion" : "m3-evidence-qa-v1",
     "promptVersion" : "answer-evidence-v1",
     "modelVersion" : "deepseek-ai/DeepSeek-V4-Flash",
@@ -36,110 +36,75 @@
   }, {
     "name" : "strictClaimEvidenceSupport",
     "numerator" : 0.0,
-    "denominator" : 0,
-    "value" : null,
+    "denominator" : 9,
+    "value" : 0.0,
     "exclusions" : {
-      "NO_PUBLISHED_CLAIM" : 15
+      "NO_PUBLISHED_CLAIM" : 8
     }
   }, {
     "name" : "citationLocalization",
-    "numerator" : 0.0,
-    "denominator" : 0,
-    "value" : null,
+    "numerator" : 9.0,
+    "denominator" : 9,
+    "value" : 1.0,
     "exclusions" : { }
   }, {
     "name" : "refusalAccuracy",
-    "numerator" : 2.0,
+    "numerator" : 3.0,
     "denominator" : 3,
-    "value" : 0.6666666666666666,
-    "exclusions" : {
-      "ERROR" : 1
-    }
+    "value" : 1.0,
+    "exclusions" : { }
   }, {
     "name" : "answerableStatusAccuracy",
-    "numerator" : 0.0,
+    "numerator" : 4.0,
     "denominator" : 15,
-    "value" : 0.0,
+    "value" : 0.26666666666666666,
     "exclusions" : {
-      "UNKNOWN" : 2
+      "UNKNOWN" : 6
     }
   } ],
   "usage" : {
-    "totalCalls" : 107,
-    "inputUnits" : 10075,
-    "outputUnits" : 3115,
-    "latencyMs" : 128862,
+    "totalCalls" : 108,
+    "inputUnits" : 20536,
+    "outputUnits" : 2933,
+    "latencyMs" : 297990,
     "estimatedCost" : null,
     "currency" : null,
-    "unavailablePriceCalls" : 107,
+    "unavailablePriceCalls" : 108,
     "callOutcomes" : {
-      "SUCCEEDED" : 105,
-      "UNKNOWN_OUTCOME" : 2
+      "UNKNOWN_OUTCOME" : 5,
+      "SUCCEEDED" : 102,
+      "FAILED" : 1
     }
   },
   "series" : {
-    "hitAt1" : {
-      "repetitions" : 3,
-      "mean" : 0.9583333333333334,
-      "sampleStandardDeviation" : 0.0,
-      "outcomeDistribution" : {
-        "UNKNOWN" : 6,
-        "COMPLETED" : 217,
-        "REFUSED" : 46,
-        "ERROR" : 1
-      }
-    },
-    "mrrAt3" : {
-      "repetitions" : 3,
-      "mean" : 0.9791666666666666,
-      "sampleStandardDeviation" : 0.0,
-      "outcomeDistribution" : {
-        "UNKNOWN" : 6,
-        "COMPLETED" : 217,
-        "REFUSED" : 46,
-        "ERROR" : 1
-      }
-    },
-    "refusalAccuracy" : {
-      "repetitions" : 3,
-      "mean" : 0.8888888888888888,
-      "sampleStandardDeviation" : 0.1924500897298753,
-      "outcomeDistribution" : {
-        "UNKNOWN" : 6,
-        "COMPLETED" : 217,
-        "REFUSED" : 46,
-        "ERROR" : 1
-      }
-    },
     "strictClaimEvidenceSupport" : {
-      "repetitions" : 1,
+      "repetitions" : 3,
       "mean" : 0.0,
-      "sampleStandardDeviation" : null,
+      "sampleStandardDeviation" : 0.0,
       "outcomeDistribution" : {
-        "REFUSED" : 15,
-        "COMPLETED" : 73,
-        "UNKNOWN" : 2
+        "COMPLETED" : 227,
+        "REFUSED" : 24,
+        "UNKNOWN" : 19
       }
     },
     "citationLocalization" : {
-      "repetitions" : 1,
+      "repetitions" : 3,
       "mean" : 1.0,
-      "sampleStandardDeviation" : null,
+      "sampleStandardDeviation" : 0.0,
       "outcomeDistribution" : {
-        "REFUSED" : 15,
-        "COMPLETED" : 73,
-        "UNKNOWN" : 2
+        "COMPLETED" : 227,
+        "REFUSED" : 24,
+        "UNKNOWN" : 19
       }
     },
     "answerableStatusAccuracy" : {
       "repetitions" : 3,
-      "mean" : 0.022222222222222223,
-      "sampleStandardDeviation" : 0.03849001794597505,
+      "mean" : 0.24444444444444446,
+      "sampleStandardDeviation" : 0.03849001794597504,
       "outcomeDistribution" : {
-        "UNKNOWN" : 6,
-        "COMPLETED" : 217,
-        "REFUSED" : 46,
-        "ERROR" : 1
+        "COMPLETED" : 227,
+        "REFUSED" : 24,
+        "UNKNOWN" : 19
       }
     },
     "recallAt3" : {
@@ -147,12 +112,41 @@
       "mean" : 1.0,
       "sampleStandardDeviation" : 0.0,
       "outcomeDistribution" : {
-        "UNKNOWN" : 6,
-        "COMPLETED" : 217,
-        "REFUSED" : 46,
-        "ERROR" : 1
+        "COMPLETED" : 227,
+        "REFUSED" : 24,
+        "UNKNOWN" : 19
+      }
+    },
+    "hitAt1" : {
+      "repetitions" : 3,
+      "mean" : 0.9583333333333334,
+      "sampleStandardDeviation" : 0.0,
+      "outcomeDistribution" : {
+        "COMPLETED" : 227,
+        "REFUSED" : 24,
+        "UNKNOWN" : 19
+      }
+    },
+    "mrrAt3" : {
+      "repetitions" : 3,
+      "mean" : 0.9791666666666666,
+      "sampleStandardDeviation" : 0.0,
+      "outcomeDistribution" : {
+        "COMPLETED" : 227,
+        "REFUSED" : 24,
+        "UNKNOWN" : 19
+      }
+    },
+    "refusalAccuracy" : {
+      "repetitions" : 3,
+      "mean" : 1.0,
+      "sampleStandardDeviation" : 0.0,
+      "outcomeDistribution" : {
+        "COMPLETED" : 227,
+        "REFUSED" : 24,
+        "UNKNOWN" : 19
       }
     }
   },
-  "generatedAt" : "2026-11-09T16:34:57.176732100Z"
+  "generatedAt" : "2026-11-10T10:56:31.209781400Z"
 }

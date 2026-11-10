@@ -9,7 +9,7 @@ M1 的上传/Job 基线手册见 [docs/M1_RUNBOOK.md](docs/M1_RUNBOOK.md)；M2 �
 
 ## 当前阶段
 
-- 状态：M4/V1 MVP 已于 2026-11-08 正式退出；M5 `0.2.0` 已完成首次正式 DEV/TEST 基线，但严格 Claim-Evidence 支持率为 0%，未达到 85% 退出门，因此 M5 尚未退出且不得进入 M6。质量与安全检查结论见 `tasks/M5/ACCEPTANCE.md`
+- 状态：M4/V1 MVP 已于 2026-11-08 正式退出；M5 最新候选 `d9e1d51` 已完成 DEV 三轮，Recall@3 与引用定位率均为 100%，但严格 Claim-Evidence 支持率三轮均为 0%，未达到 85% 退出门；TEST 被分阶段硬门阻止且未重跑，因此 M5 尚未退出、不得进入 M6。质量与安全检查结论见 `tasks/M5/ACCEPTANCE.md`
 - 当前可验证：M3 全部能力，以及 MySQL 真源自动 Recovery、有限 Retry/DLQ、受控 Manual Replay、版本化预算/资源硬门、只读可靠性仪表和可重复故障矩阵；20/20 恢复样本无任务丢失、重复高成本调用或非法推进
 - 当前不包含：动态 Agent Loop、自动 Query Rewrite/Cross Encoder、多供应商路由、公开的索引修复/Replay UI、完整学习管理系统或公网部署
 - 第一目标：可靠的视频解析与有证据问答 MVP
