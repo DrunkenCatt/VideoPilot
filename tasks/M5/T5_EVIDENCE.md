@@ -1,6 +1,6 @@
 # M5 T5 正式基线证据
 
-状态：最新候选 `d9e1d51` 的正式 DEV 三轮已完成；严格 Claim-Evidence 支持率三轮均为 0%，分阶段硬门阻止 TEST 重跑，M5 阻断。
+状态：最新候选 `5e71014` 的正式 DEV 三轮已完成；严格 Claim-Evidence 支持率提高到 28.57%～54.55%，但仍低于 85%，引用定位率也低于 95%；分阶段硬门阻止 TEST 重跑，M5 阻断。
 
 ## 正式运行入口预检
 
@@ -103,3 +103,13 @@
 - 每轮 108 次调用且无 `BUDGET_EXHAUSTED`，证明新候选系列不再继承历史 Job 调用数；三轮 price status 均保持 unavailable。
 - 三份 DEV 报告 Schema 3/3 通过，敏感键命中 0。DEV 硬门以明确错误退出，TEST 阶段没有启动，历史 TEST 报告未覆盖。
 - Compose server 恢复健康后，以 `m1-reviewer` 在浏览器读取冻结 DEV：最新三轮均显示 `COMPLETED 90/90`，第一轮报告显示 `72/72`、`0/7`、`7/7`、108 calls、成本 unknown；展开版本可见 commit `d9e1d51`。Console warning/error 为 0，浏览器未发起写操作。
+
+## 候选 `5e71014` 正式 DEV 结果
+
+- 三个 Run `014f0b57-197b-4ade-a2ab-677900d32364`、`7aa79c0d-46b9-43cb-b1cd-3df06f8a4d17`、`16812dda-5f49-4f07-a93d-ac8125ee0999` 均完成 90/90 case；execution fingerprint 为 `95d02ef85b2358f79e1603b9e9cdc90d0312d3e179c1191af9899fdcd0b21859`。
+- 三轮 Recall@3 均 100%，Hit@1 均 95.83%，MRR@3 均 97.92%，拒答正确率均 100%；检索和不可回答判断没有回归。
+- 严格 Claim-Evidence 支持率分别为 `4/14=28.57%`、`7/15=46.67%`、`6/11=54.55%`；引用定位率分别为 `14/17=82.35%`、`14/18=77.78%`、`11/13=84.62%`。模型更常生成答案且部分释义可正确计分，但逐 Claim 的精确引用和全部 required facts 覆盖仍不稳定。
+- 可回答状态命中率分别为 40%、40%、33.33%；每轮 108 次调用中 106 次成功、2 次失败，无 `UNKNOWN` 或 `BUDGET_EXHAUSTED`。价格继续为 unavailable。
+- 三份 DEV 报告 Schema 3/3 通过，敏感键命中 0。正式命令耗时 8 分 59 秒并在 DEV 硬门停止，TEST 未执行、历史 TEST 报告未覆盖。
+- 容器化完整门为 407/407 快速测试、91 项集成测试零 failure/error（2 项发布开关 skip），JaCoCo/ArchUnit 通过；前端 115/115 和生产构建通过。Linux OCR 超时夹具修复另有 8/8 定向容器测试。
+- Compose server 以新 JAR 恢复 healthy，HTTP 健康端点返回 200。浏览器只读验收受当前工具的 `ERR_BLOCKED_BY_CLIENT` 阻断，Chrome 控制通道不可用，因此本轮不宣称页面/Console 验收通过，也未发起浏览器写操作。

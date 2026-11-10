@@ -252,3 +252,22 @@ TEST 三轮 outcome 总计为 150 `COMPLETED`、27 `REFUSED`、3 `UNKNOWN`；其
 ## 11. Linux OCR 超时夹具修复
 
 候选 `25759d9` 的容器化完整门在快速层发现既有 OCR 超时夹具存在平台竞态：伪 Tesseract 子进程把 `child.pid` 注册为进程退出时删除，Linux 收到终止信号后会先运行删除钩子，测试因而无法读取 PID 并验证子进程已结束。夹具不再自行删除该文件，统一交由 JUnit `@TempDir` 清理；生产 OCR 超时、终止与重试语义未修改。含 FFmpeg/Tesseract 的 Linux 镜像中定向执行 `TesseractOcrAdapterTest`，8/8 通过且 JaCoCo 门通过。
+
+## 12. 候选 `5e71014` 正式 DEV 复评
+
+候选包含确定性 required fact 释义匹配、`answer-evidence-v2` 原子 Claim/逐题完整回答约束、60 秒模型超时和 Linux OCR 超时夹具修复。正式执行期间停止 Compose server，宿主机夹具独占评测 Run；三轮分别完成 90/90 case，无 Run 级错误、`VERSION_DRIFT`、`NON_DETERMINISTIC_RETRIEVAL` 或预算耗尽。
+
+| 指标 | repetition 1 | repetition 2 | repetition 3 | 门槛/结论 |
+| --- | ---: | ---: | ---: | --- |
+| Recall@3 | 100% | 100% | 100% | 通过 85% |
+| Hit@1 / MRR@3 | 95.83% / 97.92% | 95.83% / 97.92% | 95.83% / 97.92% | 报告项 |
+| 严格 Claim-Evidence 支持率 | 4/14，28.57% | 7/15，46.67% | 6/11，54.55% | **均低于 85%，失败** |
+| 引用定位率 | 14/17，82.35% | 14/18，77.78% | 11/13，84.62% | **均低于 95%，失败** |
+| 拒答正确率 | 3/3，100% | 3/3，100% | 3/3，100% | 通过 |
+| 可回答状态命中率 | 6/15，40% | 6/15，40% | 5/15，33.33% | 报告项 |
+
+三轮均记录 108 次调用、106 次成功和 2 次失败；价格注册表仍不可用，因此 108 次调用全部保留 unavailable，不写成零成本。三份报告通过 `evaluation-report.schema.json`，敏感键扫描均为 0。正式命令耗时 8 分 59 秒，在第一轮 Claim 支持率硬门处明确失败；按分阶段合同没有执行 TEST，既有 TEST 报告未覆盖。正式夹具同时重新生成两份 M3 报告，按用户要求保留。
+
+完整容器门在含 FFmpeg/Tesseract 的 Linux 镜像、全新且预授权的隔离 schema 和 Compose 内网执行：407 项快速测试及 91 项集成测试零 failure/error，2 项需显式付费发布开关而 skip，JaCoCo/ArchUnit 通过，总耗时 8 分 11 秒。前端 `npm.cmd run check` 的 typecheck、lint、115 项测试、coverage 和生产构建通过。应用以新 JAR 重建后 `/actuator/health` 返回 200，server 容器 healthy。
+
+浏览器只读验收未形成通过结论：当前 Codex 内置浏览器在导航 `localhost:8080` 和 `127.0.0.1:8080` 时均返回 `ERR_BLOCKED_BY_CLIENT`，Chrome 控制通道不可用。没有伪造页面、Console 或账号验收结果，也未在浏览器发起新 Run。M5 仍被效果硬门阻断，不得进入 TEST 或 M6。

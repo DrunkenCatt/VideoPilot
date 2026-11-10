@@ -5,13 +5,13 @@
   "hitAt1" : 0.8181818181818182,
   "mrrAt3" : 0.9090909090909091,
   "groups" : {
-    "ocr" : {
+    "exact" : {
       "scoredCases" : 4,
       "recallAt3" : 1.0,
       "hitAt1" : 0.75,
       "mrrAt3" : 0.875
     },
-    "exact" : {
+    "ocr" : {
       "scoredCases" : 4,
       "recallAt3" : 1.0,
       "hitAt1" : 0.75,
@@ -29,6 +29,6 @@
   "formulaVersion" : "hybrid-0.60-0.25-0.15-v1",
   "embeddingVersion" : "siliconflow-bge-m3-1024-v1",
   "chunkVersion" : "chunk-5m-v1",
-  "commit" : "07dfb15",
-  "createdAt" : "2026-11-10T03:49:04.224345044Z"
+  "commit" : "5e71014",
+  "createdAt" : "2026-11-10T13:41:11.241499719Z"
 }

@@ -1,12 +1,12 @@
 {
-  "runId" : "cd906e91-c44a-465c-a706-4e33814c0acb",
+  "runId" : "16812dda-5f49-4f07-a93d-ac8125ee0999",
   "datasetId" : "a6829e55-ccd2-504f-ae78-347156c50a2b",
   "datasetFingerprint" : "98667e464bd7099736b91c32ee2ca1013df3d330c7d136bc3a7777be9e8c31ca",
-  "executionFingerprint" : "469c5da377a911a026673b6ac9a78bce112569c95b4d0e4b35a54c840d862573",
+  "executionFingerprint" : "95d02ef85b2358f79e1603b9e9cdc90d0312d3e179c1191af9899fdcd0b21859",
   "versions" : {
-    "codeCommit" : "d9e1d51",
+    "codeCommit" : "5e71014",
     "pipelineVersion" : "m3-evidence-qa-v1",
-    "promptVersion" : "answer-evidence-v1",
+    "promptVersion" : "answer-evidence-v2",
     "modelVersion" : "deepseek-ai/DeepSeek-V4-Flash",
     "embeddingVersion" : "siliconflow-bge-m3-1024-v1",
     "chunkVersion" : "chunk-5m-v1",
@@ -35,17 +35,17 @@
     "exclusions" : { }
   }, {
     "name" : "strictClaimEvidenceSupport",
-    "numerator" : 0.0,
-    "denominator" : 9,
-    "value" : 0.0,
+    "numerator" : 6.0,
+    "denominator" : 11,
+    "value" : 0.5454545454545454,
     "exclusions" : {
-      "NO_PUBLISHED_CLAIM" : 8
+      "NO_PUBLISHED_CLAIM" : 11
     }
   }, {
     "name" : "citationLocalization",
-    "numerator" : 9.0,
-    "denominator" : 9,
-    "value" : 1.0,
+    "numerator" : 11.0,
+    "denominator" : 13,
+    "value" : 0.8461538461538461,
     "exclusions" : { }
   }, {
     "name" : "refusalAccuracy",
@@ -55,56 +55,35 @@
     "exclusions" : { }
   }, {
     "name" : "answerableStatusAccuracy",
-    "numerator" : 4.0,
+    "numerator" : 5.0,
     "denominator" : 15,
-    "value" : 0.26666666666666666,
+    "value" : 0.3333333333333333,
     "exclusions" : {
-      "UNKNOWN" : 6
+      "UNKNOWN" : 2
     }
   } ],
   "usage" : {
     "totalCalls" : 108,
-    "inputUnits" : 20536,
-    "outputUnits" : 2933,
-    "latencyMs" : 297990,
+    "inputUnits" : 33307,
+    "outputUnits" : 5607,
+    "latencyMs" : 167678,
     "estimatedCost" : null,
     "currency" : null,
     "unavailablePriceCalls" : 108,
     "callOutcomes" : {
-      "UNKNOWN_OUTCOME" : 5,
-      "SUCCEEDED" : 102,
-      "FAILED" : 1
+      "FAILED" : 2,
+      "SUCCEEDED" : 106
     }
   },
   "series" : {
-    "strictClaimEvidenceSupport" : {
-      "repetitions" : 3,
-      "mean" : 0.0,
-      "sampleStandardDeviation" : 0.0,
-      "outcomeDistribution" : {
-        "COMPLETED" : 227,
-        "REFUSED" : 24,
-        "UNKNOWN" : 19
-      }
-    },
-    "citationLocalization" : {
-      "repetitions" : 3,
-      "mean" : 1.0,
-      "sampleStandardDeviation" : 0.0,
-      "outcomeDistribution" : {
-        "COMPLETED" : 227,
-        "REFUSED" : 24,
-        "UNKNOWN" : 19
-      }
-    },
     "answerableStatusAccuracy" : {
       "repetitions" : 3,
-      "mean" : 0.24444444444444446,
-      "sampleStandardDeviation" : 0.03849001794597504,
+      "mean" : 0.37777777777777777,
+      "sampleStandardDeviation" : 0.03849001794597508,
       "outcomeDistribution" : {
-        "COMPLETED" : 227,
-        "REFUSED" : 24,
-        "UNKNOWN" : 19
+        "UNKNOWN" : 6,
+        "REFUSED" : 31,
+        "COMPLETED" : 233
       }
     },
     "recallAt3" : {
@@ -112,9 +91,9 @@
       "mean" : 1.0,
       "sampleStandardDeviation" : 0.0,
       "outcomeDistribution" : {
-        "COMPLETED" : 227,
-        "REFUSED" : 24,
-        "UNKNOWN" : 19
+        "UNKNOWN" : 6,
+        "REFUSED" : 31,
+        "COMPLETED" : 233
       }
     },
     "hitAt1" : {
@@ -122,9 +101,9 @@
       "mean" : 0.9583333333333334,
       "sampleStandardDeviation" : 0.0,
       "outcomeDistribution" : {
-        "COMPLETED" : 227,
-        "REFUSED" : 24,
-        "UNKNOWN" : 19
+        "UNKNOWN" : 6,
+        "REFUSED" : 31,
+        "COMPLETED" : 233
       }
     },
     "mrrAt3" : {
@@ -132,9 +111,9 @@
       "mean" : 0.9791666666666666,
       "sampleStandardDeviation" : 0.0,
       "outcomeDistribution" : {
-        "COMPLETED" : 227,
-        "REFUSED" : 24,
-        "UNKNOWN" : 19
+        "UNKNOWN" : 6,
+        "REFUSED" : 31,
+        "COMPLETED" : 233
       }
     },
     "refusalAccuracy" : {
@@ -142,11 +121,31 @@
       "mean" : 1.0,
       "sampleStandardDeviation" : 0.0,
       "outcomeDistribution" : {
-        "COMPLETED" : 227,
-        "REFUSED" : 24,
-        "UNKNOWN" : 19
+        "UNKNOWN" : 6,
+        "REFUSED" : 31,
+        "COMPLETED" : 233
+      }
+    },
+    "strictClaimEvidenceSupport" : {
+      "repetitions" : 3,
+      "mean" : 0.4326118326118326,
+      "sampleStandardDeviation" : 0.1331767600760775,
+      "outcomeDistribution" : {
+        "UNKNOWN" : 6,
+        "REFUSED" : 31,
+        "COMPLETED" : 233
+      }
+    },
+    "citationLocalization" : {
+      "repetitions" : 3,
+      "mean" : 0.81582034523211,
+      "sampleStandardDeviation" : 0.034833804870343786,
+      "outcomeDistribution" : {
+        "UNKNOWN" : 6,
+        "REFUSED" : 31,
+        "COMPLETED" : 233
       }
     }
   },
-  "generatedAt" : "2026-11-10T10:56:31.209781400Z"
+  "generatedAt" : "2026-11-10T13:55:44.923758600Z"
 }
