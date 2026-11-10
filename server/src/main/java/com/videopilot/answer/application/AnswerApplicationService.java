@@ -166,7 +166,7 @@ public final class AnswerApplicationService {
                 .toList();
         String prompt = prompt(normalizedQuestion, exposed);
         try {
-            if (budget != null) budget.beforeCall(jobId, "ANSWER", 0);
+            if (budget != null) budget.beforeInteractiveCall(jobId, "ANSWER", 0);
         } catch (ExecutionBudgetExceededException exception) {
             store.fail(answerId, null, "FAILED", "BUDGET_EXHAUSTED",
                     exception.limitVersion() + ':' + exception.reason().name(), now.get());
@@ -190,7 +190,7 @@ public final class AnswerApplicationService {
         }
 
         try {
-            if (budget != null) budget.afterCall(
+            if (budget != null) budget.afterInteractiveCall(
                     jobId, "ANSWER", response.usage().inputTokens(), response.usage().outputTokens(), BigDecimal.ZERO);
         } catch (ExecutionBudgetExceededException exception) {
             store.fail(answerId, callId, "FAILED", "BUDGET_EXHAUSTED",

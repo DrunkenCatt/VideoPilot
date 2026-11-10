@@ -189,7 +189,7 @@ class AnswerApplicationServiceTest {
                 "ASR", "Redis String 可以存储文本。", true)));
         Instant now = Instant.parse("2026-11-07T01:00:00Z");
         ExecutionBudgetPolicy exhausted = new ExecutionBudgetPolicy(ignored -> new ExecutionBudgetStore.Usage(
-                now, Map.of("ANSWER", new ExecutionBudgetStore.OperationUsage(1, 0, 0)),
+                now.minus(Duration.ofHours(2)), Map.of("ANSWER", new ExecutionBudgetStore.OperationUsage(1, 0, 0)),
                 BigDecimal.ZERO, true),
                 new ExecutionLimits("m4-limits-v1", Duration.ofHours(1), Map.of("ANSWER", 1),
                         Map.of("ANSWER", 10L), Map.of("ANSWER", 10L), BigDecimal.ONE), () -> now);

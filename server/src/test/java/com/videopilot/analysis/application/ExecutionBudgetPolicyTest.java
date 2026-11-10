@@ -114,6 +114,41 @@ class ExecutionBudgetPolicyTest {
         policy.checkJob(JOB_ID);
     }
 
+    @Test
+    void interactiveCallsIgnoreAnalysisDeadlineButKeepEveryOtherHardGate() {
+        Instant expired = STARTED.minusSeconds(31);
+        ExecutionBudgetPolicy allowed = policy(usage(expired, Map.of(), 0, 0, "0"));
+
+        allowed.beforeInteractiveCall(JOB_ID, "EMBEDDING", 1);
+        allowed.afterInteractiveCall(JOB_ID);
+        allowed.afterInteractiveCall(JOB_ID, "ANSWER", 1, 1, BigDecimal.ZERO);
+
+        assertThatThrownBy(() -> allowed.beforeCall(JOB_ID, "EMBEDDING", 1))
+                .isInstanceOfSatisfying(ExecutionBudgetExceededException.class,
+                        exception -> assertThat(exception.reason())
+                                .isEqualTo(ExecutionBudgetExceededException.Reason.DEADLINE));
+        assertThatThrownBy(() -> policy(usage(expired, Map.of("ANSWER", 2L), 0, 0, "0"))
+                .beforeInteractiveCall(JOB_ID, "ANSWER", 0))
+                .isInstanceOfSatisfying(ExecutionBudgetExceededException.class,
+                        exception -> assertThat(exception.reason())
+                                .isEqualTo(ExecutionBudgetExceededException.Reason.CALL_COUNT));
+        assertThatThrownBy(() -> policy(usage(expired, Map.of(), 100, 0, "0"))
+                .beforeInteractiveCall(JOB_ID, "ASR", 1))
+                .isInstanceOfSatisfying(ExecutionBudgetExceededException.class,
+                        exception -> assertThat(exception.reason())
+                                .isEqualTo(ExecutionBudgetExceededException.Reason.INPUT_UNITS));
+        assertThatThrownBy(() -> policy(usage(expired, Map.of(), 0, 10, "0"))
+                .afterInteractiveCall(JOB_ID, "ASR", 0, 1, BigDecimal.ZERO))
+                .isInstanceOfSatisfying(ExecutionBudgetExceededException.class,
+                        exception -> assertThat(exception.reason())
+                                .isEqualTo(ExecutionBudgetExceededException.Reason.OUTPUT_UNITS));
+        assertThatThrownBy(() -> policy(usage(expired, Map.of(), 0, 0, "1.01"))
+                .afterInteractiveCall(JOB_ID))
+                .isInstanceOfSatisfying(ExecutionBudgetExceededException.class,
+                        exception -> assertThat(exception.reason())
+                                .isEqualTo(ExecutionBudgetExceededException.Reason.KNOWN_COST));
+    }
+
     private void assertExceeded(
             ExecutionBudgetStore.Usage usage,
             ExecutionBudgetExceededException.Reason reason,

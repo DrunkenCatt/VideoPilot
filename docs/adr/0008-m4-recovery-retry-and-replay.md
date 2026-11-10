@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted（deadline 作用域由 ADR-0012 补充）
 
 ## Date
 

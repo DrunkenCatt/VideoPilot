@@ -80,7 +80,7 @@ Recovery worker 默认每 10 秒扫描一次，批量读取到期的 `RETRY_WAIT
 
 ## 6. 预算、资源池与积压
 
-执行限制版本默认为 `m4-limits-v3`。Job deadline、operation 调用数、已知成本和供应商等待上限由 Job 级硬门控制；输入/输出计量按 ASR、OCR、Embedding、Answer 分别聚合和限额，禁止把毫秒、像素、字符和 Token 直接相加裁决。价格未知显示为 unknown，不得当作 0。`m4-limits-v1/v2` 的历史 Trace 保持原样；自 v2 起 ASR `input_units` 是音频窗口毫秒，`output_units` 是 Unicode 字符数，并额外受默认 1200 字符/分钟的单次输出率硬门约束。
+执行限制版本默认为 `m4-limits-v3`。按 ADR-0012，Job deadline 只约束后台解析、索引、Recovery、Retry 和 Replay；READY 后的同步 Query Embedding 与 Answer 不再因 Job 年龄失败，但仍受原 Job 的 operation 调用数、输入/输出计量、已知成本和供应商等待上限硬门约束。输入/输出计量按 ASR、OCR、Embedding、Answer 分别聚合和限额，禁止把毫秒、像素、字符和 Token 直接相加裁决。价格未知显示为 unknown，不得当作 0。`m4-limits-v1/v2` 的历史 Trace 保持原样；自 v2 起 ASR `input_units` 是音频窗口毫秒，`output_units` 是 Unicode 字符数，并额外受默认 1200 字符/分钟的单次输出率硬门约束。
 
 `asr-v2` 将供应商显式返回的空 `text` 视为合法静音片段并记录 `output_units=0`，对齐前会跳过该片段。只有视频至少存在一个非空转写片段时才能发布；全片静音仍由 `ASR_EMPTY` 硬门拒绝。该版本变更避免短静音尾段让前序有效转写整体失败，同时不放宽无语音视频的发布条件。
 

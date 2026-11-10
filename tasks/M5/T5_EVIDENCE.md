@@ -78,3 +78,12 @@
 - 真实 Qdrant `QdrantVectorIndexAdapterIT` 随机创建 collection、发布向量、按 owner/media/context 查询、删除后从耐久事实重建并再次查询，1/1 通过（31.770 秒），没有走 MySQL 相似度 fallback。
 - 完整后端门为 397 tests、0 failure/error、1 个既有条件 skip，JaCoCo 与 ArchUnit 通过。
 - 浏览器以 `m1-reviewer` 打开 READY Job 和问答区，Console warning/error 为 0。两次最小问答尝试均被既有 `BUDGET_EXHAUSTED` 硬门在外部调用前拒绝；未降低预算门、未产生费用，也未把该拒绝误记为 Qdrant 故障。
+
+## READY 后问答预算期限纠偏
+
+- 数据库复核确认前述拒绝均为 `BUDGET_EXHAUSTED:m4-limits-v3:DEADLINE`：两个 Job 分别约 17 小时和 20 小时，Answer 使用量分别为 18/20 和 0/20，且拒绝前没有新增供应商调用。因此根因不是 API Key 欠费，而是从 `analysis_job.created_at` 起算的 6 小时后台期限被错误用于 READY 后交互问答。
+- ADR-0012 将 deadline 限定为后台解析、索引、Recovery、Retry 和 Replay；READY 后 Query Embedding 与 Answer 仍复用原 Job 的调用数、输入/输出和已知费用硬门，不提高阈值，不新增预算抽象，也不改写历史拒绝记录。
+- RED：`ExecutionBudgetPolicyTest` 新场景先因缺少交互预算入口产生 7 个编译错误。GREEN：`ExecutionBudgetPolicyTest,RetrievalApplicationServiceTest,AnswerApplicationServiceTest` 共 23/23 通过，覆盖过期 Job 可交互、后台仍返回 `DEADLINE`，以及 CALL_COUNT、INPUT_UNITS、OUTPUT_UNITS、KNOWN_COST 继续生效。
+- 后端完整门：`server\\mvnw.cmd test` 共 398 tests、0 failure/error、1 个既有条件 skip，JaCoCo 与 ArchUnit 通过。随后以已通过测试的新 JAR 重建本地 server 容器。
+- Docker 集成门先在隔离的 `videopilot_m5_gate` 数据库执行 90 项：84 项通过、2 项既有条件 skip，4 项因宿主缺少 `ffprobe`、MinIO 健康地址未映射和未向基线测试注入现有供应商 Key 而失败。补齐这些运行前提后，仅重跑失败集合并得到 4/4 通过；临时数据库随每轮删除，既有 `videopilot_browser` 未参与，测试前备份的两份 M3 报告在 finally 中原样恢复。
+- 真实浏览器在创建约 21 小时的 READY `free-media-licenses.webm` Job 上提交最小问题，得到 `ANSWERED` 和两条可跳转 OCR 引用；MySQL 中 `degraded_channels=[]`，Query Embedding 与 Answer 均为 `SUCCEEDED`，分别记录 19 input units，以及 1008 input / 161 output units。页面未显示向量库降级，容器日志没有 ERROR/WARN、`BUDGET_EXHAUSTED` 或 Qdrant 故障。该记录仅作为浏览器 Smoke，不替代冻结 TEST 的效果结论。

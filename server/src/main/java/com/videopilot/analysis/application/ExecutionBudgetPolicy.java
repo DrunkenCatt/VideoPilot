@@ -19,9 +19,17 @@ public final class ExecutionBudgetPolicy {
     }
 
     public void beforeCall(UUID jobId, String operation, long projectedInputUnits) {
+        beforeCall(jobId, operation, projectedInputUnits, true);
+    }
+
+    public void beforeInteractiveCall(UUID jobId, String operation, long projectedInputUnits) {
+        beforeCall(jobId, operation, projectedInputUnits, false);
+    }
+
+    private void beforeCall(UUID jobId, String operation, long projectedInputUnits, boolean enforceDeadline) {
         if (projectedInputUnits < 0) throw new IllegalArgumentException("projected input units cannot be negative");
         ExecutionBudgetStore.Usage usage = store.load(jobId);
-        commonChecks(usage);
+        commonChecks(usage, enforceDeadline);
         Integer maxCalls = limits.maxCallsByOperation().get(operation);
         if (maxCalls == null) throw new IllegalArgumentException("unknown budget operation: " + operation);
         ExecutionBudgetStore.OperationUsage operationUsage = usage.usageByOperation().getOrDefault(
@@ -37,20 +45,35 @@ public final class ExecutionBudgetPolicy {
     }
 
     public void checkJob(UUID jobId) {
-        commonChecks(store.load(jobId));
+        commonChecks(store.load(jobId), true);
     }
 
     public void afterCall(UUID jobId) {
-        commonChecks(store.load(jobId));
+        commonChecks(store.load(jobId), true);
+    }
+
+    public void afterInteractiveCall(UUID jobId) {
+        commonChecks(store.load(jobId), false);
     }
 
     public void afterCall(
             UUID jobId, String operation, long addedInputUnits, long addedOutputUnits, BigDecimal addedKnownCost) {
+        afterCall(jobId, operation, addedInputUnits, addedOutputUnits, addedKnownCost, true);
+    }
+
+    public void afterInteractiveCall(
+            UUID jobId, String operation, long addedInputUnits, long addedOutputUnits, BigDecimal addedKnownCost) {
+        afterCall(jobId, operation, addedInputUnits, addedOutputUnits, addedKnownCost, false);
+    }
+
+    private void afterCall(
+            UUID jobId, String operation, long addedInputUnits, long addedOutputUnits,
+            BigDecimal addedKnownCost, boolean enforceDeadline) {
         if (addedInputUnits < 0 || addedOutputUnits < 0 || addedKnownCost == null || addedKnownCost.signum() < 0) {
             throw new IllegalArgumentException("completed call usage is invalid");
         }
         ExecutionBudgetStore.Usage usage = store.load(jobId);
-        commonChecks(usage);
+        commonChecks(usage, enforceDeadline);
         if (!limits.maxCallsByOperation().containsKey(operation)) {
             throw new IllegalArgumentException("unknown budget operation: " + operation);
         }
@@ -71,8 +94,8 @@ public final class ExecutionBudgetPolicy {
 
     public String version() { return limits.version(); }
 
-    private void commonChecks(ExecutionBudgetStore.Usage usage) {
-        if (!now.get().isBefore(usage.jobCreatedAt().plus(limits.jobDeadline()))) {
+    private void commonChecks(ExecutionBudgetStore.Usage usage, boolean enforceDeadline) {
+        if (enforceDeadline && !now.get().isBefore(usage.jobCreatedAt().plus(limits.jobDeadline()))) {
             exceeded(ExecutionBudgetExceededException.Reason.DEADLINE);
         }
         for (var entry : usage.usageByOperation().entrySet()) {

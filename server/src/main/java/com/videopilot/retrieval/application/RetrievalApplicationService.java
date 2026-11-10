@@ -157,7 +157,7 @@ public final class RetrievalApplicationService {
             return Map.of();
         }
         String fingerprint = sha256(snapshot.indexId() + "|" + embeddingVersion + "|" + query);
-        if (budget != null) budget.beforeCall(snapshot.jobId(), "EMBEDDING", 0);
+        if (budget != null) budget.beforeInteractiveCall(snapshot.jobId(), "EMBEDDING", 0);
         int attempt = store.nextRetrievalEmbeddingAttempt(
                 snapshot.jobId(), "RETRIEVAL_EMBEDDING", embeddingVersion, fingerprint);
         UUID callId = ids.get();
@@ -177,7 +177,7 @@ public final class RetrievalApplicationService {
             Instant completedAt = now.get();
             store.completeRetrievalEmbeddingCall(new VideoIndexStore.RetrievalEmbeddingCompletion(
                     callId, result.inputTokens(), latency(startedAt, completedAt), completedAt));
-            if (budget != null) budget.afterCall(snapshot.jobId());
+            if (budget != null) budget.afterInteractiveCall(snapshot.jobId());
         } catch (EmbeddingException exception) {
             Instant completedAt = now.get();
             store.failEmbedding(new VideoIndexStore.EmbeddingFailure(

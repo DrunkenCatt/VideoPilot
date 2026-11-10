@@ -166,7 +166,7 @@ class RetrievalApplicationServiceTest {
         ExecutionBudgetPolicy budget = mock(ExecutionBudgetPolicy.class);
         org.mockito.Mockito.doThrow(new ExecutionBudgetExceededException(
                 ExecutionBudgetExceededException.Reason.CALL_COUNT, "m4-limits-v1"))
-                .when(budget).beforeCall(JOB_ID, "EMBEDDING", 0);
+                .when(budget).beforeInteractiveCall(JOB_ID, "EMBEDDING", 0);
         RetrievalApplicationService service = new RetrievalApplicationService(
                 store, embeddings, vectors, "SiliconFlow", "BAAI/bge-m3", "embedding-v1",
                 "collection", 2, 50, 1_000, Instant::now, UUID::randomUUID, budget);
