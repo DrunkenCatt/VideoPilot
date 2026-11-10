@@ -307,7 +307,8 @@ public class AnswerPersistenceAdapter implements AnswerStore {
 
     private void add(Map<String, AnswerEvidenceGate.EvidenceSource> target, AnswerEvidenceGate.EvidenceSource value) {
         String key = value.chunkId() + "|" + value.segmentId() + "|" + value.channel();
-        target.putIfAbsent(key, value);
+        target.merge(key, value, (existing, replacement) ->
+                existing.selectable() || !replacement.selectable() ? existing : replacement);
     }
 
     private String ocrText(String value) {

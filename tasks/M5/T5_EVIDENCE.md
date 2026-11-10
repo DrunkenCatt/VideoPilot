@@ -53,3 +53,11 @@
 - 报告展示 Recall、Claim 支持、引用定位、拒答、可回答状态的分子/分母，以及全部执行版本；两个 TEST Run 的 compare 正常计算差值。
 - 导出 Run `0708583a-5c43-4989-ab1c-754d008117c2` 得到 60 个结果，dataset fingerprint 和 execution fingerprint 与页面一致；精确敏感键扫描无命中。
 - 刷新后状态恢复；320×720 下页面无横向溢出且局部数据集导航可滚动；Console warning/error 为 0。验收期间未发起新 Run。
+
+## 正式基线后纠偏：可选证据合并
+
+- 根因：同一 `chunkId/segmentId/channel` 的邻接证据先以 `selectable=false` 放入 Map，随后题目显式指定该 Segment 时，`putIfAbsent` 保留了旧值，导致本应可供模型选择的后续 Segment 仍不可选。
+- RED：真实 MySQL `AnswerPersistenceAdapterIT` 同时指定两个 Segment 时只返回第一个 Segment 的可选 ASR/OCR，第二个 Segment 的 ASR 缺失；断言稳定复现该问题。
+- GREEN：相同证据键合并时只允许 `selectable` 从 false 升级为 true，不改变文本、时间窗、通道或既有可选证据。真实 MySQL 测试 1/1 通过（37.196 秒）。首次启动因本机 Tesseract 配置与本切片无关而阻断，复跑仅关闭不参与该存储测试的 ASR/OCR Bean，没有跳过数据库或目标断言。
+- 完整后端门首次运行时 `FfprobeMediaProbeTest` 在整套测试负载下把两个子进程误判为 2 秒超时；该类随后定向 4/4 通过，再次执行未改阈值的完整门为 394 tests、0 failure/error、1 个既有条件 skip，JaCoCo 与 ArchUnit 通过。
+- 容器重建后使用同一系统账号 `m1-reviewer` 验收评测工作台：冻结数据集、三轮 Run、Trace 与报告均可读取，Console warning/error 为 0；未发起新评测、未产生模型费用。

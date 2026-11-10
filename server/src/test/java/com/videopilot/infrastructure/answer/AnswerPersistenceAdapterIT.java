@@ -61,6 +61,10 @@ class AnswerPersistenceAdapterIT {
                 .contains(FIRST, SECOND);
         assertThat(evidence).filteredOn(AnswerEvidenceGate.EvidenceSource::selectable)
                 .allMatch(item -> item.segmentId().equals(FIRST));
+        assertThat(answers.loadEvidence(owner, JOB, Set.of(CHUNK), Set.of(FIRST, SECOND)))
+                .filteredOn(AnswerEvidenceGate.EvidenceSource::selectable)
+                .extracting(AnswerEvidenceGate.EvidenceSource::segmentId)
+                .containsExactlyInAnyOrder(FIRST, FIRST, SECOND);
         assertThat(answers.loadEvidence(
                 new OwnerId(UUID.randomUUID()), JOB, Set.of(CHUNK), Set.of(FIRST))).isEmpty();
 
