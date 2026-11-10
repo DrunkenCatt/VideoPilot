@@ -176,6 +176,73 @@ class EvaluationBaselineRunnerTest {
     }
 
     @Test
+    void creditsDeterministicParaphrasesWhenAnchorsAndFactContentArePreserved() {
+        RetrievalApplicationService retrieval = mock(RetrievalApplicationService.class);
+        AnswerApplicationService answers = mock(AnswerApplicationService.class);
+        UUID expected = UUID.randomUUID();
+        EvaluationCase evaluationCase = new EvaluationCase(
+                "answer-paraphrase", 1, ANSWER, UUID.randomUUID(), "question", List.of(expected),
+                Answerability.ANSWERABLE,
+                new AnswerScoring(
+                        List.of("教程中的示例书名是《信仰之旅》。", "列出书的性质时，首先点击“添加陈述”。"),
+                        List.of(), List.of("ASR")),
+                null, "APPROVED", 2, "a".repeat(64));
+        var title = new AnswerStore.StoredClaim(UUID.randomUUID(), "教程用《信仰之旅》这本书作为示例。", List.of(
+                new AnswerStore.StoredCitation(UUID.randomUUID(), expected, 0, 1_000, "ASR",
+                        "这个书名呢，是信仰之旅。", "EXACT")));
+        var action = new AnswerStore.StoredClaim(UUID.randomUUID(), "第一步点击“添加陈述”。", List.of(
+                new AnswerStore.StoredCitation(UUID.randomUUID(), expected, 1_000, 2_000, "ASR",
+                        "首先，我们来点击添加陈述，这个属性栏里面就有性质。", "EXACT")));
+        when(answers.ask(
+                org.mockito.ArgumentMatchers.eq(OWNER),
+                org.mockito.ArgumentMatchers.eq(evaluationCase.jobId()),
+                org.mockito.ArgumentMatchers.eq(evaluationCase.question()),
+                org.mockito.ArgumentMatchers.startsWith("eval:"),
+                org.mockito.ArgumentMatchers.any(UUID.class),
+                org.mockito.ArgumentMatchers.eq(evaluationCase.caseId())))
+                .thenReturn(new AnswerStore.StoredAnswer(
+                        1, UUID.randomUUID(), "ANSWERED", evaluationCase.question(), null, List.of(),
+                        "prompt-v1", "model-v1", "embedding-v1", "formula-v1", "chunk-v1",
+                        List.of(title, action), NOW));
+
+        var result = new EvaluationBaselineRunner(retrieval, answers, () -> NOW)
+                .run(OWNER, run(), evaluationCase);
+
+        assertThat(result.supportedClaimCount()).isEqualTo(2);
+    }
+
+    @Test
+    void doesNotCreditTopicallyRelatedTextThatOmitsTheFrozenAnchor() {
+        RetrievalApplicationService retrieval = mock(RetrievalApplicationService.class);
+        AnswerApplicationService answers = mock(AnswerApplicationService.class);
+        UUID expected = UUID.randomUUID();
+        EvaluationCase evaluationCase = new EvaluationCase(
+                "answer-missing-anchor", 1, ANSWER, UUID.randomUUID(), "question", List.of(expected),
+                Answerability.ANSWERABLE,
+                new AnswerScoring(List.of("教程中的示例书名是《信仰之旅》。"), List.of(), List.of("ASR")),
+                null, "APPROVED", 2, "a".repeat(64));
+        var wrongBook = new AnswerStore.StoredClaim(UUID.randomUUID(), "教程使用一本书作为示例。", List.of(
+                new AnswerStore.StoredCitation(UUID.randomUUID(), expected, 0, 1_000, "ASR",
+                        "这里展示了教程中的示例书名。", "EXACT")));
+        when(answers.ask(
+                org.mockito.ArgumentMatchers.eq(OWNER),
+                org.mockito.ArgumentMatchers.eq(evaluationCase.jobId()),
+                org.mockito.ArgumentMatchers.eq(evaluationCase.question()),
+                org.mockito.ArgumentMatchers.startsWith("eval:"),
+                org.mockito.ArgumentMatchers.any(UUID.class),
+                org.mockito.ArgumentMatchers.eq(evaluationCase.caseId())))
+                .thenReturn(new AnswerStore.StoredAnswer(
+                        1, UUID.randomUUID(), "ANSWERED", evaluationCase.question(), null, List.of(),
+                        "prompt-v1", "model-v1", "embedding-v1", "formula-v1", "chunk-v1",
+                        List.of(wrongBook), NOW));
+
+        var result = new EvaluationBaselineRunner(retrieval, answers, () -> NOW)
+                .run(OWNER, run(), evaluationCase);
+
+        assertThat(result.supportedClaimCount()).isZero();
+    }
+
+    @Test
     void doesNotCreditClaimsWhenTheAnswerOmitsAnyRequiredFact() {
         RetrievalApplicationService retrieval = mock(RetrievalApplicationService.class);
         AnswerApplicationService answers = mock(AnswerApplicationService.class);

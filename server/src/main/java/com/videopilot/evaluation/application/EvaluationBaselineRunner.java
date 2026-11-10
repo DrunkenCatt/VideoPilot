@@ -11,15 +11,23 @@ import com.videopilot.evaluation.domain.EvaluationModels.EvaluationRun;
 import com.videopilot.identity.application.OwnerContext;
 import com.videopilot.retrieval.application.RetrievalApplicationService;
 import com.videopilot.retrieval.application.RetrievalException;
+import java.text.Normalizer;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.function.Supplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class EvaluationBaselineRunner {
+
+    private static final double REQUIRED_FACT_CHARACTER_COVERAGE = 0.60;
+    private static final Pattern REQUIRED_ANCHOR = Pattern.compile(
+            "[《“\\\"]([^》”\\\"]{2,})[》”\\\"]|[A-Za-z][A-Za-z0-9._/-]*");
 
     private final RetrievalApplicationService retrieval;
     private final AnswerApplicationService answers;
@@ -115,18 +123,17 @@ public class EvaluationBaselineRunner {
 
     private int supportedClaims(List<AnswerStore.StoredClaim> claims, EvaluationCase evaluationCase) {
         List<String> requiredFacts = evaluationCase.answerScoring().requiredFacts().stream()
-                .map(this::normalize)
-                .filter(value -> !value.isBlank())
+                .filter(value -> !normalize(value).isBlank())
                 .toList();
         if (requiredFacts.isEmpty()) return 0;
         List<AnswerStore.StoredClaim> eligible = claims.stream()
                 .filter(claim -> eligible(claim, evaluationCase))
                 .toList();
         boolean complete = requiredFacts.stream()
-                .allMatch(fact -> eligible.stream().anyMatch(claim -> evidence(claim).contains(fact)));
+                .allMatch(fact -> eligible.stream().anyMatch(claim -> supports(fact, evidence(claim))));
         if (!complete) return 0;
         return (int) eligible.stream()
-                .filter(claim -> requiredFacts.stream().anyMatch(evidence(claim)::contains))
+                .filter(claim -> requiredFacts.stream().anyMatch(fact -> supports(fact, evidence(claim))))
                 .count();
     }
 
@@ -149,7 +156,38 @@ public class EvaluationBaselineRunner {
     }
 
     private String normalize(String value) {
-        return value == null ? "" : value.toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
+        if (value == null) return "";
+        String normalized = Normalizer.normalize(value, Normalizer.Form.NFKC).toLowerCase(Locale.ROOT);
+        StringBuilder result = new StringBuilder(normalized.length());
+        normalized.codePoints().filter(Character::isLetterOrDigit).forEach(result::appendCodePoint);
+        return result.toString();
+    }
+
+    private boolean supports(String requiredFact, String normalizedEvidence) {
+        String normalizedFact = normalize(requiredFact);
+        if (normalizedFact.isBlank()) return false;
+        if (normalizedEvidence.contains(normalizedFact)) return true;
+        if (!requiredAnchors(requiredFact).stream().allMatch(normalizedEvidence::contains)) return false;
+        Set<Integer> factCharacters = characters(normalizedFact);
+        Set<Integer> evidenceCharacters = characters(normalizedEvidence);
+        long covered = factCharacters.stream().filter(evidenceCharacters::contains).count();
+        return (double) covered / factCharacters.size() >= REQUIRED_FACT_CHARACTER_COVERAGE;
+    }
+
+    private Set<String> requiredAnchors(String fact) {
+        Set<String> anchors = new LinkedHashSet<>();
+        Matcher matcher = REQUIRED_ANCHOR.matcher(fact);
+        while (matcher.find()) {
+            String anchor = normalize(matcher.group(1) == null ? matcher.group() : matcher.group(1));
+            if (!anchor.isBlank()) anchors.add(anchor);
+        }
+        return anchors;
+    }
+
+    private Set<Integer> characters(String value) {
+        Set<Integer> result = new HashSet<>();
+        value.codePoints().forEach(result::add);
+        return result;
     }
 
     private CaseResult result(

@@ -7,7 +7,7 @@ M5 T2 在 T1 的 MySQL 评测真源上增加确定性聚合，不引入可插拔
 ## 数据与计分
 
 - 答案题必须声明 `answerability`；`requiredFacts`、`forbiddenClaims`、`allowedChannels` 和 `expectedHits` 只保存在 MySQL，不进入脱敏 API。
-- 严格 Claim 支持要求绑定引用非空、必需事实出现在 Claim/引用证据中、禁止事实不出现在 Claim 中、引用通道允许，并命中冻结的 expected segment。
+- 严格 Claim 支持要求绑定引用非空、必需事实由 Claim/引用证据覆盖、禁止事实不出现在 Claim 中、引用通道允许，并命中冻结的 expected segment。事实覆盖按 ADR-0014 的确定性规则判断：完整规范化子串直接通过；否则所有书名/引号/英文数字锚点必须保留，且 fact 的去重字母数字字符覆盖率至少为 60%。
 - 引用定位按引用 segment 是否命中冻结 expected segment 计数；没有 expected segment 的工程种子允许运行，但以 `MISSING_EXPECTED_HIT` 排除，不伪造分母。
 - MRR 分子是浮点倒数和；空分母的 `value` 为 `null`。每个指标保存 `numerator`、`denominator` 和非零 `exclusions`。
 - `UNKNOWN`、`ERROR`、依赖失败和坏响应保留在 outcome 分布中。它们不会变成正确拒答；无发布 Claim 不进入 Claim 分母。
