@@ -65,12 +65,14 @@ M5 必须补齐数据集/运行身份、dev/test 隔离、双人复核、发布�
 | `Hit@1` | rank=1 的上述检索题 | 同 `Recall@3` 分母 |
 | `MRR@3` | 对 rank 1-3 累加 `1/rank` | 同 `Recall@3` 分母 |
 | 引用定位率 | 引用时间窗合法，且与 required citation 窗或冻结的一段对齐邻域重叠 | 已发布的全部 `CitedEvidence` |
-| 严格 Claim-Evidence 支持率 | Claim 的每个必需事实均由其绑定引用的允许通道/时间窗原文支持，且不包含 forbidden claim | 已发布的全部事实 Claim；无 Claim 的拒答不进入此分母 |
+| 严格 Claim-Evidence 支持率 | 整份答案的每个 required fact 都由至少一个合格 Claim 及其绑定引用覆盖；只有自身覆盖至少一个 required fact、引用通道/时间窗合法且不含 forbidden claim 的 Claim 计入分子；遗漏任一 required fact 时该答案的 Claim 均不计支持 | 已发布的全部事实 Claim；无 Claim 的拒答不进入此分母 |
 | 拒答正确率 | unanswerable 题得到 `REFUSED`，且不是依赖错误伪装 | approved unanswerable 答案题 |
 | 可回答状态命中率 | answerable 题得到 `ANSWERED` | approved answerable 答案题 |
 | 恢复成功率 | M4 冻结可恢复样本最终成功且零重复高成本调用 | 全部预先冻结的可恢复样本 |
 
 `ERROR`、`UNKNOWN`、timeout、坏 JSON 和预算耗尽分别计数，不进入“正确拒答”。价格缺失为 `estimatedCost=null` 和 `priceStatus=UNAVAILABLE`，不记为 0。检索同配置至少 2 次并要求逐题 rank 一致；答案同配置至少 3 次，报告均值、样本标准差（n-1）和逐题 outcome 分布。
+
+2026-11-10 基线后纠偏：原实现错误地要求每个 Claim 分别重复包含题目的全部 required facts，使正常的“一个 Claim 对应一个事实”答案必然记为 0。上述公式明确 required facts 的完整性在整份答案上判断，Claim 自身仍必须绑定合法证据；硬门、分母和精确事实匹配均未降低。
 
 ## 5. 脱敏报告合同
 

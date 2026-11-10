@@ -140,6 +140,73 @@ class EvaluationBaselineRunnerTest {
         assertThat(result.answerId()).isNotNull();
     }
 
+    @Test
+    void scoresRequiredFactsAcrossTheWholeAnswerInsteadOfRequiringEveryFactInEveryClaim() {
+        RetrievalApplicationService retrieval = mock(RetrievalApplicationService.class);
+        AnswerApplicationService answers = mock(AnswerApplicationService.class);
+        UUID expected = UUID.randomUUID();
+        EvaluationCase evaluationCase = new EvaluationCase(
+                "answer-multiple-facts", 1, ANSWER, UUID.randomUUID(), "question", List.of(expected),
+                Answerability.ANSWERABLE,
+                new AnswerScoring(List.of("第一项事实", "第二项事实"), List.of(), List.of("ASR")),
+                null, "APPROVED", 2, "a".repeat(64));
+        var first = new AnswerStore.StoredClaim(UUID.randomUUID(), "第一项事实", List.of(
+                new AnswerStore.StoredCitation(
+                        UUID.randomUUID(), expected, 0, 1_000, "ASR", "第一项事实", "EXACT")));
+        var second = new AnswerStore.StoredClaim(UUID.randomUUID(), "第二项事实", List.of(
+                new AnswerStore.StoredCitation(
+                        UUID.randomUUID(), expected, 1_000, 2_000, "ASR", "第二项事实", "EXACT")));
+        when(answers.ask(
+                org.mockito.ArgumentMatchers.eq(OWNER),
+                org.mockito.ArgumentMatchers.eq(evaluationCase.jobId()),
+                org.mockito.ArgumentMatchers.eq(evaluationCase.question()),
+                org.mockito.ArgumentMatchers.startsWith("eval:"),
+                org.mockito.ArgumentMatchers.any(UUID.class),
+                org.mockito.ArgumentMatchers.eq(evaluationCase.caseId())))
+                .thenReturn(new AnswerStore.StoredAnswer(
+                        1, UUID.randomUUID(), "ANSWERED", evaluationCase.question(), null, List.of(),
+                        "prompt-v1", "model-v1", "embedding-v1", "formula-v1", "chunk-v1",
+                        List.of(first, second), NOW));
+
+        var result = new EvaluationBaselineRunner(retrieval, answers, () -> NOW)
+                .run(OWNER, run(), evaluationCase);
+
+        assertThat(result.claimCount()).isEqualTo(2);
+        assertThat(result.supportedClaimCount()).isEqualTo(2);
+    }
+
+    @Test
+    void doesNotCreditClaimsWhenTheAnswerOmitsAnyRequiredFact() {
+        RetrievalApplicationService retrieval = mock(RetrievalApplicationService.class);
+        AnswerApplicationService answers = mock(AnswerApplicationService.class);
+        UUID expected = UUID.randomUUID();
+        EvaluationCase evaluationCase = new EvaluationCase(
+                "answer-incomplete", 1, ANSWER, UUID.randomUUID(), "question", List.of(expected),
+                Answerability.ANSWERABLE,
+                new AnswerScoring(List.of("已有事实", "遗漏事实"), List.of(), List.of("ASR")),
+                null, "APPROVED", 2, "a".repeat(64));
+        var partial = new AnswerStore.StoredClaim(UUID.randomUUID(), "已有事实", List.of(
+                new AnswerStore.StoredCitation(
+                        UUID.randomUUID(), expected, 0, 1_000, "ASR", "已有事实", "EXACT")));
+        when(answers.ask(
+                org.mockito.ArgumentMatchers.eq(OWNER),
+                org.mockito.ArgumentMatchers.eq(evaluationCase.jobId()),
+                org.mockito.ArgumentMatchers.eq(evaluationCase.question()),
+                org.mockito.ArgumentMatchers.startsWith("eval:"),
+                org.mockito.ArgumentMatchers.any(UUID.class),
+                org.mockito.ArgumentMatchers.eq(evaluationCase.caseId())))
+                .thenReturn(new AnswerStore.StoredAnswer(
+                        1, UUID.randomUUID(), "ANSWERED", evaluationCase.question(), null, List.of(),
+                        "prompt-v1", "model-v1", "embedding-v1", "formula-v1", "chunk-v1",
+                        List.of(partial), NOW));
+
+        var result = new EvaluationBaselineRunner(retrieval, answers, () -> NOW)
+                .run(OWNER, run(), evaluationCase);
+
+        assertThat(result.claimCount()).isEqualTo(1);
+        assertThat(result.supportedClaimCount()).isZero();
+    }
+
     private EvaluationCase evaluationCase(
             com.videopilot.evaluation.domain.EvaluationModels.CaseType type,
             List<UUID> expected) {

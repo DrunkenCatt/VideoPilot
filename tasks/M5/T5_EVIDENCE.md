@@ -61,3 +61,11 @@
 - GREEN：相同证据键合并时只允许 `selectable` 从 false 升级为 true，不改变文本、时间窗、通道或既有可选证据。真实 MySQL 测试 1/1 通过（37.196 秒）。首次启动因本机 Tesseract 配置与本切片无关而阻断，复跑仅关闭不参与该存储测试的 ASR/OCR Bean，没有跳过数据库或目标断言。
 - 完整后端门首次运行时 `FfprobeMediaProbeTest` 在整套测试负载下把两个子进程误判为 2 秒超时；该类随后定向 4/4 通过，再次执行未改阈值的完整门为 394 tests、0 failure/error、1 个既有条件 skip，JaCoCo 与 ArchUnit 通过。
 - 容器重建后使用同一系统账号 `m1-reviewer` 验收评测工作台：冻结数据集、三轮 Run、Trace 与报告均可读取，Console warning/error 为 0；未发起新评测、未产生模型费用。
+
+## 正式基线后纠偏：Claim / required facts 计分
+
+- 根因：旧实现逐个 Claim 检查题目的全部 required facts；正式题通常包含两个事实并由两个 Claim 分别回答，因此即使整份答案完整且每个 Claim 有合法引用，也会得到 `0/2`。
+- 修复语义：先要求整份答案通过合格 Claim 覆盖全部 required facts，再只给自身覆盖至少一个 required fact 的 Claim 计分；任一事实遗漏时整份答案的 Claim 均不计支持。引用不能为空，allowed channel、冻结 Segment 和 forbidden claim 规则保持不变，85% 硬门与分母不变。
+- RED：两个 Claim 分别覆盖两个 required facts 的用例由预期 `2` 得到实际 `0`。GREEN：该用例得到 `2/2`；新增“遗漏一个 required fact”反例保持 `0/1`，防止以局部事实通过完整性门。
+- 定向测试 `EvaluationBaselineRunnerTest,EvaluationReportCalculatorTest` 为 9/9 通过；完整后端门为 396 tests、0 failure/error、1 个既有条件 skip，JaCoCo 与 ArchUnit 通过。
+- 重新打包并重建 Compose server 后，同一系统账号 `m1-reviewer` 可读取评测工作台、冻结 `0.2.0` 和 `strictClaimEvidenceSupport` 报告，Console warning/error 为 0；未重算已发布历史报告，也未发起新外部调用。

@@ -14,6 +14,7 @@ import com.videopilot.retrieval.application.RetrievalException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -105,20 +106,32 @@ public class EvaluationBaselineRunner {
                 .filter(citation -> !evaluationCase.expectedSegmentIds().isEmpty()
                         && evaluationCase.expectedSegmentIds().contains(citation.segmentId()))
                 .count()).sum();
-        int supported = (int) answer.claims().stream()
-                .filter(claim -> supported(claim, evaluationCase)).count();
+        int supported = supportedClaims(answer.claims(), evaluationCase);
         CaseOutcome outcome = "ANSWERED".equals(answer.status())
                 ? CaseOutcome.COMPLETED : CaseOutcome.REFUSED;
         return result(run, evaluationCase, outcome, null, answer.claims().size(), citations,
                 supported, localized, answer.answerId(), startedAt, null);
     }
 
-    private boolean supported(AnswerStore.StoredClaim claim, EvaluationCase evaluationCase) {
+    private int supportedClaims(List<AnswerStore.StoredClaim> claims, EvaluationCase evaluationCase) {
+        List<String> requiredFacts = evaluationCase.answerScoring().requiredFacts().stream()
+                .map(this::normalize)
+                .filter(value -> !value.isBlank())
+                .toList();
+        if (requiredFacts.isEmpty()) return 0;
+        List<AnswerStore.StoredClaim> eligible = claims.stream()
+                .filter(claim -> eligible(claim, evaluationCase))
+                .toList();
+        boolean complete = requiredFacts.stream()
+                .allMatch(fact -> eligible.stream().anyMatch(claim -> evidence(claim).contains(fact)));
+        if (!complete) return 0;
+        return (int) eligible.stream()
+                .filter(claim -> requiredFacts.stream().anyMatch(evidence(claim)::contains))
+                .count();
+    }
+
+    private boolean eligible(AnswerStore.StoredClaim claim, EvaluationCase evaluationCase) {
         if (claim.citations().isEmpty()) return false;
-        String evidence = normalize(claim.text() + " " + claim.citations().stream()
-                .map(AnswerStore.StoredCitation::quote).collect(java.util.stream.Collectors.joining(" ")));
-        boolean facts = evaluationCase.answerScoring().requiredFacts().stream()
-                .allMatch(value -> evidence.contains(normalize(value)));
         boolean forbidden = evaluationCase.answerScoring().forbiddenClaims().stream()
                 .anyMatch(value -> normalize(claim.text()).contains(normalize(value)));
         boolean channels = evaluationCase.answerScoring().allowedChannels().isEmpty()
@@ -127,7 +140,12 @@ public class EvaluationBaselineRunner {
         boolean windows = !evaluationCase.expectedSegmentIds().isEmpty()
                 && claim.citations().stream().allMatch(value ->
                 evaluationCase.expectedSegmentIds().contains(value.segmentId()));
-        return facts && !forbidden && channels && windows;
+        return !forbidden && channels && windows;
+    }
+
+    private String evidence(AnswerStore.StoredClaim claim) {
+        return normalize(claim.text() + " " + claim.citations().stream()
+                .map(AnswerStore.StoredCitation::quote).collect(java.util.stream.Collectors.joining(" ")));
     }
 
     private String normalize(String value) {
