@@ -9,6 +9,10 @@ public interface ExecutionBudgetStore {
 
     Usage load(UUID jobId);
 
+    default Usage loadEvaluationSeries(UUID jobId, UUID evaluationRunId) {
+        return load(jobId);
+    }
+
     record Usage(
             Instant jobCreatedAt,
             Map<String, OperationUsage> usageByOperation,

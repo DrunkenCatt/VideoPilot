@@ -177,6 +177,20 @@ class RetrievalApplicationServiceTest {
         verify(store, never()).startRetrievalEmbeddingCall(any());
     }
 
+    @Test
+    void scopesEvaluationEmbeddingBudgetToTheRunSeries() {
+        UUID evaluationRunId = UUID.randomUUID();
+        ExecutionBudgetPolicy budget = mock(ExecutionBudgetPolicy.class);
+        RetrievalApplicationService service = new RetrievalApplicationService(
+                store, embeddings, vectors, "SiliconFlow", "BAAI/bge-m3", "embedding-v1",
+                "collection", 2, 50, 1_000, Instant::now, UUID::randomUUID, budget);
+
+        service.retrieve(OWNER, JOB_ID, "redis", 2, evaluationRunId, "case-1");
+
+        verify(budget).beforeInteractiveCall(JOB_ID, "EMBEDDING", 0, evaluationRunId);
+        verify(budget).afterInteractiveCall(JOB_ID, evaluationRunId);
+    }
+
     private RetrievalApplicationService service() {
         return new RetrievalApplicationService(
                 store, embeddings, vectors, "SiliconFlow", "BAAI/bge-m3", "siliconflow-bge-m3-1024-v1",

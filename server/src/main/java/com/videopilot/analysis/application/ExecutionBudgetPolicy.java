@@ -23,12 +23,23 @@ public final class ExecutionBudgetPolicy {
     }
 
     public void beforeInteractiveCall(UUID jobId, String operation, long projectedInputUnits) {
-        beforeCall(jobId, operation, projectedInputUnits, false);
+        beforeInteractiveCall(jobId, operation, projectedInputUnits, null);
+    }
+
+    public void beforeInteractiveCall(
+            UUID jobId, String operation, long projectedInputUnits, UUID evaluationRunId) {
+        beforeCall(jobId, operation, projectedInputUnits, false, evaluationRunId);
     }
 
     private void beforeCall(UUID jobId, String operation, long projectedInputUnits, boolean enforceDeadline) {
+        beforeCall(jobId, operation, projectedInputUnits, enforceDeadline, null);
+    }
+
+    private void beforeCall(
+            UUID jobId, String operation, long projectedInputUnits,
+            boolean enforceDeadline, UUID evaluationRunId) {
         if (projectedInputUnits < 0) throw new IllegalArgumentException("projected input units cannot be negative");
-        ExecutionBudgetStore.Usage usage = store.load(jobId);
+        ExecutionBudgetStore.Usage usage = load(jobId, evaluationRunId);
         commonChecks(usage, enforceDeadline);
         Integer maxCalls = limits.maxCallsByOperation().get(operation);
         if (maxCalls == null) throw new IllegalArgumentException("unknown budget operation: " + operation);
@@ -53,7 +64,11 @@ public final class ExecutionBudgetPolicy {
     }
 
     public void afterInteractiveCall(UUID jobId) {
-        commonChecks(store.load(jobId), false);
+        afterInteractiveCall(jobId, null);
+    }
+
+    public void afterInteractiveCall(UUID jobId, UUID evaluationRunId) {
+        commonChecks(load(jobId, evaluationRunId), false);
     }
 
     public void afterCall(
@@ -63,16 +78,28 @@ public final class ExecutionBudgetPolicy {
 
     public void afterInteractiveCall(
             UUID jobId, String operation, long addedInputUnits, long addedOutputUnits, BigDecimal addedKnownCost) {
-        afterCall(jobId, operation, addedInputUnits, addedOutputUnits, addedKnownCost, false);
+        afterInteractiveCall(jobId, operation, addedInputUnits, addedOutputUnits, addedKnownCost, null);
+    }
+
+    public void afterInteractiveCall(
+            UUID jobId, String operation, long addedInputUnits, long addedOutputUnits,
+            BigDecimal addedKnownCost, UUID evaluationRunId) {
+        afterCall(jobId, operation, addedInputUnits, addedOutputUnits, addedKnownCost, false, evaluationRunId);
     }
 
     private void afterCall(
             UUID jobId, String operation, long addedInputUnits, long addedOutputUnits,
             BigDecimal addedKnownCost, boolean enforceDeadline) {
+        afterCall(jobId, operation, addedInputUnits, addedOutputUnits, addedKnownCost, enforceDeadline, null);
+    }
+
+    private void afterCall(
+            UUID jobId, String operation, long addedInputUnits, long addedOutputUnits,
+            BigDecimal addedKnownCost, boolean enforceDeadline, UUID evaluationRunId) {
         if (addedInputUnits < 0 || addedOutputUnits < 0 || addedKnownCost == null || addedKnownCost.signum() < 0) {
             throw new IllegalArgumentException("completed call usage is invalid");
         }
-        ExecutionBudgetStore.Usage usage = store.load(jobId);
+        ExecutionBudgetStore.Usage usage = load(jobId, evaluationRunId);
         commonChecks(usage, enforceDeadline);
         if (!limits.maxCallsByOperation().containsKey(operation)) {
             throw new IllegalArgumentException("unknown budget operation: " + operation);
@@ -93,6 +120,12 @@ public final class ExecutionBudgetPolicy {
     }
 
     public String version() { return limits.version(); }
+
+    private ExecutionBudgetStore.Usage load(UUID jobId, UUID evaluationRunId) {
+        return evaluationRunId == null
+                ? store.load(jobId)
+                : store.loadEvaluationSeries(jobId, evaluationRunId);
+    }
 
     private void commonChecks(ExecutionBudgetStore.Usage usage, boolean enforceDeadline) {
         if (enforceDeadline && !now.get().isBefore(usage.jobCreatedAt().plus(limits.jobDeadline()))) {

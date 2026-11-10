@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 class ExecutionBudgetPolicyTest {
 
     private static final UUID JOB_ID = UUID.fromString("10000000-0000-0000-0000-000000000001");
+    private static final UUID EVALUATION_RUN_ID = UUID.fromString("20000000-0000-0000-0000-000000000001");
     private static final Instant STARTED = Instant.parse("2026-11-07T00:00:00Z");
 
     @Test
@@ -147,6 +148,39 @@ class ExecutionBudgetPolicyTest {
                 .isInstanceOfSatisfying(ExecutionBudgetExceededException.class,
                         exception -> assertThat(exception.reason())
                                 .isEqualTo(ExecutionBudgetExceededException.Reason.KNOWN_COST));
+    }
+
+    @Test
+    void formalEvaluationUsesItsSeriesBudgetInsteadOfHistoricalJobUsage() {
+        ExecutionBudgetStore.Usage exhaustedJob = usage(
+                STARTED, Map.of("ANSWER", 2L), 0, 0, "0");
+        ExecutionBudgetStore.Usage freshSeries = usage(
+                STARTED, Map.of("ANSWER", 1L), 0, 0, "0");
+        ExecutionBudgetStore store = new ExecutionBudgetStore() {
+            @Override
+            public Usage load(UUID jobId) {
+                return exhaustedJob;
+            }
+
+            @Override
+            public Usage loadEvaluationSeries(UUID jobId, UUID evaluationRunId) {
+                assertThat(jobId).isEqualTo(JOB_ID);
+                assertThat(evaluationRunId).isEqualTo(EVALUATION_RUN_ID);
+                return freshSeries;
+            }
+        };
+        ExecutionBudgetPolicy policy = new ExecutionBudgetPolicy(store, new ExecutionLimits(
+                "m4-limits-v1", Duration.ofMinutes(1), Map.of("ANSWER", 2),
+                Map.of("ANSWER", 100L), Map.of("ANSWER", 10L), BigDecimal.ONE),
+                () -> STARTED.plusSeconds(30));
+
+        policy.beforeInteractiveCall(JOB_ID, "ANSWER", 0, EVALUATION_RUN_ID);
+        policy.afterInteractiveCall(JOB_ID, "ANSWER", 0, 1, BigDecimal.ZERO, EVALUATION_RUN_ID);
+
+        assertThatThrownBy(() -> policy.beforeInteractiveCall(JOB_ID, "ANSWER", 0))
+                .isInstanceOfSatisfying(ExecutionBudgetExceededException.class,
+                        exception -> assertThat(exception.reason())
+                                .isEqualTo(ExecutionBudgetExceededException.Reason.CALL_COUNT));
     }
 
     private void assertExceeded(

@@ -157,7 +157,13 @@ public final class RetrievalApplicationService {
             return Map.of();
         }
         String fingerprint = sha256(snapshot.indexId() + "|" + embeddingVersion + "|" + query);
-        if (budget != null) budget.beforeInteractiveCall(snapshot.jobId(), "EMBEDDING", 0);
+        if (budget != null) {
+            if (evaluationRunId == null) {
+                budget.beforeInteractiveCall(snapshot.jobId(), "EMBEDDING", 0);
+            } else {
+                budget.beforeInteractiveCall(snapshot.jobId(), "EMBEDDING", 0, evaluationRunId);
+            }
+        }
         int attempt = store.nextRetrievalEmbeddingAttempt(
                 snapshot.jobId(), "RETRIEVAL_EMBEDDING", embeddingVersion, fingerprint);
         UUID callId = ids.get();
@@ -177,7 +183,13 @@ public final class RetrievalApplicationService {
             Instant completedAt = now.get();
             store.completeRetrievalEmbeddingCall(new VideoIndexStore.RetrievalEmbeddingCompletion(
                     callId, result.inputTokens(), latency(startedAt, completedAt), completedAt));
-            if (budget != null) budget.afterInteractiveCall(snapshot.jobId());
+            if (budget != null) {
+                if (evaluationRunId == null) {
+                    budget.afterInteractiveCall(snapshot.jobId());
+                } else {
+                    budget.afterInteractiveCall(snapshot.jobId(), evaluationRunId);
+                }
+            }
         } catch (EmbeddingException exception) {
             Instant completedAt = now.get();
             store.failEmbedding(new VideoIndexStore.EmbeddingFailure(

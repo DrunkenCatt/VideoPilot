@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted（正式评测的预算聚合作用域由 ADR-0013 补充）
 
 ## Date
 

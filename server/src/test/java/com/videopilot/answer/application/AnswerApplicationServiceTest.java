@@ -209,6 +209,29 @@ class AnswerApplicationServiceTest {
                 org.mockito.ArgumentMatchers.eq("m4-limits-v1:CALL_COUNT"), any());
     }
 
+    @Test
+    void scopesEvaluationAnswerBudgetToTheRunSeries() {
+        UUID evaluationRunId = UUID.randomUUID();
+        ExecutionBudgetPolicy budget = mock(ExecutionBudgetPolicy.class);
+        when(retrieval.retrieve(owner, jobId, "String 是什么？", 5, evaluationRunId, "case-1"))
+                .thenReturn(result(List.of(hit(.85))));
+        when(store.loadEvidence(any(), any(), any(), any())).thenReturn(List.of(
+                new AnswerEvidenceGate.EvidenceSource(
+                        segmentId + "#ASR", chunkId, segmentId, 0, 0, 10_000,
+                        "ASR", "Redis String 可以存储文本。", true)));
+        when(model.generate(any())).thenReturn(new LanguageModelPort.Response(
+                "{\"answerable\":false,\"claims\":[]}", new LanguageModelPort.Usage(10, 5)));
+        service = new AnswerApplicationService(
+                retrieval, model, store, new ObjectMapper(), "SiliconFlow", "model", "prompt",
+                .20, Instant::now, () -> answerId, budget);
+
+        service.ask(owner, jobId, "String 是什么？", "eval-intent", evaluationRunId, "case-1");
+
+        verify(budget).beforeInteractiveCall(jobId, "ANSWER", 0, evaluationRunId);
+        verify(budget).afterInteractiveCall(
+                jobId, "ANSWER", 10, 5, BigDecimal.ZERO, evaluationRunId);
+    }
+
     private RetrievalApplicationService.RetrievalResult result(List<EvidenceHit> hits) {
         return new RetrievalApplicationService.RetrievalResult(
                 "query", RetrievalApplicationService.FORMULA_VERSION, "embedding-v1", "chunk-v1", List.of(), hits);
