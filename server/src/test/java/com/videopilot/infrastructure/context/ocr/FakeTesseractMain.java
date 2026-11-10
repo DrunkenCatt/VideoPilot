@@ -16,7 +16,6 @@ public final class FakeTesseractMain {
             return;
         }
         if (mode.equals("timeout")) {
-            Path.of(args[0]).resolveSibling("child.pid").toFile().deleteOnExit();
             Files.writeString(Path.of(args[0]).resolveSibling("child.pid"), Long.toString(ProcessHandle.current().pid()));
             Thread.sleep(30_000);
             return;

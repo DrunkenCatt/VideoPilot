@@ -248,3 +248,7 @@ TEST 三轮 outcome 总计为 150 `COMPLETED`、27 `REFUSED`、3 `UNKNOWN`；其
 正式命令耗时 13 分 03 秒，并以 `DEV repetition 1 strictClaimEvidenceSupport=0.0 is below 0.85` 退出。按新分阶段合同，TEST 命令未执行，现有三份 TEST 报告仍属于历史候选 `07dfb15`，没有被覆盖。该失败是效果硬门而非工程流程失败；不得降低阈值继续。
 
 恢复 Compose server 后，使用同一系统账号 `m1-reviewer` 在真实应用内浏览器选择冻结 DEV。页面显示最新三个 Run 均为 `COMPLETED 90/90`；展开第一轮报告可见 Recall `72/72`、严格 Claim 支持 `0/7`、引用定位 `7/7`、108 次调用和成本 `UNKNOWN`，执行版本 Commit 为 `d9e1d51`。浏览器 Console warning/error 为 0；验收只读，未创建 Run 或产生额外费用。
+
+## 11. Linux OCR 超时夹具修复
+
+候选 `25759d9` 的容器化完整门在快速层发现既有 OCR 超时夹具存在平台竞态：伪 Tesseract 子进程把 `child.pid` 注册为进程退出时删除，Linux 收到终止信号后会先运行删除钩子，测试因而无法读取 PID 并验证子进程已结束。夹具不再自行删除该文件，统一交由 JUnit `@TempDir` 清理；生产 OCR 超时、终止与重试语义未修改。含 FFmpeg/Tesseract 的 Linux 镜像中定向执行 `TesseractOcrAdapterTest`，8/8 通过且 JaCoCo 门通过。
