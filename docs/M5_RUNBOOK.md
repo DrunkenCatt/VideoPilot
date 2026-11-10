@@ -44,7 +44,7 @@ cd server
   failsafe:integration-test failsafe:verify
 ```
 
-付费运行前临时停止 Compose server，避免其 Evaluation Worker 与夹具竞争领取；MySQL、Redis、RabbitMQ、MinIO 和 Qdrant 保持运行。确认候选 commit、DEV fingerprint 和预算后再显式增加执行开关：
+付费运行前临时停止 Compose server，避免其 Evaluation Worker 与夹具竞争领取；MySQL、Redis、RabbitMQ、MinIO 和 Qdrant 保持运行。确认候选 commit、DEV fingerprint 和预算后，先显式执行 DEV 阶段：
 
 ```powershell
 cd ..
@@ -55,6 +55,16 @@ cd server
   "-Dit.test=M5ReleaseBaselineLocalIT" `
   "-Dm5.release=true" `
   "-Dm5.release.execute=true" `
+  "-Dm5.release.phase=DEV" `
+  "-Dm5.candidate.commit=<candidate-commit>" `
+  failsafe:integration-test failsafe:verify
+
+# 只有 DEV 三轮硬门全部通过后才能执行 TEST；入口会从 MySQL 重新验证。
+.\mvnw.cmd test-compile -Pintegration `
+  "-Dit.test=M5ReleaseBaselineLocalIT" `
+  "-Dm5.release=true" `
+  "-Dm5.release.execute=true" `
+  "-Dm5.release.phase=TEST" `
   "-Dm5.candidate.commit=<candidate-commit>" `
   failsafe:integration-test failsafe:verify
 
@@ -62,7 +72,7 @@ cd ..
 docker compose up -d --build server
 ```
 
-夹具顺序为 DEV 三轮全部完成并通过确定性门，然后才导入 TEST 并运行三轮。任一 repetition 失败立即停止，不继续下一轮。候选 commit 参与幂等键：同一候选重复命令返回原 series，不重复高成本调用；修复后的新候选创建新的 Replay series，旧失败 Run 保留。
+两个阶段不能在一次命令中串行执行。TEST 入口只接受同一候选 commit 的三个已完成 DEV Run，并逐轮重新检查 `Recall@3 >= 85%`、严格 Claim-Evidence 支持率 `>= 85%` 和引用定位率 `>= 95%`；缺失指标也视为失败，在导入或执行 TEST 前停止。任一 repetition 执行失败也立即停止。候选 commit 参与幂等键：同一候选重复命令返回原 series，不重复高成本调用；修复后的新候选创建新的 Replay series，旧失败 Run 保留。
 
 ## 4. 失败恢复
 

@@ -16,7 +16,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
-import java.time.Instant;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -59,7 +58,7 @@ class M5ReleaseBaselineLocalIT {
     private ObjectMapper json;
 
     @Test
-    void runsDevBeforeFirstTestUseAndExportsRedactedReports() throws Exception {
+    void runsOneExplicitPhaseAndExportsRedactedReports() throws Exception {
         String candidate = System.getProperty("m5.candidate.commit");
         assertThat(candidate).as("-Dm5.candidate.commit must identify the frozen candidate").isNotBlank();
         assertThat(candidate).matches("[a-f0-9]{7,40}");
@@ -80,16 +79,30 @@ class M5ReleaseBaselineLocalIT {
         EvaluationDataset dev = importDataset(owner, loader, repository, local, "dev", jobs, segments);
         assertThat(dev.fingerprint()).isEqualTo("98667e464bd7099736b91c32ee2ca1013df3d330c7d136bc3a7777be9e8c31ca");
         if (!Boolean.getBoolean("m5.release.execute")) return;
-        List<EvaluationRun> devRuns = runSeries(owner, dev, candidate, "m5-release-v0.2.0-dev-" + candidate);
+        String phase = System.getProperty("m5.release.phase", "").trim().toUpperCase(java.util.Locale.ROOT);
+        assertThat(phase).as("-Dm5.release.phase must be DEV or TEST when execution is enabled")
+                .isIn("DEV", "TEST");
+        String devIdempotencyKey = "m5-release-v0.2.0-dev-" + candidate;
+        if ("DEV".equals(phase)) {
+            List<EvaluationRun> devRuns = runSeries(owner, dev, candidate, devIdempotencyKey);
+            assertThat(devRuns).allMatch(run -> run.status() == RunStatus.COMPLETED);
+            writeReports(owner, devRuns, reports, "dev");
+            assertGatePassed(owner, "DEV", devRuns);
+            return;
+        }
+
+        List<EvaluationRun> devRuns = evaluations.listRuns(owner, dev.datasetId()).stream()
+                .filter(run -> devIdempotencyKey.equals(run.idempotencyKey()))
+                .sorted(java.util.Comparator.comparingInt(EvaluationRun::repetitionIndex))
+                .toList();
         assertThat(devRuns).allMatch(run -> run.status() == RunStatus.COMPLETED);
-        writeReports(owner, devRuns, reports, "dev");
+        assertGatePassed(owner, "DEV", devRuns);
 
         EvaluationDataset test = importDataset(owner, loader, repository, local, "test", jobs, segments);
-        assertThat(test.createdAt()).isAfterOrEqualTo(devRuns.stream()
-                .map(EvaluationRun::completedAt).max(Instant::compareTo).orElseThrow());
         List<EvaluationRun> testRuns = runSeries(owner, test, candidate, "m5-release-v0.2.0-test-" + candidate);
         assertThat(testRuns).allMatch(run -> run.status() == RunStatus.COMPLETED);
         writeReports(owner, testRuns, reports, "test");
+        assertGatePassed(owner, "TEST", testRuns);
     }
 
     private EvaluationDataset importDataset(
@@ -137,6 +150,12 @@ class M5ReleaseBaselineLocalIT {
             Path path = reports.resolve("m5-v0.2.0-" + split + "-r" + run.repetitionIndex() + ".json");
             json.writerWithDefaultPrettyPrinter().writeValue(path.toFile(), evaluations.getReport(owner, run.runId()));
         }
+    }
+
+    private void assertGatePassed(OwnerContext owner, String split, List<EvaluationRun> runs) {
+        M5ReleaseGate.assertPassed(split, runs.stream()
+                .map(run -> evaluations.getReport(owner, run.runId()).metrics())
+                .toList());
     }
 
     private Map<String, Source> loadSources() {

@@ -87,3 +87,10 @@
 - 后端完整门：`server\\mvnw.cmd test` 共 398 tests、0 failure/error、1 个既有条件 skip，JaCoCo 与 ArchUnit 通过。随后以已通过测试的新 JAR 重建本地 server 容器。
 - Docker 集成门先在隔离的 `videopilot_m5_gate` 数据库执行 90 项：84 项通过、2 项既有条件 skip，4 项因宿主缺少 `ffprobe`、MinIO 健康地址未映射和未向基线测试注入现有供应商 Key 而失败。补齐这些运行前提后，仅重跑失败集合并得到 4/4 通过；临时数据库随每轮删除，既有 `videopilot_browser` 未参与，测试前备份的两份 M3 报告在 finally 中原样恢复。
 - 真实浏览器在创建约 21 小时的 READY `free-media-licenses.webm` Job 上提交最小问题，得到 `ANSWERED` 和两条可跳转 OCR 引用；MySQL 中 `degraded_channels=[]`，Query Embedding 与 Answer 均为 `SUCCEEDED`，分别记录 19 input units，以及 1008 input / 161 output units。页面未显示向量库降级，容器日志没有 ERROR/WARN、`BUDGET_EXHAUSTED` 或 Qdrant 故障。该记录仅作为浏览器 Smoke，不替代冻结 TEST 的效果结论。
+
+## 候选预算隔离与分阶段硬门
+
+- ADR-0013 将正式评测调用按“同一 `series_id` + 同一 AnalysisJob”聚合。三次 repetition 共享原 `m4-limits-v3` 数值门，不同候选、历史人工问答和旧系列不再互相消耗；普通 READY 查询仍按 Job 聚合，历史记录不清零、不改写。
+- RED 首先证明现有预算接口和 JDBC 聚合不认识评测系列；GREEN 覆盖历史 Job 已耗尽但新系列可用、普通交互仍被拦截、同系列跨 repetition 合并，以及其他系列和普通调用被排除。真实 MySQL `JdbcExecutionBudgetStoreIT` 2/2 通过。
+- 正式入口改为显式 `m5.release.phase=DEV|TEST`。DEV 完成三轮后逐轮检查 Recall@3、严格 Claim 支持和引用定位三项门；TEST 入口从 MySQL 重新读取同一候选的三个 DEV Run，任何 Run/指标缺失或低于门槛时，在 TEST 导入和调用前停止。
+- `M5ReleaseGateTest` 2/2 通过；不付费的 `M5ReleaseBaselineLocalIT` 预检 1/1 通过，确认五条来源、冻结 DEV fingerprint 和宿主机依赖可读取，外部模型调用为 0。
