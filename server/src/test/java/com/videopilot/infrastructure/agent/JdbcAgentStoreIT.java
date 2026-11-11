@@ -3,6 +3,7 @@ package com.videopilot.infrastructure.agent;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.videopilot.agent.application.AgentException;
 import com.videopilot.agent.domain.AgentModels.AgentBudget;
 import com.videopilot.agent.domain.AgentModels.AgentRun;
@@ -12,6 +13,7 @@ import com.videopilot.agent.domain.AgentModels.RunStatus;
 import com.videopilot.agent.domain.AgentModels.ToolCall;
 import com.videopilot.agent.domain.AgentModels.ToolCallStatus;
 import com.videopilot.identity.domain.OwnerId;
+import com.videopilot.infrastructure.web.AgentController;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
@@ -49,6 +51,12 @@ class JdbcAgentStoreIT {
     @Autowired
     private JdbcClient jdbc;
 
+    @Autowired
+    private ObjectMapper json;
+
+    @Autowired
+    private AgentController controller;
+
     @BeforeEach
     void setUp() {
         jdbc.sql("""
@@ -80,6 +88,7 @@ class JdbcAgentStoreIT {
 
     @Test
     void persistsIdempotentRunAndAdvancesOnlyWithLeaseAndVersionCas() {
+        assertThat(controller).isNotNull();
         AgentRun requested = run("intent-1", "c".repeat(64));
         assertThat(store.ownsReadyJob(owner, jobId)).isTrue();
         assertThat(store.ownsReadyJob(new OwnerId(UUID.randomUUID()), jobId)).isFalse();
@@ -93,6 +102,8 @@ class JdbcAgentStoreIT {
                 "lease-000000000000000000000000000001", now.plusSeconds(60), now).orElseThrow();
         assertThat(claimed.run().status()).isEqualTo(RunStatus.RUNNING);
         assertThat(claimed.run().version()).isEqualTo(1);
+        assertThat(store.claimNext(
+                "lease-duplicate-worker-0000000000001", now.plusSeconds(60), now)).isEmpty();
 
         UUID callId = UUID.randomUUID();
         ToolCall intent = new ToolCall(
@@ -135,10 +146,17 @@ class JdbcAgentStoreIT {
                 "lease-000000000000000000000000000001", runId, callVersion,
                 completed, step, false);
 
-        var reclaimed = store.claimNext(
+        JdbcAgentStore restartedStore = new JdbcAgentStore(jdbc, json);
+        var reclaimed = restartedStore.claimNext(
                 "lease-000000000000000000000000000002", now.plusSeconds(61), now.plusSeconds(1))
                 .orElseThrow();
-        store.terminate("lease-000000000000000000000000000002", runId, reclaimed.run().version(),
+        assertThat(restartedStore.findTrace(owner, runId).orElseThrow().steps()).containsExactly(step);
+        assertThatThrownBy(() -> restartedStore.beginToolCall(
+                "lease-000000000000000000000000000002", runId, reclaimed.run().version(), intent))
+                .isInstanceOf(AgentException.class)
+                .extracting(value -> ((AgentException) value).reason())
+                .isEqualTo(AgentException.Reason.CONFLICT);
+        restartedStore.terminate("lease-000000000000000000000000000002", runId, reclaimed.run().version(),
                 RunStatus.COMPLETED, "COMPLETED", now.plusSeconds(1));
 
         var trace = store.findTrace(owner, runId).orElseThrow();

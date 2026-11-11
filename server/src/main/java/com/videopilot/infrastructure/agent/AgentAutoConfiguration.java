@@ -9,6 +9,7 @@ import com.videopilot.agent.port.AgentPolicy;
 import com.videopilot.answer.application.AnswerApplicationService;
 import com.videopilot.context.application.VideoContextQueryApplicationService;
 import com.videopilot.retrieval.application.RetrievalApplicationService;
+import com.videopilot.infrastructure.web.AgentController;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
@@ -17,6 +18,7 @@ import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -59,6 +61,12 @@ public class AgentAutoConfiguration {
                         6, 2, 12_000, 6_000, new BigDecimal("1.00"),
                         clock.instant().plus(Duration.ofMinutes(3))),
                 clock::instant, UUID::randomUUID, policy, retrieval, contexts, answers);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    AgentController agentController(AgentApplicationService agents) {
+        return new AgentController(agents);
     }
 
     @Bean

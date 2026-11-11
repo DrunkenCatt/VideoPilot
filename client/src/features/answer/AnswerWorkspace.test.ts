@@ -2,12 +2,14 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type {
+  AgentRun,
   AnalysisJob,
   AnswerPageResponse,
   AnswerResponse,
   CitedEvidence,
   Session,
 } from '../../api/contracts'
+import type { AgentsApi } from '../../api/agents'
 import type { AnswersApi } from '../../api/answers'
 import { ApiClientError } from '../../api/session'
 import AnswerWorkspace from './AnswerWorkspace.vue'
@@ -67,9 +69,132 @@ function answersApi(overrides: Partial<AnswersApi> = {}): AnswersApi {
   }
 }
 
-afterEach(() => vi.useRealTimers())
+function run(overrides: Partial<AgentRun> = {}): AgentRun {
+  return {
+    runId: '80000000-0000-0000-0000-000000000008' as AgentRun['runId'],
+    jobId: job.jobId,
+    goal: answered.question,
+    status: 'REQUESTED',
+    versions: {
+      policyVersion: 'agent-policy-v1', promptVersion: 'prompt-v1', modelVersion: 'model-v1',
+      embeddingVersion: 'embedding-v1', retrievalFormulaVersion: 'formula-v1',
+      evidenceGateVersion: 'gate-v1', limitsVersion: 'limits-v1',
+    },
+    budget: {
+      maxSteps: 6, maxAnswerAttempts: 2, maxInputTokens: 12_000, maxOutputTokens: 6_000,
+      maxKnownCost: 1, deadlineAt: '2026-11-11T09:05:00Z',
+    },
+    usage: { steps: 0, answerAttempts: 0, inputTokens: 0, outputTokens: 0, knownCost: 0, unknownCostCalls: 0 },
+    terminationReason: null,
+    createdAt: '2026-11-11T09:00:00Z',
+    completedAt: null,
+    steps: [],
+    toolCalls: [],
+    ...overrides,
+  }
+}
+
+function agentsApi(overrides: Partial<AgentsApi> = {}): AgentsApi {
+  return {
+    create: vi.fn().mockResolvedValue(run()),
+    get: vi.fn().mockResolvedValue(run({ status: 'COMPLETED', terminationReason: 'COMPLETED' })),
+    ...overrides,
+  }
+}
+
+afterEach(() => {
+  vi.useRealTimers()
+  globalThis.history.replaceState(null, '', '/')
+})
 
 describe('AnswerWorkspace', () => {
+  it('keeps the experimental Agent entry absent by default', async () => {
+    const wrapper = mount(AnswerWorkspace, { props: { job, csrfToken: session.csrfToken, api: answersApi() } })
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="agent-toggle"]').exists()).toBe(false)
+  })
+
+  it('polls an enabled Agent run and reuses the existing verified answer list', async () => {
+    vi.useFakeTimers()
+    const agentApi = agentsApi()
+    const api = answersApi({
+      list: vi.fn()
+        .mockResolvedValueOnce(page())
+        .mockResolvedValueOnce(page([answered])),
+    })
+    const wrapper = mount(AnswerWorkspace, {
+      props: {
+        job, csrfToken: session.csrfToken, api, agentApi,
+        agentAvailable: true, agentPollMs: 1,
+      },
+    })
+    await flushPromises()
+    await wrapper.get('[data-test="agent-toggle"]').setValue(true)
+    await wrapper.get('[data-test="answer-question"]').setValue(answered.question)
+    await wrapper.get('[data-test="ask-form"]').trigger('submit')
+    await vi.advanceTimersByTimeAsync(1)
+    await flushPromises()
+
+    expect(agentApi.create).toHaveBeenCalledWith(job.jobId, answered.question, expect.any(String), session.csrfToken)
+    expect(agentApi.get).toHaveBeenCalledTimes(1)
+    expect(wrapper.get('[data-test="agent-termination"]').text()).toContain('确定性证据门')
+    expect(wrapper.get('[data-test="answer-claim"]').text()).toContain('String 可以保存')
+  })
+
+  it('shows unknown cost and clarification without exposing parameters or raw responses', async () => {
+    const clarified = run({
+      status: 'REFUSED',
+      terminationReason: 'NEEDS_CLARIFICATION',
+      usage: { steps: 1, answerAttempts: 0, inputTokens: 12, outputTokens: 0, knownCost: 0, unknownCostCalls: 1 },
+      steps: [{
+        stepNumber: 1, action: 'RETRIEVE', observationSummary: 'EVIDENCE:none',
+        resultReference: null, completedAt: '2026-11-11T09:00:01Z',
+      }],
+      toolCalls: [{
+        toolCallId: '90000000-0000-0000-0000-000000000008', stepNumber: 1,
+        toolName: 'RETRIEVE', status: 'UNKNOWN', parameterSummary: 'SECRET_PROMPT',
+        observationSummary: 'UNKNOWN_OUTCOME', resultReference: null, latencyMs: 10,
+        startedAt: '2026-11-11T09:00:00Z', completedAt: '2026-11-11T09:00:01Z',
+      }],
+    })
+    const wrapper = mount(AnswerWorkspace, {
+      props: {
+        job, csrfToken: session.csrfToken, api: answersApi(),
+        agentApi: agentsApi({ create: vi.fn().mockResolvedValue(clarified) }), agentAvailable: true,
+      },
+    })
+    await flushPromises()
+    await wrapper.get('[data-test="agent-toggle"]').setValue(true)
+    await wrapper.get('[data-test="answer-question"]').setValue('为什么？')
+    await wrapper.get('[data-test="ask-form"]').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="agent-termination"]').text()).toContain('补充更具体')
+    expect(wrapper.get('[data-test="agent-budget"]').text()).toContain('未知费用调用 1 次')
+    expect(wrapper.get('[data-test="agent-trace"]').text()).toContain('不会自动重放')
+    expect(wrapper.text()).not.toContain('SECRET_PROMPT')
+  })
+
+  it('reloads the persisted Agent trace referenced by the page URL', async () => {
+    const completed = run({
+      status: 'REFUSED',
+      terminationReason: 'NO_SUFFICIENT_EVIDENCE',
+      usage: { steps: 1, answerAttempts: 0, inputTokens: 9, outputTokens: 0, knownCost: 0, unknownCostCalls: 1 },
+    })
+    globalThis.history.replaceState(null, '', `/?agentRun=${completed.runId}`)
+    const agentApi = agentsApi({ get: vi.fn().mockResolvedValue(completed) })
+
+    const wrapper = mount(AnswerWorkspace, {
+      props: { job, csrfToken: session.csrfToken, api: answersApi(), agentApi, agentAvailable: true },
+    })
+    await flushPromises()
+
+    expect(agentApi.get).toHaveBeenCalledWith(completed.runId)
+    expect(wrapper.get('[data-test="agent-run"]').text()).toContain('视频证据不足')
+    expect(wrapper.get('[data-test="agent-budget"]').text()).toContain('未知费用调用 1 次')
+  })
+
   it('restores published claims and emits a keyboard-operable citation seek', async () => {
     const api = answersApi({ list: vi.fn().mockResolvedValue(page([answered])) })
     const wrapper = mount(AnswerWorkspace, { props: { job, csrfToken: session.csrfToken, api } })
@@ -178,6 +303,37 @@ describe('AnswerWorkspace', () => {
 
     expect(wrapper.find('[data-test="answer-claim"]').exists()).toBe(false)
     expect(api.list).toHaveBeenLastCalledWith(nextJob.jobId)
+  })
+
+  it('does not let a late Agent poll overwrite the selected job or replay URL', async () => {
+    vi.useFakeTimers()
+    let resolve!: (value: AgentRun) => void
+    const pending = new Promise<AgentRun>((done) => { resolve = done })
+    const agentApi = agentsApi({ get: vi.fn().mockReturnValue(pending) })
+    const wrapper = mount(AnswerWorkspace, {
+      props: {
+        job, csrfToken: session.csrfToken, api: answersApi(), agentApi,
+        agentAvailable: true, agentPollMs: 1,
+      },
+    })
+    await flushPromises()
+    await wrapper.get('[data-test="agent-toggle"]').setValue(true)
+    await wrapper.get('[data-test="answer-question"]').setValue(answered.question)
+    await wrapper.get('[data-test="ask-form"]').trigger('submit')
+    await vi.advanceTimersByTimeAsync(1)
+    await flushPromises()
+
+    const nextJob = {
+      ...job,
+      jobId: '10000000-0000-0000-0000-000000000009' as AnalysisJob['jobId'],
+    }
+    await wrapper.setProps({ job: nextJob })
+    await flushPromises()
+    resolve(run({ status: 'FAILED', terminationReason: 'UNKNOWN_COST' }))
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="agent-run"]').exists()).toBe(false)
+    expect(globalThis.location.search).not.toContain('agentRun=')
   })
 
   it('does not read or submit answers before the job is ready', async () => {

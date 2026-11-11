@@ -235,6 +235,24 @@ class AgentLoopApplicationServiceTest {
         verify(store, never()).beginToolCall(any(), any(), any(Long.class), any());
     }
 
+    @Test
+    void unknownRecordedCostDoesNotBlockATerminalDecisionThatMakesNoFurtherCall() {
+        AgentTrace trace = trace(run(
+                1, 0, 10, 0, BigDecimal.ZERO, 1, NOW.plusSeconds(180)), List.of(new AgentStep(
+                runId, 1, "RETRIEVE", "EVIDENCE:none", null, NOW)));
+        claimed(trace);
+        when(policy.next(trace)).thenReturn(AgentPolicy.Decision.terminal(
+                AgentPolicy.Action.NEEDS_CLARIFICATION, "NEEDS_CLARIFICATION"));
+
+        assertThat(service.processNext()).isTrue();
+
+        verify(store).terminate(any(), eq(runId), eq(1L), eq(RunStatus.REFUSED),
+                eq("NEEDS_CLARIFICATION"), eq(NOW));
+        verify(store, never()).beginToolCall(any(), any(), any(Long.class), any());
+        verify(retrieval, never()).retrieve(any(), any(), any(), any(Integer.class));
+        verify(answers, never()).ask(any(), any(), any(), any(), any());
+    }
+
     private void claimed(AgentTrace trace) {
         when(store.claimNext(any(), any(), eq(NOW)))
                 .thenReturn(Optional.of(new ClaimedRun(ownerId, trace.run())));

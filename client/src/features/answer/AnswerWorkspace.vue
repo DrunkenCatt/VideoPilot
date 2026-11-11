@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 
+import { createAgentsApi, type AgentsApi } from '../../api/agents'
 import { createAnswersApi, type AnswersApi } from '../../api/answers'
 import type {
+  AgentRun,
+  AgentRunId,
   AnalysisJob,
   AnswerResponse,
   CitedEvidence,
@@ -15,9 +18,15 @@ const props = withDefaults(defineProps<{
   job: AnalysisJob
   csrfToken: string
   api?: AnswersApi
+  agentApi?: AgentsApi
+  agentAvailable?: boolean
+  agentPollMs?: number
   timeoutMs?: number
 }>(), {
   api: () => createAnswersApi(),
+  agentApi: () => createAgentsApi(),
+  agentAvailable: import.meta.env.VITE_AGENT_ENABLED === 'true',
+  agentPollMs: 1_000,
   timeoutMs: 35_000,
 })
 const emit = defineEmits<{
@@ -29,10 +38,31 @@ const answers = ref<AnswerResponse[]>([])
 const question = ref('')
 const loading = ref(false)
 const submitting = ref(false)
+const useAgent = ref(false)
+const agentRun = ref<AgentRun | null>(null)
 const errorMessage = ref('')
 let revision = 0
 let idempotencyKey: string | null = null
 let requestController: globalThis.AbortController | null = null
+let pollTimer: ReturnType<typeof globalThis.setTimeout> | null = null
+
+const terminalAgentStatuses = new Set<AgentRun['status']>(['COMPLETED', 'REFUSED', 'FAILED'])
+const agentRunQueryParameter = 'agentRun'
+
+const terminationLabels: Record<string, string> = {
+  COMPLETED: '已完成并通过确定性证据门。',
+  NEEDS_CLARIFICATION: '需要补充更具体的问题后再运行。',
+  NO_SUFFICIENT_EVIDENCE: '视频证据不足，Agent 已稳定拒答。',
+  OWNER_OR_JOB_REJECTED: '当前账号无权访问该任务，或任务尚未就绪。',
+  STEP_BUDGET_EXHAUSTED: '步骤预算已用尽。',
+  DEADLINE_EXCEEDED: '运行时间预算已用尽。',
+  INPUT_TOKEN_BUDGET_EXHAUSTED: '输入 Token 预算已用尽。',
+  OUTPUT_TOKEN_BUDGET_EXHAUSTED: '输出 Token 预算已用尽。',
+  COST_BUDGET_EXHAUSTED: '已知费用预算已用尽。',
+  UNKNOWN_COST: '存在无法确定费用的调用，已停止继续执行。',
+  ANSWER_ATTEMPT_BUDGET_EXHAUSTED: '答案修复次数已用尽。',
+  UNKNOWN_OUTCOME: '上一次高成本调用结果未知，未自动重放。',
+}
 
 const refusalLabels: Record<RefusalReason, string> = {
   NO_SUFFICIENT_EVIDENCE: '视频证据不足，无法可靠回答。',
@@ -78,11 +108,61 @@ function publish(answer: AnswerResponse) {
   else answers.value.unshift(answer)
 }
 
+function waitForPoll(): Promise<void> {
+  return new Promise((resolve) => {
+    pollTimer = globalThis.setTimeout(resolve, props.agentPollMs)
+  })
+}
+
+function rememberedAgentRunId(): AgentRunId | null {
+  const value = new globalThis.URL(globalThis.location.href).searchParams.get(agentRunQueryParameter)
+  return value ? value as AgentRunId : null
+}
+
+function rememberAgentRun(run: AgentRun) {
+  agentRun.value = run
+  const url = new globalThis.URL(globalThis.location.href)
+  url.searchParams.set(agentRunQueryParameter, run.runId)
+  globalThis.history.replaceState(globalThis.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+}
+
+function forgetAgentRun() {
+  const url = new globalThis.URL(globalThis.location.href)
+  url.searchParams.delete(agentRunQueryParameter)
+  globalThis.history.replaceState(globalThis.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+}
+
+async function restoreAnswers(currentRevision: number, jobId: AnalysisJob['jobId']) {
+  const page = await props.api.list(jobId)
+  if (currentRevision === revision && props.job.jobId === jobId) answers.value = page.data
+}
+
+async function pollAgent(initial: AgentRun, currentRevision: number, jobId: AnalysisJob['jobId']) {
+  if (currentRevision !== revision || props.job.jobId !== jobId) return
+  let current = initial
+  rememberAgentRun(current)
+  while (!terminalAgentStatuses.has(current.status)) {
+    if (currentRevision !== revision || props.job.jobId !== jobId) return
+    await waitForPoll()
+    if (currentRevision !== revision || props.job.jobId !== jobId) return
+    current = await props.agentApi.get(current.runId)
+    if (currentRevision !== revision || props.job.jobId !== jobId) return
+    rememberAgentRun(current)
+  }
+  if (current.status === 'COMPLETED' || current.status === 'REFUSED') {
+    await restoreAnswers(currentRevision, jobId)
+  }
+}
+
 async function load() {
   const currentRevision = ++revision
   requestController?.abort()
   requestController = null
+  if (pollTimer !== null) globalThis.clearTimeout(pollTimer)
+  pollTimer = null
   answers.value = []
+  agentRun.value = null
+  useAgent.value = false
   question.value = ''
   idempotencyKey = null
   errorMessage.value = ''
@@ -93,6 +173,12 @@ async function load() {
   try {
     const page = await props.api.list(props.job.jobId)
     if (currentRevision === revision) answers.value = page.data
+    const runId = props.agentAvailable ? rememberedAgentRunId() : null
+    if (runId && currentRevision === revision) {
+      const persisted = await props.agentApi.get(runId)
+      if (persisted.jobId === props.job.jobId) await pollAgent(persisted, currentRevision, props.job.jobId)
+      else forgetAgentRun()
+    }
   } catch (error) {
     if (currentRevision === revision) handleError(error)
   } finally {
@@ -112,15 +198,21 @@ async function submit() {
   requestController = controller
   const timeout = globalThis.setTimeout(() => controller.abort(), props.timeoutMs)
   try {
-    const answer = await props.api.ask(
-      jobId,
-      { question: normalized },
-      idempotencyKey,
-      props.csrfToken,
-      controller.signal,
-    )
+    if (props.agentAvailable && useAgent.value) {
+      const run = await props.agentApi.create(jobId, normalized, idempotencyKey, props.csrfToken)
+      await pollAgent(run, currentRevision, jobId)
+    } else {
+      const answer = await props.api.ask(
+        jobId,
+        { question: normalized },
+        idempotencyKey,
+        props.csrfToken,
+        controller.signal,
+      )
+      if (currentRevision !== revision || props.job.jobId !== jobId) return
+      publish(answer)
+    }
     if (currentRevision !== revision || props.job.jobId !== jobId) return
-    publish(answer)
     question.value = ''
     idempotencyKey = null
   } catch (error) {
@@ -136,6 +228,10 @@ watch(question, () => {
   if (!submitting.value) idempotencyKey = null
 })
 watch(() => [props.job.jobId, props.job.status] as const, load, { immediate: true })
+onBeforeUnmount(() => {
+  requestController?.abort()
+  if (pollTimer !== null) globalThis.clearTimeout(pollTimer)
+})
 </script>
 
 <template>
@@ -181,16 +277,87 @@ watch(() => [props.job.jobId, props.job.status] as const, load, { immediate: tru
           />
         </label>
         <div class="answer-form__actions">
-          <small>{{ question.trim().length }} / 1000</small>
+          <div>
+            <small>{{ question.trim().length }} / 1000</small>
+            <label
+              v-if="agentAvailable"
+              class="agent-toggle"
+            >
+              <input
+                v-model="useAgent"
+                data-test="agent-toggle"
+                type="checkbox"
+                :disabled="submitting"
+              >
+              实验 Agent（默认关闭）
+            </label>
+          </div>
           <button
             data-test="ask-submit"
             type="submit"
             :disabled="submitting || !question.trim()"
           >
-            {{ submitting ? '正在核验…' : '提交问题' }}
+            {{ submitting ? '正在核验…' : useAgent ? '启动 Agent' : '提交问题' }}
           </button>
         </div>
       </form>
+
+      <section
+        v-if="agentRun"
+        class="agent-run"
+        data-test="agent-run"
+        aria-labelledby="agent-run-title"
+      >
+        <header>
+          <div>
+            <p class="section-index">
+              EXPERIMENTAL TRACE
+            </p>
+            <h4 id="agent-run-title">
+              Agent 运行回放
+            </h4>
+          </div>
+          <strong :data-status="agentRun.status">{{ agentRun.status }}</strong>
+        </header>
+        <p
+          v-if="agentRun.terminationReason"
+          class="agent-termination"
+          data-test="agent-termination"
+        >
+          {{ terminationLabels[agentRun.terminationReason] ?? `运行已终止：${agentRun.terminationReason}` }}
+        </p>
+        <dl
+          class="agent-budget"
+          data-test="agent-budget"
+        >
+          <div><dt>步骤</dt><dd>{{ agentRun.usage.steps }} / {{ agentRun.budget.maxSteps }}</dd></div>
+          <div><dt>答案尝试</dt><dd>{{ agentRun.usage.answerAttempts }} / {{ agentRun.budget.maxAnswerAttempts }}</dd></div>
+          <div><dt>Token</dt><dd>{{ agentRun.usage.inputTokens + agentRun.usage.outputTokens }}</dd></div>
+          <div><dt>已知费用</dt><dd>¥{{ Number(agentRun.usage.knownCost).toFixed(4) }}</dd></div>
+          <div><dt>费用完整性</dt><dd>{{ agentRun.usage.unknownCostCalls > 0 ? `未知费用调用 ${agentRun.usage.unknownCostCalls} 次` : '无未知费用' }}</dd></div>
+        </dl>
+        <details
+          v-if="agentRun.steps.length || agentRun.toolCalls.length"
+          data-test="agent-trace"
+        >
+          <summary>查看去敏执行轨迹</summary>
+          <ol>
+            <li
+              v-for="step in agentRun.steps"
+              :key="step.stepNumber"
+            >
+              <strong>{{ String(step.stepNumber).padStart(2, '0') }} · {{ step.action }}</strong>
+              <span>{{ step.observationSummary }}</span>
+            </li>
+          </ol>
+          <p
+            v-if="agentRun.toolCalls.some((call) => call.status === 'UNKNOWN')"
+            class="agent-unknown"
+          >
+            检测到 UNKNOWN 调用；系统不会自动重放该高成本步骤。
+          </p>
+        </details>
+      </section>
 
       <p
         v-if="submitting"

@@ -192,7 +192,7 @@ public final class AgentApplicationService {
         if (run.inputTokens() >= run.budget().maxInputTokens()) return "INPUT_TOKEN_BUDGET_EXHAUSTED";
         if (run.outputTokens() >= run.budget().maxOutputTokens()) return "OUTPUT_TOKEN_BUDGET_EXHAUSTED";
         if (run.knownCost().compareTo(run.budget().maxKnownCost()) >= 0) return "COST_BUDGET_EXHAUSTED";
-        if (run.unknownCostCalls() > 0) return "UNKNOWN_COST";
+        if (run.unknownCostCalls() > 0 && !isTerminal(decision.action())) return "UNKNOWN_COST";
         if (decision.action() == AgentPolicy.Action.GENERATE_AND_VERIFY
                 && run.answerAttemptCount() >= run.budget().maxAnswerAttempts()) {
             return "ANSWER_ATTEMPT_BUDGET_EXHAUSTED";

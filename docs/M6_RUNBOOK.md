@@ -67,7 +67,8 @@ AGENT_WORKER_ENABLED=false
 
 每次动作前重新检查 owner/READY Job、动作 Schema、step、deadline、输入/输出 Token、已知费用、
 未知费用和答案次数。Answer 和 Retrieval 产生的既有 `model_call` 通过 `run_id` 归属 Run；预算事实
-由 Store 聚合，不新建第二套调用账本。任一未知结果或无价格成功调用会使后续 Step 失败关闭。
+由 Store 聚合，不新建第二套调用账本。任一未知结果或无价格成功调用会使后续业务动作失败关闭；
+不再产生 Tool 或模型调用的确定性拒答/澄清可以落库，但仍保留未知费用事实，不能显示为 0。
 
 T2 聚焦验证在全新隔离数据库上执行：
 
@@ -91,5 +92,20 @@ cd server
 - 过期租约下若存在 RUNNING ToolCall，Worker 标记 UNKNOWN 并终止 Run；不能假设调用未发生并自动重放。
 - V20 是前进迁移。应用回滚时保留三张表和历史事实，切换到已验证兼容当前 schema 的构建；
   不执行 `flyway repair`、删库、降版本迁移或覆盖历史。
-- T2 已实现 UNKNOWN 与调用前硬门；重复 Worker、进程重启、Redis 清空和完整边界矩阵仍须在 T3
-  故障注入中证明，不因单元测试提前声称 T3 通过。
+- T3 已以真实 MySQL 证明重复 Worker 只有一个 CAS 胜出、完成 Step 不重复；过期 RUNNING ToolCall
+  变为 UNKNOWN 并稳定终止。应用重启和项目 Redis DB 清空后，Run 仍从 MySQL 读取。
+- 页面只把最新 `runId` 放入 URL 查询参数作为无敏感信息的回放指针；刷新后仍调用 owner-scoped
+  `GET /api/v1/agent-runs/{runId}` 读取 MySQL，不把浏览器状态作为第二真源。
+- `AGENT_ENABLED`、`AGENT_WORKER_ENABLED` 和前端 `VITE_AGENT_ENABLED` 均默认 `false`；仅本地验收
+  临时开启，Compose 和示例配置不改变默认关闭事实。
+
+## 6. T3 本地验收
+
+真实浏览器使用一条已完成 ASR/OCR/索引的 8 秒教学视频验证三条路径：真实 SiliconFlow Embedding
+成功但价格不可得时，相关问题在首个安全 Step 后以 `UNKNOWN_COST` 停止；注入 Embedding 连接故障
+后，短问题以 `NEEDS_CLARIFICATION` 终止，长且无关问题以 `NO_SUFFICIENT_EVIDENCE` 拒答。三条路径
+都显示未知费用调用 1 次，没有伪造成本或测试数据。
+
+浏览器刷新、应用重启和 Redis `FLUSHDB` 后，同一 URL 指向的 Run 轨迹仍可回放。桌面和 320px
+视口均保留开关、预算、终止原因和折叠轨迹的语义结构；控制台只有 Vite debug 连接消息，没有
+warning/error。Agent 创建、轮询与刷新读取均返回可渲染响应，没有页面级 4xx/5xx 或失败提示。

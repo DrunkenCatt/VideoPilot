@@ -34,11 +34,11 @@
 
 ## T3：证明恢复故障矩阵并在现有问答页回放
 
-- [ ] 对已在 T2 生效的硬门执行故障矩阵：step/deadline/token/费用/修复次数边界、RUNNING/UNKNOWN ToolCall、重复 Worker、进程重启、Redis 清空和 owner 越权。
-- [ ] 证明重启只从最后已提交安全 Step 继续，完成 ToolCall 不重复，高成本 UNKNOWN 不自动重放；无法安全恢复时以稳定终止原因停止。
-- [ ] 在现有 `AnswerWorkspace` 增加默认关闭的 Agent 实验开关、Run 状态轮询和折叠轨迹；复用现有答案/Citation 展示，不新增 Agent 工作台或假数据。
-- [ ] 页面显示已知/未知预算消耗、终止原因、权限/预算拒绝和 `NEEDS_CLARIFICATION` 提示；未知成本不得显示为 0，内部思考/Prompt/原始响应不得返回。
-- [ ] 完成定向/集成/前端 `npm run check`、桌面与 320px 真实浏览器三路径/恢复回放、Console/Network 检查、运行手册和独立提交。
+- [x] 对已在 T2 生效的硬门执行故障矩阵：step/deadline/token/费用/修复次数边界、RUNNING/UNKNOWN ToolCall、重复 Worker、进程重启、Redis 清空和 owner 越权。
+- [x] 证明重启只从最后已提交安全 Step 继续，完成 ToolCall 不重复，高成本 UNKNOWN 不自动重放；无法安全恢复时以稳定终止原因停止。
+- [x] 在现有 `AnswerWorkspace` 增加默认关闭的 Agent 实验开关、Run 状态轮询和折叠轨迹；复用现有答案/Citation 展示，不新增 Agent 工作台或假数据。
+- [x] 页面显示已知/未知预算消耗、终止原因、权限/预算拒绝和 `NEEDS_CLARIFICATION` 提示；未知成本不得显示为 0，内部思考/Prompt/原始响应不得返回。
+- [x] 完成定向/集成/前端 `npm run check`、桌面与 320px 真实浏览器三路径/恢复回放、Console/Network 检查、运行手册和独立提交。
 
 **退出门**：恢复、幂等、权限和全部预算硬门可重复验证；页面能回放至少三条真实路径；任何越权、超预算或 UNKNOWN 自动重放都直接失败。
 

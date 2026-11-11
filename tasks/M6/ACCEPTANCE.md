@@ -1,6 +1,6 @@
 # M6 验收记录：最小动态工具型 Agent Loop
 
-> 当前状态：T2 已完成；OWASP 因 NVD 数据不可用未形成结论，负责人以 `EX-2026-11-11-M6-OWASP` 接受该项本地遗留风险并要求继续 T3。M5 仍未退出；M6 依据 `EX-2026-11-10-M6` 作为默认关闭的本地实验能力开始。
+> 当前状态：T3 已完成，可以进入 T4；OWASP 因 NVD 数据不可用未形成结论，负责人以 `EX-2026-11-11-M6-OWASP` 接受该项本地遗留风险并要求继续。M5 仍未退出；M6 依据 `EX-2026-11-10-M6` 作为默认关闭的本地实验能力推进。
 
 ## 1. 冻结事实
 
@@ -170,3 +170,50 @@ T2 退出：实现、后端、前端、集成、覆盖率、架构、秘密和 n
 没有有效结果；负责人在审阅该证据后明确要求跳过本次检查并继续 T3，已登记有期限的
 `EX-2026-11-11-M6-OWASP`。该例外不是扫描通过，也不接受任何已知 High/Critical 漏洞；数据源
 恢复或 CI 形成有效报告后仍须满足原阈值。Agent 与 Worker 仍默认关闭。
+
+## 9. T3 验收场景
+
+### 场景 A：恢复与单赢家
+
+**Given** 已提交 Step、完成 ToolCall 或租约过期的 RUNNING ToolCall；**When** 重复 Worker、应用重启或
+Redis 清空；**Then** MySQL CAS 只允许一个推进者，完成调用不重复，RUNNING 调用变为 UNKNOWN 后不重放。
+
+### 场景 B：真实页面三路径
+
+**Given** 真实 READY 视频和真实/故障注入的 Embedding 依赖；**When** 提交相关、短且不明确、长且无关
+三类问题；**Then** 页面分别显示 `UNKNOWN_COST`、`NEEDS_CLARIFICATION`、`NO_SUFFICIENT_EVIDENCE`，
+并展示真实预算和去敏轨迹，不展示 Prompt、参数或原始模型响应。
+
+### 场景 C：刷新回放与默认关闭
+
+**Given** 页面已创建 Run；**When** 刷新页面、重启应用或清空 Redis；**Then** URL 只保存 `runId`
+指针，owner API 从 MySQL 恢复轨迹；仓库和 Compose 中 Agent/Worker/前端入口仍默认关闭。
+
+## 10. T3 实际证据
+
+2026-11-11 完成以下验证：
+
+- `JdbcAgentStoreIT` 在全新 `videopilot_m6_t3_gate` 上通过 2/2；覆盖重复 Worker、重新创建 Store 后的
+  进程恢复，以及旧的已完成 Step 不能重复提交。V1-V20 前进迁移与相关集成检查此前在同一 T3
+  隔离门中 11/11 通过。
+- `server\.\mvnw.cmd clean test`：439 项通过、0 failure、0 error、1 项既有 FFmpeg 环境条件跳过；
+  JaCoCo 80% bundle 门与 ArchUnit 均通过，总耗时 73 秒。
+- `client\npm.cmd run check`：类型、ESLint、19 个测试文件/122 项测试、覆盖率和生产构建全部通过；
+  statements 87.54%、branches 82.79%、functions 89.12%、lines 92.68%。
+- 真实浏览器使用 `m2-t7-smoke-8s.mp4` 的 READY Job 验证三条持久化路径：相关问题以
+  `UNKNOWN_COST` 失败关闭；Embedding 连接故障下注入的短问题以 `NEEDS_CLARIFICATION` 终止，长且
+  无关问题以 `NO_SUFFICIENT_EVIDENCE` 拒答。数据库最近记录对应 `FAILED/REFUSED/REFUSED`，每条
+  `step_count=1`、`unknown_cost_calls=1`；没有把未知成本写成 0。
+- 首次实现把费用硬门放在确定性终止之前，使拒答/澄清不可达；新增失败测试后只允许“不再产生任何
+  Tool/模型调用”的终止落库，任何后续业务动作仍在调用前以 `UNKNOWN_COST` 停止。该修复不修改价格
+  事实、不增加价格表，也不放松 UNKNOWN 自动重放规则。
+- 页面将最新 Run 的 UUID 放入 URL 查询参数；刷新、应用容器重启和 Redis `FLUSHDB` 后，owner API
+  仍从 MySQL 回放同一轨迹。Redis 清空前后 `DBSIZE` 均为 0，没有业务事实依赖 Redis。
+- 桌面和 320px 视口均保留实验开关、预算、终止原因与折叠轨迹；Console 只有 Vite debug 连接消息，
+  没有 warning/error。创建、轮询、刷新读取都返回可渲染响应，页面没有网络错误提示。
+- 真实启动曾发现组件扫描的条件 Controller 在 Bean 注册顺序下未创建；改为沿用 Answer/Evaluation 的
+  AutoConfiguration 显式 Bean 后，真实 HTTP 与聚焦 Spring/MySQL 集成测试均通过。首次尝试用空 API
+  key 注入 Embedding 故障时被 ASR 启动校验拒绝，随后改为仅覆盖 Embedding base URL；没有关闭启动门。
+
+T3 退出门通过，可以进入 T4。OWASP 仍仅由 `EX-2026-11-11-M6-OWASP` 临时覆盖本地缺失报告，
+不视为安全扫描通过；Agent、Worker 和前端入口仍默认关闭。

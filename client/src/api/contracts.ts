@@ -13,6 +13,7 @@ export type ClaimId = Brand<string, 'ClaimId'>
 export type CitationId = Brand<string, 'CitationId'>
 export type EvaluationDatasetId = Brand<string, 'EvaluationDatasetId'>
 export type EvaluationRunId = Brand<string, 'EvaluationRunId'>
+export type AgentRunId = Brand<string, 'AgentRunId'>
 
 export const API = {
   prefix: '/api/v1',
@@ -61,6 +62,14 @@ export function jobRetrievalPath(jobId: JobId): string {
 
 export function jobAnswersPath(jobId: JobId): string {
   return `${API.analysisJobs}/${jobId}/answers`
+}
+
+export function jobAgentRunsPath(jobId: JobId): string {
+  return `${API.analysisJobs}/${jobId}/agent-runs`
+}
+
+export function agentRunPath(runId: AgentRunId | string): string {
+  return `${API.prefix}/agent-runs/${runId}`
 }
 
 export function jobAnswerPath(jobId: JobId, answerId: AnswerId | string): string {
@@ -583,4 +592,71 @@ export interface AnswerPageResponse {
   data: AnswerResponse[]
   nextCursor: number | null
   hasMore: boolean
+}
+
+export type AgentRunStatus = 'REQUESTED' | 'RUNNING' | 'COMPLETED' | 'REFUSED' | 'FAILED'
+export type AgentToolCallStatus = 'REQUESTED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'UNKNOWN'
+
+export interface AgentExecutionVersions {
+  policyVersion: string
+  promptVersion: string
+  modelVersion: string
+  embeddingVersion: string
+  retrievalFormulaVersion: string
+  evidenceGateVersion: string
+  limitsVersion: string
+}
+
+export interface AgentBudgetSnapshot {
+  maxSteps: number
+  maxAnswerAttempts: number
+  maxInputTokens: number
+  maxOutputTokens: number
+  maxKnownCost: number
+  deadlineAt: string
+}
+
+export interface AgentBudgetUsage {
+  steps: number
+  answerAttempts: number
+  inputTokens: number
+  outputTokens: number
+  knownCost: number
+  unknownCostCalls: number
+}
+
+export interface AgentStep {
+  stepNumber: number
+  action: string
+  observationSummary: string
+  resultReference: string | null
+  completedAt: string
+}
+
+export interface AgentToolCall {
+  toolCallId: string
+  stepNumber: number
+  toolName: string
+  status: AgentToolCallStatus
+  parameterSummary: string
+  observationSummary: string | null
+  resultReference: string | null
+  latencyMs: number
+  startedAt: string
+  completedAt: string | null
+}
+
+export interface AgentRun {
+  runId: AgentRunId
+  jobId: JobId
+  goal: string
+  status: AgentRunStatus
+  versions: AgentExecutionVersions
+  budget: AgentBudgetSnapshot
+  usage: AgentBudgetUsage
+  terminationReason: string | null
+  createdAt: string
+  completedAt: string | null
+  steps: AgentStep[]
+  toolCalls: AgentToolCall[]
 }
