@@ -1,6 +1,6 @@
 # M6 验收记录：最小动态工具型 Agent Loop
 
-> 当前状态：T1 已完成，下一步 T2。M5 仍未退出；M6 依据 `EX-2026-11-10-M6` 作为默认关闭的本地实验能力开始。
+> 当前状态：T2 已完成；OWASP 因 NVD 数据不可用未形成结论，负责人以 `EX-2026-11-11-M6-OWASP` 接受该项本地遗留风险并要求继续 T3。M5 仍未退出；M6 依据 `EX-2026-11-10-M6` 作为默认关闭的本地实验能力开始。
 
 ## 1. 冻结事实
 
@@ -118,3 +118,55 @@ REQUESTED/RUNNING 不依赖已完成 Step，同时状态、完成时间和 Run �
 夹具的全量 `verify -Pintegration` 留在 T4；T1 已执行所有直接相关的真实迁移和 Store 集成门。
 
 T1 退出门通过，可以进入 T2。M5 效果门仍失败，Agent 仍默认关闭。
+
+## 7. T2 验收场景
+
+### 场景 A：Observation 改变动作
+
+**Given** 首次检索分别得到多条、一条或零条证据；**When** 策略读取已提交 Observation；**Then**
+分别进入生成并验证、扩窗后生成、拒答或请求澄清，不执行固定的三段式工作流。
+
+### 场景 B：调用前硬门
+
+**Given** owner/Job、动作 Schema、step、deadline、输入/输出 Token、已知/未知费用或答案次数任一
+不合法；**When** Worker 领取 Run；**Then** 在 Tool/供应商调用前以稳定原因终止，调用次数保持 0。
+
+### 场景 C：先审计后副作用
+
+**Given** 策略选择业务动作；**When** 执行既有 Retrieval、Context 或 Answer service；**Then** 先以
+lease/version CAS 写入 RUNNING ToolCall，完成后同一事务提交 Step、调用摘要、耗时、结果引用与预算聚合。
+
+### 场景 D：不安全恢复不重放
+
+**Given** 租约过期时存在 RUNNING ToolCall；**When** 新 Worker 领取；**Then** 将调用标为 UNKNOWN 并以
+`UNKNOWN_OUTCOME` 终止，不重放可能已产生费用的调用。
+
+## 8. T2 实际证据
+
+2026-11-11 完成以下验证：
+
+- `AgentApplicationServiceTest,AgentLoopApplicationServiceTest,RuleBasedAgentPolicyTest` 共 26 项通过；
+  覆盖三类路径、先写调用意图、owner/Schema/六类预算硬门、答案 Run 归属和 RUNNING 恢复停止。
+- 最终干净执行 `server\.\mvnw.cmd clean test`：438 项通过、0 failure、0 error、1 项既有 FFmpeg
+  环境条件跳过；JaCoCo 80% bundle 门和 ArchUnit 均通过，总耗时 66 秒。首次干净构建曾以 79%
+  覆盖率失败；没有降低阈值，而是补齐 Worker、CAS、终止与错误路径测试后重跑通过。
+- 专用隔离库 `videopilot_m6_t2_gate` 从空库前进迁移 V1-V20；定向执行
+  `DatabaseMigrationIT,JdbcAgentStoreIT,AnswerPersistenceAdapterIT,VideoIndexPersistenceAdapterIT`
+  全部通过。真实 MySQL 断言覆盖 ToolCall 先写、lease/version CAS、Step 原子完成、Token/费用聚合，
+  以及 Answer/Retrieval `model_call.run_id` 归属。
+- 首次误用现有 `videopilot_browser` 时发现其 V20 校验和来自较早工作区；测试按硬门失败停止，未执行
+  `flyway repair` 或关闭校验，随后只在全新隔离库重跑并通过。
+- 定向测试全部使用确定性 fixture/mock，没有发出供应商请求；外部调用增量、已知费用和未知费用均为
+  0。运行时代码会把真实模型调用写入既有 `model_call`，无价格或 UNKNOWN 事实按非零未知调用聚合，
+  下一 Step 在调用前失败关闭。
+- `client\npm.cmd run check` 完整通过：18 个测试文件、115 项测试通过，类型、Lint、覆盖率和构建
+  通过；`npm audit --audit-level=high --registry=https://registry.npmjs.org` 为 0 high/critical，仍有
+  10 项 moderate。Gitleaks 8.30.1 扫描约 65 KB staged 内容，0 leak。
+- OWASP Dependency-Check 12.2.2 在线更新 NVD 时首分页持续超时并进入重试；停止在线更新后执行
+  `-DautoUpdate=false`，工具明确以 `NoDataException: No documents exist` 失败。本机没有可用 NVD
+  缓存，因此依赖安全门未通过，不能把网络/数据源故障记作 0 high/critical。
+
+T2 退出：实现、后端、前端、集成、覆盖率、架构、秘密和 npm 高危门均通过。OWASP 依赖安全门
+没有有效结果；负责人在审阅该证据后明确要求跳过本次检查并继续 T3，已登记有期限的
+`EX-2026-11-11-M6-OWASP`。该例外不是扫描通过，也不接受任何已知 High/Critical 漏洞；数据源
+恢复或 CI 形成有效报告后仍须满足原阈值。Agent 与 Worker 仍默认关闭。

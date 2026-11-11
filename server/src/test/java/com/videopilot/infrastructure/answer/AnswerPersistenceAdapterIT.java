@@ -69,9 +69,10 @@ class AnswerPersistenceAdapterIT {
                 new OwnerId(UUID.randomUUID()), JOB, Set.of(CHUNK), Set.of(FIRST))).isEmpty();
 
         UUID callId = UUID.randomUUID();
+        UUID executionRunId = UUID.randomUUID();
         answers.startModelCall(new AnswerStore.ModelCallStart(
                 callId, answerId, JOB, "request-1", "SiliconFlow", "deepseek-ai/DeepSeek-V4-Flash",
-                "answer-evidence-v1", "c".repeat(64), now));
+                "answer-evidence-v1", "c".repeat(64), executionRunId, null, null, now));
         AnswerEvidenceGate.VerifiedCitation citation = new AnswerEvidenceGate.VerifiedCitation(
                 FIRST + "#ASR", FIRST, 0, 10_000, "ASR", "Redis String 可以存储文本", "NORMALIZED");
         AnswerStore.StoredAnswer published = answers.publish(owner, new AnswerStore.Publication(
@@ -90,6 +91,9 @@ class AnswerPersistenceAdapterIT {
         assertThat(answers.list(owner, JOB, null, 20)).containsExactly(published);
         assertThat(jdbc.sql("SELECT status FROM model_call WHERE model_call_id = :id")
                 .param("id", callId.toString()).query(String.class).single()).isEqualTo("SUCCEEDED");
+        assertThat(jdbc.sql("SELECT run_id FROM model_call WHERE model_call_id = :id")
+                .param("id", callId.toString()).query(String.class).single())
+                .isEqualTo(executionRunId.toString());
     }
 
     private void seed() {

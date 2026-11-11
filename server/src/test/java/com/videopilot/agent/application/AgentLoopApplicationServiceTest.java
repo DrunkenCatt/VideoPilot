@@ -1,0 +1,319 @@
+package com.videopilot.agent.application;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import com.videopilot.agent.domain.AgentModels.AgentBudget;
+import com.videopilot.agent.domain.AgentModels.AgentRun;
+import com.videopilot.agent.domain.AgentModels.AgentStep;
+import com.videopilot.agent.domain.AgentModels.AgentTrace;
+import com.videopilot.agent.domain.AgentModels.AgentVersions;
+import com.videopilot.agent.domain.AgentModels.ClaimedRun;
+import com.videopilot.agent.domain.AgentModels.RunStatus;
+import com.videopilot.agent.domain.AgentModels.ToolCall;
+import com.videopilot.agent.domain.AgentModels.ToolCallStatus;
+import com.videopilot.agent.port.AgentPolicy;
+import com.videopilot.agent.port.AgentStore;
+import com.videopilot.answer.application.AnswerApplicationService;
+import com.videopilot.answer.port.AnswerStore;
+import com.videopilot.context.application.VideoContextQueryApplicationService;
+import com.videopilot.context.domain.VideoSegment;
+import com.videopilot.context.domain.VideoContext;
+import com.videopilot.identity.domain.OwnerId;
+import com.videopilot.retrieval.application.RetrievalApplicationService;
+import com.videopilot.retrieval.application.RetrievalException;
+import com.videopilot.retrieval.domain.EvidenceHit;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+class AgentLoopApplicationServiceTest {
+
+    private static final Instant NOW = Instant.parse("2026-11-11T01:00:00Z");
+    private final AgentStore store = mock(AgentStore.class);
+    private final AgentPolicy policy = mock(AgentPolicy.class);
+    private final RetrievalApplicationService retrieval = mock(RetrievalApplicationService.class);
+    private final VideoContextQueryApplicationService contexts = mock(VideoContextQueryApplicationService.class);
+    private final AnswerApplicationService answers = mock(AnswerApplicationService.class);
+    private final UUID runId = UUID.randomUUID();
+    private final UUID jobId = UUID.randomUUID();
+    private final OwnerId ownerId = new OwnerId(UUID.randomUUID());
+    private AgentApplicationService service;
+
+    @BeforeEach
+    void setUp() {
+        service = new AgentApplicationService(
+                store, versions(), this::budget, () -> NOW, UUID::randomUUID,
+                policy, retrieval, contexts, answers);
+    }
+
+    @Test
+    void persistsIntentBeforeRetrievalAndStoresOnlyRedactedFacts() {
+        AgentTrace trace = trace(run(0, 0, NOW.plusSeconds(180)), List.of());
+        claimed(trace);
+        when(policy.next(trace)).thenReturn(AgentPolicy.Decision.action(AgentPolicy.Action.RETRIEVE));
+        when(store.beginToolCall(any(), eq(runId), eq(1L), any())).thenReturn(2L);
+        when(retrieval.retrieve(any(), eq(jobId), eq("请解释课程中的 String"), eq(5), eq(runId)))
+                .thenReturn(retrievalResult(2));
+
+        assertThat(service.processNext()).isTrue();
+
+        var order = inOrder(store, retrieval);
+        order.verify(store).beginToolCall(any(), eq(runId), eq(1L), any());
+        order.verify(retrieval).retrieve(any(), eq(jobId), eq("请解释课程中的 String"), eq(5), eq(runId));
+        order.verify(store).completeToolCallAndStep(any(), eq(runId), eq(2L), any(), any(), eq(false));
+    }
+
+    @Test
+    void expandsThePersistedRetrievalWindowWithoutAProviderCall() {
+        AgentStep retrievalStep = new AgentStep(
+                runId, 1, "RETRIEVE", "EVIDENCE:single", "window:1000:9000", NOW);
+        AgentTrace trace = trace(run(1, 0, NOW.plusSeconds(180)), List.of(retrievalStep));
+        claimed(trace);
+        when(policy.next(trace)).thenReturn(AgentPolicy.Decision.action(AgentPolicy.Action.EXPAND_WINDOW));
+        when(store.beginToolCall(any(), eq(runId), eq(1L), any())).thenReturn(2L);
+        VideoContext context = mock(VideoContext.class);
+        when(context.durationMs()).thenReturn(60_000L);
+        when(contexts.get(any(), eq(jobId))).thenReturn(context);
+        when(contexts.segments(any(), eq(jobId), eq(null), eq(20), eq(0L), eq(39000L)))
+                .thenReturn(new VideoContextQueryApplicationService.SegmentPage(
+                        List.of(segment()), Optional.empty(), false));
+
+        assertThat(service.processNext()).isTrue();
+
+        verify(contexts).segments(any(), eq(jobId), eq(null), eq(20), eq(0L), eq(39000L));
+        verify(retrieval, never()).retrieve(any(), any(), any(), any(Integer.class));
+        verify(answers, never()).ask(any(), any(), any(), any());
+    }
+
+    @Test
+    void reusesVerifiedAnswerPathAndLinksItsModelCallsToTheAgentRun() {
+        AgentTrace trace = trace(run(1, 0, NOW.plusSeconds(180)), List.of(new AgentStep(
+                runId, 1, "RETRIEVE", "EVIDENCE:multiple", "window:1000:9000", NOW)));
+        claimed(trace);
+        when(policy.next(trace)).thenReturn(
+                AgentPolicy.Decision.action(AgentPolicy.Action.GENERATE_AND_VERIFY));
+        when(store.beginToolCall(any(), eq(runId), eq(1L), any())).thenReturn(2L);
+        AnswerStore.StoredAnswer answer = answer("ANSWERED", null);
+        when(answers.ask(any(), eq(jobId), eq("请解释课程中的 String"), any(), eq(runId)))
+                .thenReturn(answer);
+
+        assertThat(service.processNext()).isTrue();
+
+        verify(answers).ask(any(), eq(jobId), eq("请解释课程中的 String"), any(), eq(runId));
+        verify(store).completeToolCallAndStep(any(), eq(runId), eq(2L), any(), any(), eq(true));
+    }
+
+    @Test
+    void rejectsExpiredBudgetBeforeAnyToolOrProviderCall() {
+        AgentTrace trace = trace(run(0, 0, NOW), List.of());
+        claimed(trace);
+        when(policy.next(trace)).thenReturn(AgentPolicy.Decision.action(AgentPolicy.Action.RETRIEVE));
+
+        assertThat(service.processNext()).isTrue();
+
+        verify(store, never()).beginToolCall(any(), any(), any(Long.class), any());
+        verify(retrieval, never()).retrieve(any(), any(), any(), any(Integer.class));
+        verify(store).terminate(any(), eq(runId), eq(1L), eq(RunStatus.FAILED),
+                eq("DEADLINE_EXCEEDED"), eq(NOW));
+    }
+
+    @Test
+    void rejectsUnknownDecisionSchemaBeforeAnyToolCall() {
+        AgentTrace trace = trace(run(0, 0, NOW.plusSeconds(180)), List.of());
+        claimed(trace);
+        when(policy.next(trace)).thenReturn(new AgentPolicy.Decision(
+                AgentPolicy.SCHEMA_VERSION + 1, AgentPolicy.Action.RETRIEVE, null));
+
+        assertThat(service.processNext()).isTrue();
+
+        verify(store, never()).beginToolCall(any(), any(), any(Long.class), any());
+        verify(retrieval, never()).retrieve(any(), any(), any(), any(Integer.class));
+        verify(store).terminate(any(), eq(runId), eq(1L), eq(RunStatus.FAILED),
+                eq("INVALID_ACTION_SCHEMA"), eq(NOW));
+    }
+
+    @Test
+    void rechecksOwnerAndReadyJobBeforeEveryToolCall() {
+        AgentTrace trace = trace(run(0, 0, NOW.plusSeconds(180)), List.of());
+        claimed(trace);
+        when(store.ownsReadyJob(ownerId, jobId)).thenReturn(false);
+        when(policy.next(trace)).thenReturn(AgentPolicy.Decision.action(AgentPolicy.Action.RETRIEVE));
+
+        assertThat(service.processNext()).isTrue();
+
+        verify(store, never()).beginToolCall(any(), any(), any(Long.class), any());
+        verify(store).terminate(any(), eq(runId), eq(1L), eq(RunStatus.FAILED),
+                eq("OWNER_OR_JOB_REJECTED"), eq(NOW));
+    }
+
+    @ParameterizedTest
+    @MethodSource("budgetGates")
+    void enforcesEveryBudgetBeforeAnyToolCall(
+            String reason, int steps, int answersUsed, long inputTokens, long outputTokens,
+            BigDecimal knownCost, int unknownCostCalls, AgentPolicy.Action action) {
+        AgentTrace trace = trace(run(
+                steps, answersUsed, inputTokens, outputTokens, knownCost, unknownCostCalls,
+                NOW.plusSeconds(180)), List.of());
+        claimed(trace);
+        when(policy.next(trace)).thenReturn(AgentPolicy.Decision.action(action));
+
+        assertThat(service.processNext()).isTrue();
+
+        verify(store, never()).beginToolCall(any(), any(), any(Long.class), any());
+        verify(store).terminate(any(), eq(runId), eq(1L), eq(RunStatus.FAILED), eq(reason), eq(NOW));
+    }
+
+    @Test
+    void marksAnInterruptedRunningToolUnknownInsteadOfReplayingIt() {
+        ToolCall running = new ToolCall(
+                UUID.randomUUID(), runId, 1, "GENERATE_AND_VERIFY", "run-step-1",
+                "f".repeat(64), ToolCallStatus.RUNNING, "{\"action\":\"GENERATE_AND_VERIFY\"}",
+                null, null, 0, NOW.minusSeconds(60), null);
+        AgentTrace trace = new AgentTrace(run(0, 0, NOW.plusSeconds(180)), List.of(), List.of(running));
+        claimed(trace);
+
+        assertThat(service.processNext()).isTrue();
+
+        verify(policy, never()).next(any());
+        verify(answers, never()).ask(any(), any(), any(), any(), any());
+        verify(store).failToolCallAndTerminate(any(), eq(runId), eq(1L), eq(running.toolCallId()),
+                eq(ToolCallStatus.UNKNOWN), eq("UNKNOWN_OUTCOME"), eq(NOW));
+    }
+
+    @Test
+    void returnsIdleWhenNoRunCanBeClaimed() {
+        when(store.claimNext(any(), any(), eq(NOW))).thenReturn(Optional.empty());
+
+        assertThat(service.processNext()).isFalse();
+
+        verify(policy, never()).next(any());
+    }
+
+    @Test
+    void recordsAStableFailureWhenAToolThrowsAfterItsIntentWasPersisted() {
+        AgentTrace trace = trace(run(0, 0, NOW.plusSeconds(180)), List.of());
+        claimed(trace);
+        when(policy.next(trace)).thenReturn(AgentPolicy.Decision.action(AgentPolicy.Action.RETRIEVE));
+        when(store.beginToolCall(any(), eq(runId), eq(1L), any())).thenReturn(2L);
+        when(retrieval.retrieve(any(), eq(jobId), any(), eq(5), eq(runId)))
+                .thenThrow(new RetrievalException(RetrievalException.Reason.NOT_READY));
+
+        assertThat(service.processNext()).isTrue();
+
+        verify(store).failToolCallAndTerminate(any(), eq(runId), eq(2L), any(),
+                eq(ToolCallStatus.FAILED), eq("TOOL_EXECUTION_FAILED"), eq(NOW));
+    }
+
+    @ParameterizedTest
+    @MethodSource("terminalDecisions")
+    void commitsDeterministicTerminalDecisions(
+            AgentPolicy.Decision decision, RunStatus expectedStatus, String expectedReason) {
+        AgentTrace trace = trace(run(1, 0, NOW.plusSeconds(180)), List.of(new AgentStep(
+                runId, 1, "GENERATE_AND_VERIFY", "ANSWER:ANSWERED", "answer:1", NOW)));
+        claimed(trace);
+        when(policy.next(trace)).thenReturn(decision);
+
+        assertThat(service.processNext()).isTrue();
+
+        verify(store).terminate(any(), eq(runId), eq(1L), eq(expectedStatus),
+                eq(expectedReason), eq(NOW));
+        verify(store, never()).beginToolCall(any(), any(), any(Long.class), any());
+    }
+
+    private void claimed(AgentTrace trace) {
+        when(store.claimNext(any(), any(), eq(NOW)))
+                .thenReturn(Optional.of(new ClaimedRun(ownerId, trace.run())));
+        when(store.findTrace(ownerId, runId)).thenReturn(Optional.of(trace));
+        when(store.ownsReadyJob(ownerId, jobId)).thenReturn(true);
+    }
+
+    private AgentRun run(int steps, int answers, Instant deadline) {
+        return run(steps, answers, 0, 0, BigDecimal.ZERO, 0, deadline);
+    }
+
+    private AgentRun run(
+            int steps, int answers, long inputTokens, long outputTokens,
+            BigDecimal knownCost, int unknownCostCalls, Instant deadline) {
+        return new AgentRun(
+                runId, ownerId, jobId, "intent", "a".repeat(64), "请解释课程中的 String",
+                RunStatus.RUNNING, versions(), new AgentBudget(
+                        6, 2, 12_000, 6_000, BigDecimal.ONE, deadline),
+                steps, answers, inputTokens, outputTokens, knownCost, unknownCostCalls,
+                null, 1, NOW.minusSeconds(5), null);
+    }
+
+    private static Stream<Arguments> budgetGates() {
+        return Stream.of(
+                Arguments.of("STEP_BUDGET_EXHAUSTED", 6, 0, 0L, 0L,
+                        BigDecimal.ZERO, 0, AgentPolicy.Action.RETRIEVE),
+                Arguments.of("INPUT_TOKEN_BUDGET_EXHAUSTED", 0, 0, 12_000L, 0L,
+                        BigDecimal.ZERO, 0, AgentPolicy.Action.RETRIEVE),
+                Arguments.of("OUTPUT_TOKEN_BUDGET_EXHAUSTED", 0, 0, 0L, 6_000L,
+                        BigDecimal.ZERO, 0, AgentPolicy.Action.RETRIEVE),
+                Arguments.of("COST_BUDGET_EXHAUSTED", 0, 0, 0L, 0L,
+                        BigDecimal.ONE, 0, AgentPolicy.Action.RETRIEVE),
+                Arguments.of("UNKNOWN_COST", 0, 0, 0L, 0L,
+                        BigDecimal.ZERO, 1, AgentPolicy.Action.RETRIEVE),
+                Arguments.of("ANSWER_ATTEMPT_BUDGET_EXHAUSTED", 1, 2, 0L, 0L,
+                        BigDecimal.ZERO, 0, AgentPolicy.Action.GENERATE_AND_VERIFY));
+    }
+
+    private static Stream<Arguments> terminalDecisions() {
+        return Stream.of(
+                Arguments.of(AgentPolicy.Decision.terminal(
+                                AgentPolicy.Action.FINISH, "COMPLETED"),
+                        RunStatus.COMPLETED, "COMPLETED"),
+                Arguments.of(AgentPolicy.Decision.terminal(
+                                AgentPolicy.Action.NEEDS_CLARIFICATION, "NEEDS_CLARIFICATION"),
+                        RunStatus.REFUSED, "NEEDS_CLARIFICATION"));
+    }
+
+    private AgentTrace trace(AgentRun run, List<AgentStep> steps) {
+        return new AgentTrace(run, steps, List.of());
+    }
+
+    private AgentVersions versions() {
+        return new AgentVersions("policy-v1", "prompt-v1", "model-v1", "embedding-v1",
+                "formula-v1", "gate-v1", "limits-v1");
+    }
+
+    private AgentBudget budget() {
+        return new AgentBudget(6, 2, 12_000, 6_000, BigDecimal.ONE, NOW.plusSeconds(180));
+    }
+
+    private RetrievalApplicationService.RetrievalResult retrievalResult(int hits) {
+        List<EvidenceHit> values = java.util.stream.IntStream.range(0, hits).mapToObj(index ->
+                new EvidenceHit(UUID.randomUUID(), List.of(UUID.randomUUID()), 1_000, 9_000,
+                        "safe excerpt", List.of(EvidenceHit.Channel.ASR),
+                        new EvidenceHit.Scores(1, 1, .6, 0, 0, 0, 0, 0, 0, .6))).toList();
+        return new RetrievalApplicationService.RetrievalResult(
+                "query", "formula-v1", "embedding-v1", "chunk-v1", List.of(), values);
+    }
+
+    private VideoSegment segment() {
+        return new VideoSegment(UUID.randomUUID(), 0, 0, 10_000, Optional.of("safe"),
+                "[]", "[]", "b".repeat(64));
+    }
+
+    private AnswerStore.StoredAnswer answer(String status, String reason) {
+        return new AnswerStore.StoredAnswer(
+                1, UUID.randomUUID(), status, "question", reason, List.of(),
+                "prompt-v1", "model-v1", "embedding-v1", "formula-v1", "chunk-v1",
+                List.of(), NOW);
+    }
+}

@@ -159,6 +159,27 @@ class AgentApplicationServiceTest {
         }
 
         @Override
+        public long beginToolCall(String leaseId, UUID runId, long expectedVersion,
+                com.videopilot.agent.domain.AgentModels.ToolCall call) {
+            throw new AssertionError("application create/get tests must not begin a tool call");
+        }
+
+        @Override
+        public void completeToolCallAndStep(String leaseId, UUID runId, long expectedVersion,
+                com.videopilot.agent.domain.AgentModels.ToolCall completedCall,
+                com.videopilot.agent.domain.AgentModels.AgentStep step, boolean answerAttempt) {
+            throw new AssertionError("application create/get tests must not complete a tool call");
+        }
+
+        @Override
+        public void failToolCallAndTerminate(String leaseId, UUID runId, long expectedVersion,
+                UUID toolCallId,
+                com.videopilot.agent.domain.AgentModels.ToolCallStatus callStatus,
+                String terminationReason, Instant completedAt) {
+            throw new AssertionError("application create/get tests must not fail a tool call");
+        }
+
+        @Override
         public void terminate(
                 String leaseId, UUID runId, long expectedVersion,
                 com.videopilot.agent.domain.AgentModels.RunStatus status,

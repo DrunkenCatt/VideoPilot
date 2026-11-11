@@ -9,6 +9,8 @@ import com.videopilot.agent.domain.AgentModels.AgentRun;
 import com.videopilot.agent.domain.AgentModels.AgentStep;
 import com.videopilot.agent.domain.AgentModels.AgentVersions;
 import com.videopilot.agent.domain.AgentModels.RunStatus;
+import com.videopilot.agent.domain.AgentModels.ToolCall;
+import com.videopilot.agent.domain.AgentModels.ToolCallStatus;
 import com.videopilot.identity.domain.OwnerId;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -29,6 +31,8 @@ import org.springframework.test.context.TestPropertySource;
         "videopilot.context.ocr.enabled=false",
         "videopilot.context.derivation.enabled=false",
         "videopilot.evaluation.worker-enabled=false",
+        "videopilot.agent.enabled=true",
+        "videopilot.agent.worker-enabled=false",
         "videopilot.messaging.enabled=false"
 })
 class JdbcAgentStoreIT {
@@ -66,6 +70,7 @@ class JdbcAgentStoreIT {
 
     @AfterEach
     void cleanUp() {
+        jdbc.sql("DELETE FROM model_call WHERE run_id = :runId").param("runId", runId.toString()).update();
         jdbc.sql("DELETE FROM tool_call WHERE run_id = :runId").param("runId", runId.toString()).update();
         jdbc.sql("DELETE FROM agent_step WHERE run_id = :runId").param("runId", runId.toString()).update();
         jdbc.sql("DELETE FROM agent_run WHERE run_id = :runId").param("runId", runId.toString()).update();
@@ -89,22 +94,100 @@ class JdbcAgentStoreIT {
         assertThat(claimed.run().status()).isEqualTo(RunStatus.RUNNING);
         assertThat(claimed.run().version()).isEqualTo(1);
 
-        AgentStep step = new AgentStep(runId, 1, "NO_COST_CONTRACT", "state persisted", null, now);
-        assertThatThrownBy(() -> store.appendStep(
-                "wrong-lease-000000000000000000000001", runId, 1, step))
+        UUID callId = UUID.randomUUID();
+        ToolCall intent = new ToolCall(
+                callId, runId, 1, "RETRIEVE", "run-step-1", "e".repeat(64),
+                ToolCallStatus.RUNNING, "{\"action\":\"RETRIEVE\"}", null, null,
+                0, now, null);
+        assertThatThrownBy(() -> store.beginToolCall(
+                "wrong-lease-000000000000000000000001", runId, 1, intent))
                 .isInstanceOf(AgentException.class)
                 .extracting(value -> ((AgentException) value).reason())
                 .isEqualTo(AgentException.Reason.CONFLICT);
-        store.appendStep("lease-000000000000000000000000000001", runId, 1, step);
-        store.terminate("lease-000000000000000000000000000001", runId, 2,
+        long callVersion = store.beginToolCall(
+                "lease-000000000000000000000000000001", runId, 1, intent);
+        assertThat(store.findTrace(owner, runId).orElseThrow().toolCalls().getFirst().status())
+                .isEqualTo(ToolCallStatus.RUNNING);
+
+        jdbc.sql("""
+                INSERT INTO model_call (
+                    model_call_id, job_id, run_id, request_id, operation_type, provider,
+                    model_name, model_version, input_fingerprint, status, attempt,
+                    input_units, output_units, estimated_cost, currency, price_version,
+                    price_status, started_at, completed_at
+                ) VALUES (
+                    :callId,:jobId,:runId,:requestId,'RETRIEVAL_EMBEDDING','fixture',
+                    'fixture','fixture-v1',REPEAT('f',64),'SUCCEEDED',1,
+                    17,3,0.12500000,'CNY','fixture-price-v1','AVAILABLE',:startedAt,:completedAt
+                )
+                """).param("callId", UUID.randomUUID().toString()).param("jobId", jobId.toString())
+                .param("runId", runId.toString()).param("requestId", "agent-model-" + runId)
+                .param("startedAt", now).param("completedAt", now.plusMillis(10)).update();
+
+        AgentStep step = new AgentStep(runId, 1, "RETRIEVE", "EVIDENCE:multiple",
+                "window:1000:9000", now.plusSeconds(1));
+        ToolCall completed = new ToolCall(
+                callId, runId, 1, "RETRIEVE", intent.idempotencyKey(), intent.inputFingerprint(),
+                ToolCallStatus.COMPLETED, intent.parameterSummary(),
+                "{\"code\":\"EVIDENCE_MULTIPLE\"}", "window:1000:9000", 10,
+                now, now.plusSeconds(1));
+        store.completeToolCallAndStep(
+                "lease-000000000000000000000000000001", runId, callVersion,
+                completed, step, false);
+
+        var reclaimed = store.claimNext(
+                "lease-000000000000000000000000000002", now.plusSeconds(61), now.plusSeconds(1))
+                .orElseThrow();
+        store.terminate("lease-000000000000000000000000000002", runId, reclaimed.run().version(),
                 RunStatus.COMPLETED, "COMPLETED", now.plusSeconds(1));
 
         var trace = store.findTrace(owner, runId).orElseThrow();
         assertThat(trace.run().status()).isEqualTo(RunStatus.COMPLETED);
         assertThat(trace.run().terminationReason()).isEqualTo("COMPLETED");
         assertThat(trace.run().stepCount()).isEqualTo(1);
+        assertThat(trace.run().inputTokens()).isEqualTo(17);
+        assertThat(trace.run().outputTokens()).isEqualTo(3);
+        assertThat(trace.run().knownCost()).isEqualByComparingTo("0.12500000");
+        assertThat(trace.run().unknownCostCalls()).isZero();
         assertThat(trace.steps()).containsExactly(step);
-        assertThat(trace.toolCalls()).isEmpty();
+        assertThat(trace.toolCalls().getFirst().status()).isEqualTo(ToolCallStatus.COMPLETED);
+    }
+
+    @Test
+    void terminatesInterruptedCallsAsUnknownAndKeepsUnknownCostVisible() {
+        store.create(owner, run("intent-unknown", "c".repeat(64)));
+        var claimed = store.claimNext(
+                "lease-000000000000000000000000000003", now.plusSeconds(60), now).orElseThrow();
+        UUID toolCallId = UUID.randomUUID();
+        ToolCall intent = new ToolCall(
+                toolCallId, runId, 1, "GENERATE_AND_VERIFY", "run-step-unknown",
+                "9".repeat(64), ToolCallStatus.RUNNING,
+                "{\"action\":\"GENERATE_AND_VERIFY\"}", null, null, 0, now, null);
+        long callVersion = store.beginToolCall(
+                "lease-000000000000000000000000000003", runId,
+                claimed.run().version(), intent);
+        jdbc.sql("""
+                INSERT INTO model_call (
+                    model_call_id, job_id, run_id, request_id, operation_type, provider,
+                    model_name, model_version, input_fingerprint, status, attempt,
+                    price_status, started_at, completed_at
+                ) VALUES (
+                    :callId,:jobId,:runId,:requestId,'ANSWER','fixture',
+                    'fixture','fixture-v1',REPEAT('8',64),'UNKNOWN_OUTCOME',1,
+                    'UNAVAILABLE',:startedAt,:completedAt
+                )
+                """).param("callId", UUID.randomUUID().toString()).param("jobId", jobId.toString())
+                .param("runId", runId.toString()).param("requestId", "unknown-" + runId)
+                .param("startedAt", now).param("completedAt", now.plusMillis(10)).update();
+
+        store.failToolCallAndTerminate(
+                "lease-000000000000000000000000000003", runId, callVersion, toolCallId,
+                ToolCallStatus.UNKNOWN, "UNKNOWN_OUTCOME", now.plusSeconds(1));
+
+        var trace = store.findTrace(owner, runId).orElseThrow();
+        assertThat(trace.run().status()).isEqualTo(RunStatus.FAILED);
+        assertThat(trace.run().unknownCostCalls()).isOne();
+        assertThat(trace.toolCalls().getFirst().status()).isEqualTo(ToolCallStatus.UNKNOWN);
     }
 
     private AgentRun run(String key, String fingerprint) {

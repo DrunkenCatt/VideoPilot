@@ -92,12 +92,24 @@ public final class AnswerApplicationService {
 
     public AnswerStore.StoredAnswer ask(
             OwnerContext owner, UUID jobId, String question, String idempotencyKey) {
-        return ask(owner, jobId, question, idempotencyKey, null, null);
+        return ask(owner, jobId, question, idempotencyKey, null, null, null);
+    }
+
+    public AnswerStore.StoredAnswer ask(
+            OwnerContext owner, UUID jobId, String question, String idempotencyKey,
+            UUID executionRunId) {
+        return ask(owner, jobId, question, idempotencyKey, null, null, executionRunId);
     }
 
     public AnswerStore.StoredAnswer ask(
             OwnerContext owner, UUID jobId, String question, String idempotencyKey,
             UUID evaluationRunId, String evaluationCaseId) {
+        return ask(owner, jobId, question, idempotencyKey, evaluationRunId, evaluationCaseId, null);
+    }
+
+    private AnswerStore.StoredAnswer ask(
+            OwnerContext owner, UUID jobId, String question, String idempotencyKey,
+            UUID evaluationRunId, String evaluationCaseId, UUID executionRunId) {
         String normalizedQuestion = normalizeQuestion(question);
         if (idempotencyKey == null || !IDEMPOTENCY_KEY.matcher(idempotencyKey).matches()) {
             throw new AnswerException(AnswerException.Reason.INVALID_REQUEST);
@@ -118,10 +130,13 @@ public final class AnswerApplicationService {
 
         RetrievalApplicationService.RetrievalResult result;
         try {
-            result = evaluationRunId == null
-                    ? retrieval.retrieve(owner, jobId, normalizedQuestion, TOP_K)
-                    : retrieval.retrieve(
-                            owner, jobId, normalizedQuestion, TOP_K, evaluationRunId, evaluationCaseId);
+            result = executionRunId != null
+                    ? retrieval.retrieve(owner, jobId, normalizedQuestion, TOP_K, executionRunId)
+                    : evaluationRunId == null
+                            ? retrieval.retrieve(owner, jobId, normalizedQuestion, TOP_K)
+                            : retrieval.retrieve(
+                                    owner, jobId, normalizedQuestion, TOP_K,
+                                    evaluationRunId, evaluationCaseId);
         } catch (ExecutionBudgetExceededException exception) {
             store.fail(answerId, null, "FAILED", "BUDGET_EXHAUSTED",
                     exception.limitVersion() + ':' + exception.reason().name(), now.get());
@@ -183,7 +198,8 @@ public final class AnswerApplicationService {
         Instant started = now.get();
         store.startModelCall(new AnswerStore.ModelCallStart(
                 callId, answerId, jobId, ids.get().toString(), provider, modelVersion,
-                promptVersion, callFingerprint, evaluationRunId, evaluationCaseId, started));
+                promptVersion, callFingerprint, executionRunId,
+                evaluationRunId, evaluationCaseId, started));
         LanguageModelPort.Response response;
         try {
             response = model.generate(new LanguageModelPort.Request(prompt, callFingerprint));

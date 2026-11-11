@@ -315,16 +315,17 @@ public class VideoIndexPersistenceAdapter implements VideoIndexStore {
     public void startRetrievalEmbeddingCall(RetrievalEmbeddingCallStart call) {
         int inserted = jdbc.sql("""
                 INSERT INTO model_call (
-                    model_call_id, job_id, request_id, operation_type, provider, model_name,
+                    model_call_id, job_id, run_id, request_id, operation_type, provider, model_name,
                     model_version, embedding_version, input_fingerprint, status, attempt,
                     price_status, evaluation_run_id, evaluation_case_id, started_at
                 ) VALUES (
-                    :callId, :jobId, :requestId, :operationType, :provider, :model,
+                    :callId, :jobId, :runId, :requestId, :operationType, :provider, :model,
                     :model, :embeddingVersion, :fingerprint, 'STARTED', :attempt,
                     'UNAVAILABLE', :evaluationRunId, :evaluationCaseId, :startedAt
                 )
                 """)
                 .param("callId", call.modelCallId().toString()).param("jobId", call.jobId().toString())
+                .param("runId", call.executionRunId() == null ? null : call.executionRunId().toString())
                 .param("requestId", call.requestId()).param("operationType", call.operationType())
                 .param("provider", call.provider()).param("model", call.model())
                 .param("embeddingVersion", call.embeddingVersion())

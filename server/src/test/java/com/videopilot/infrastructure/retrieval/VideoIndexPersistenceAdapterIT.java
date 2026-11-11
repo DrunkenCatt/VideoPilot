@@ -188,7 +188,8 @@ class VideoIndexPersistenceAdapterIT {
                 indexes, embedding, unavailable, "SiliconFlow", "BAAI/bge-m3", "embedding-it-v1",
                 "chunks_it_v1", 3, 50, 1_000, Clock.systemUTC()::instant, UUID::randomUUID);
 
-        var result = retrieval.retrieve(owner, JOB_ID, "Redis String", 3);
+        UUID executionRunId = UUID.randomUUID();
+        var result = retrieval.retrieve(owner, JOB_ID, "Redis String", 3, executionRunId);
 
         assertThat(result.hits()).hasSize(2);
         assertThat(result.degradedChannels()).containsExactly(
@@ -197,6 +198,11 @@ class VideoIndexPersistenceAdapterIT {
                 SELECT status FROM model_call
                 WHERE job_id = :jobId AND operation_type = 'RETRIEVAL_EMBEDDING'
                 """).param("jobId", JOB_ID.toString()).query(String.class).single()).isEqualTo("SUCCEEDED");
+        assertThat(jdbc.sql("""
+                SELECT run_id FROM model_call
+                WHERE job_id = :jobId AND operation_type = 'RETRIEVAL_EMBEDDING'
+                """).param("jobId", JOB_ID.toString()).query(String.class).single())
+                .isEqualTo(executionRunId.toString());
         assertThatThrownBy(() -> retrieval.retrieve(
                 new OwnerContext(new OwnerId(UUID.randomUUID())), JOB_ID, "Redis", 3))
                 .isInstanceOf(RetrievalException.class)

@@ -39,6 +39,11 @@ management:
       enabled: false
 
 videopilot:
+  agent:
+    enabled: ${AGENT_ENABLED:false}
+    worker-enabled: ${AGENT_WORKER_ENABLED:false}
+    worker-delay: ${AGENT_WORKER_DELAY:1s}
+    worker-initial-delay: ${AGENT_WORKER_INITIAL_DELAY:2s}
   answer:
     base-url: ${SILICONFLOW_LLM_BASE_URL:https://api.siliconflow.cn/v1}
     api-key: ${SILICONFLOW_API_KEY:}

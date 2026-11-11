@@ -51,12 +51,45 @@ cd server
 这些开关只收窄聚焦测试的 Spring 上下文，不关闭被测的 Flyway、MySQL、Agent Store 或 Web 合同。
 验证后检查隔离库 `model_call` 数量仍为 0。
 
-## 4. 故障与恢复
+## 4. T2 动态循环
+
+Agent 与 Worker 由两个独立开关控制，默认均为 `false`：
+
+```text
+AGENT_ENABLED=false
+AGENT_WORKER_ENABLED=false
+```
+
+启用实验时，Worker 每次只领取并推进一个 Run。策略只返回版本化枚举动作；application service 以
+显式 `switch` 分发到现有 Retrieval、VideoContext Query 和 Answer service。ToolCall 在任何业务调用
+前以 RUNNING 落库，完成后才原子提交 Step。Observation 只包含证据数量、窗口、答案状态和结果引用，
+不保存检索原文、Prompt、模型原始响应或内部思考。
+
+每次动作前重新检查 owner/READY Job、动作 Schema、step、deadline、输入/输出 Token、已知费用、
+未知费用和答案次数。Answer 和 Retrieval 产生的既有 `model_call` 通过 `run_id` 归属 Run；预算事实
+由 Store 聚合，不新建第二套调用账本。任一未知结果或无价格成功调用会使后续 Step 失败关闭。
+
+T2 聚焦验证在全新隔离数据库上执行：
+
+```powershell
+cd server
+.\mvnw.cmd test-compile -Pintegration `
+  "-Dit.test=DatabaseMigrationIT,JdbcAgentStoreIT,AnswerPersistenceAdapterIT,VideoIndexPersistenceAdapterIT" `
+  "-Dvideopilot.context.asr.enabled=false" `
+  "-Dvideopilot.context.ocr.enabled=false" `
+  "-Dvideopilot.context.derivation.enabled=false" `
+  "-Dvideopilot.evaluation.worker-enabled=false" `
+  "-Dvideopilot.messaging.enabled=false" `
+  failsafe:integration-test failsafe:verify
+```
+
+## 5. 故障与恢复
 
 - 创建响应断开后，用原幂等键重试，不创建第二个逻辑 Run。
 - lease 或 version 冲突时重新读取 MySQL，不直接改状态、不清表、不放宽 CAS。
-- T1 只允许验证无费用生命周期；不得手工插入假 ToolCall 或伪造完成轨迹供 UI 展示。
+- T1 只允许验证无费用生命周期；T2 测试中的 fixture 只验证数据库预算聚合，不作为 UI 演示数据。
+- 过期租约下若存在 RUNNING ToolCall，Worker 标记 UNKNOWN 并终止 Run；不能假设调用未发生并自动重放。
 - V20 是前进迁移。应用回滚时保留三张表和历史事实，切换到已验证兼容当前 schema 的构建；
   不执行 `flyway repair`、删库、降版本迁移或覆盖历史。
-- 到 T2 后，UNKNOWN、高成本调用和进程重启必须遵循任务表中的调用前硬门；T1 不提前声称这些
-  故障矩阵已经通过。
+- T2 已实现 UNKNOWN 与调用前硬门；重复 Worker、进程重启、Redis 清空和完整边界矩阵仍须在 T3
+  故障注入中证明，不因单元测试提前声称 T3 通过。

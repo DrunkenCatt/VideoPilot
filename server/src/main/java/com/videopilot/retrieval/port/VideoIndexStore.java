@@ -128,6 +128,7 @@ public interface VideoIndexStore {
             String embeddingVersion,
             String inputFingerprint,
             int attempt,
+            UUID executionRunId,
             UUID evaluationRunId,
             String evaluationCaseId,
             Instant startedAt) {
@@ -135,9 +136,17 @@ public interface VideoIndexStore {
         public RetrievalEmbeddingCallStart(
                 UUID modelCallId, UUID jobId, String requestId, String operationType,
                 String provider, String model, String embeddingVersion, String inputFingerprint,
+                int attempt, UUID evaluationRunId, String evaluationCaseId, Instant startedAt) {
+            this(modelCallId, jobId, requestId, operationType, provider, model, embeddingVersion,
+                    inputFingerprint, attempt, null, evaluationRunId, evaluationCaseId, startedAt);
+        }
+
+        public RetrievalEmbeddingCallStart(
+                UUID modelCallId, UUID jobId, String requestId, String operationType,
+                String provider, String model, String embeddingVersion, String inputFingerprint,
                 int attempt, Instant startedAt) {
             this(modelCallId, jobId, requestId, operationType, provider, model, embeddingVersion,
-                    inputFingerprint, attempt, null, null, startedAt);
+                    inputFingerprint, attempt, null, null, null, startedAt);
         }
     }
 

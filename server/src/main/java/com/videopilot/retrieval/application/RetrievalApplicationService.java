@@ -102,12 +102,23 @@ public final class RetrievalApplicationService {
     }
 
     public RetrievalResult retrieve(OwnerContext owner, UUID jobId, String query, int topK) {
-        return retrieve(owner, jobId, query, topK, null, null);
+        return retrieve(owner, jobId, query, topK, null, null, null);
+    }
+
+    public RetrievalResult retrieve(
+            OwnerContext owner, UUID jobId, String query, int topK, UUID executionRunId) {
+        return retrieve(owner, jobId, query, topK, null, null, executionRunId);
     }
 
     public RetrievalResult retrieve(
             OwnerContext owner, UUID jobId, String query, int topK,
             UUID evaluationRunId, String evaluationCaseId) {
+        return retrieve(owner, jobId, query, topK, evaluationRunId, evaluationCaseId, null);
+    }
+
+    private RetrievalResult retrieve(
+            OwnerContext owner, UUID jobId, String query, int topK,
+            UUID evaluationRunId, String evaluationCaseId, UUID executionRunId) {
         String normalizedQuery = normalizeQuery(query);
         if (topK < 1 || topK > 20) throw new RetrievalException(RetrievalException.Reason.INVALID_REQUEST);
         VideoIndexStore.RetrievalSnapshot snapshot = store
@@ -120,7 +131,8 @@ public final class RetrievalApplicationService {
         EnumSet<EvidenceHit.DegradedChannel> degraded = EnumSet.noneOf(EvidenceHit.DegradedChannel.class);
         if (!"AVAILABLE".equals(snapshot.ocrState())) degraded.add(EvidenceHit.DegradedChannel.OCR);
         Map<UUID, Double> semantic = semantic(
-                owner, snapshot, normalizedQuery, degraded, evaluationRunId, evaluationCaseId);
+                owner, snapshot, normalizedQuery, degraded,
+                evaluationRunId, evaluationCaseId, executionRunId);
         Set<String> queryTokens = tokens(normalizedQuery);
         Map<UUID, Double> keyword = new LinkedHashMap<>();
         Map<UUID, Double> visual = new LinkedHashMap<>();
@@ -151,7 +163,8 @@ public final class RetrievalApplicationService {
             String query,
             EnumSet<EvidenceHit.DegradedChannel> degraded,
             UUID evaluationRunId,
-            String evaluationCaseId) {
+            String evaluationCaseId,
+            UUID executionRunId) {
         if ("SEMANTIC_DEGRADED".equals(snapshot.status()) || snapshot.embeddings().isEmpty()) {
             degraded.add(EvidenceHit.DegradedChannel.SEMANTIC);
             return Map.of();
@@ -171,7 +184,7 @@ public final class RetrievalApplicationService {
         store.startRetrievalEmbeddingCall(new VideoIndexStore.RetrievalEmbeddingCallStart(
                 callId, snapshot.jobId(), ids.get().toString(), "RETRIEVAL_EMBEDDING",
                 embeddingProvider, embeddingModel, embeddingVersion, fingerprint, attempt,
-                evaluationRunId, evaluationCaseId, startedAt));
+                executionRunId, evaluationRunId, evaluationCaseId, startedAt));
         List<Float> queryVector;
         try {
             EmbeddingPort.Result result = embeddings.embed(new EmbeddingPort.Request(

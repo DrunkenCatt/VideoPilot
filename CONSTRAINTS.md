@@ -82,3 +82,4 @@ Last reviewed: 2026-10-27
 | ID | Rule | Path | Reason | Owner | Expires |
 | --- | --- | --- | --- | --- | --- |
 | EX-2026-11-10-M6 | `AGENTS.md` / Roadmap 的“当前里程碑未退出不得进入下一阶段”流程顺序；不豁免任何工程或运行时质量门 | `tasks/M6/**`、`server/src/**/com/videopilot/agent/**`、`client/src/features/agent/**` 及其直接测试/迁移/文档 | M5 工程流水线已完成但效果门失败；负责人明确要求冻结该已知缺口并优先验证最小 M6 Agent Loop。M6 只能作为本地实验能力推进，不得默认启用、不得宣称 M5/M6 质量通过、不得读取或调参历史 TEST；M5 的 85% Claim 支持和 95% 引用定位门保持不变 | zzm | 2027-02-08 |
+| EX-2026-11-11-M6-OWASP | 允许 M6 T2-T3 的本地退出门在 OWASP Dependency-Check 没有可用 NVD 数据时记录为“未形成结论”并继续；不豁免已知 High/Critical 漏洞，不豁免 CI、`npm audit`、Gitleaks 或其他质量门 | M6 T2-T3 的直接代码、测试、迁移和文档 | Dependency-Check 12.2.2 在线获取 NVD 首分页持续超时，离线模式又因本机无缓存以 `NoDataException` 失败；负责人在看到该证据后明确要求跳过本次 OWASP 检查并继续 T3。例外不得记作扫描通过；数据源恢复或 CI 得到有效报告时仍必须满足 High/Critical 为 0 | zzm | 2026-11-25 |

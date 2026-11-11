@@ -36,13 +36,22 @@ public interface AnswerStore {
     record ModelCallStart(
             UUID modelCallId, UUID answerId, UUID jobId, String requestId, String provider,
             String modelVersion, String promptVersion, String inputFingerprint,
+            UUID executionRunId,
             UUID evaluationRunId, String evaluationCaseId, Instant startedAt) {
+
+        public ModelCallStart(
+                UUID modelCallId, UUID answerId, UUID jobId, String requestId, String provider,
+                String modelVersion, String promptVersion, String inputFingerprint,
+                UUID evaluationRunId, String evaluationCaseId, Instant startedAt) {
+            this(modelCallId, answerId, jobId, requestId, provider, modelVersion, promptVersion,
+                    inputFingerprint, null, evaluationRunId, evaluationCaseId, startedAt);
+        }
 
         public ModelCallStart(
                 UUID modelCallId, UUID answerId, UUID jobId, String requestId, String provider,
                 String modelVersion, String promptVersion, String inputFingerprint, Instant startedAt) {
             this(modelCallId, answerId, jobId, requestId, provider, modelVersion, promptVersion,
-                    inputFingerprint, null, null, startedAt);
+                    inputFingerprint, null, null, null, startedAt);
         }
     }
 

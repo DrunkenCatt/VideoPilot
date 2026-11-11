@@ -128,6 +128,89 @@ public class JdbcAgentStore implements AgentStore {
     }
 
     @Override
+    @Transactional
+    public long beginToolCall(String leaseId, UUID runId, long expectedVersion, ToolCall call) {
+        int updated = jdbc.sql("""
+                UPDATE agent_run SET version = version + 1
+                WHERE run_id = :runId AND status = 'RUNNING'
+                  AND lease_id = :leaseId AND version = :version
+                  AND step_count + 1 = :stepNumber
+                """).param("runId", runId.toString()).param("leaseId", leaseId)
+                .param("version", expectedVersion).param("stepNumber", call.stepNumber()).update();
+        if (updated != 1) throw new AgentException(AgentException.Reason.CONFLICT);
+        jdbc.sql("""
+                INSERT INTO tool_call (
+                    tool_call_id, run_id, step_number, tool_name, idempotency_key,
+                    input_fingerprint, status, parameter_summary, started_at
+                ) VALUES (
+                    :callId,:runId,:stepNumber,:toolName,:key,
+                    :fingerprint,'RUNNING',CAST(:parameters AS JSON),:startedAt
+                )
+                """).param("callId", call.toolCallId().toString()).param("runId", runId.toString())
+                .param("stepNumber", call.stepNumber()).param("toolName", call.toolName())
+                .param("key", call.idempotencyKey()).param("fingerprint", call.inputFingerprint())
+                .param("parameters", call.parameterSummary()).param("startedAt", call.startedAt()).update();
+        return expectedVersion + 1;
+    }
+
+    @Override
+    @Transactional
+    public void completeToolCallAndStep(
+            String leaseId, UUID runId, long expectedVersion,
+            ToolCall call, AgentStep step, boolean answerAttempt) {
+        int callUpdated = jdbc.sql("""
+                UPDATE tool_call SET status = 'COMPLETED', observation_summary = CAST(:observation AS JSON),
+                    result_reference = :reference, latency_ms = :latency, completed_at = :completedAt
+                WHERE tool_call_id = :callId AND run_id = :runId AND status = 'RUNNING'
+                """).param("observation", call.observationSummary()).param("reference", call.resultReference())
+                .param("latency", call.latencyMs()).param("completedAt", call.completedAt())
+                .param("callId", call.toolCallId().toString()).param("runId", runId.toString()).update();
+        if (callUpdated != 1) throw new AgentException(AgentException.Reason.CONFLICT);
+        jdbc.sql("""
+                INSERT INTO agent_step (
+                    run_id, step_number, action, observation_summary, result_reference, completed_at
+                ) VALUES (:runId,:stepNumber,:action,:observation,:reference,:completedAt)
+                """).param("runId", runId.toString()).param("stepNumber", step.stepNumber())
+                .param("action", step.action()).param("observation", step.observationSummary())
+                .param("reference", step.resultReference()).param("completedAt", step.completedAt()).update();
+        int runUpdated = jdbc.sql("""
+                UPDATE agent_run SET status = 'REQUESTED', step_count = step_count + 1,
+                    answer_attempt_count = answer_attempt_count + :answerAttempt,
+                    input_tokens = (SELECT COALESCE(SUM(input_units),0) FROM model_call WHERE run_id=:runId),
+                    output_tokens = (SELECT COALESCE(SUM(output_units),0) FROM model_call WHERE run_id=:runId),
+                    known_cost = (SELECT COALESCE(SUM(estimated_cost),0) FROM model_call WHERE run_id=:runId),
+                    unknown_cost_calls = (SELECT COUNT(*) FROM model_call
+                        WHERE run_id=:runId AND (status='UNKNOWN_OUTCOME'
+                          OR (status='SUCCEEDED' AND price_status='UNAVAILABLE'))),
+                    lease_id = NULL, lease_until = NULL, version = version + 1
+                WHERE run_id=:runId AND status='RUNNING' AND lease_id=:leaseId
+                  AND version=:version AND step_count + 1=:stepNumber
+                """).param("answerAttempt", answerAttempt ? 1 : 0).param("runId", runId.toString())
+                .param("leaseId", leaseId).param("version", expectedVersion)
+                .param("stepNumber", step.stepNumber()).update();
+        if (runUpdated != 1) throw new AgentException(AgentException.Reason.CONFLICT);
+    }
+
+    @Override
+    @Transactional
+    public void failToolCallAndTerminate(
+            String leaseId, UUID runId, long expectedVersion, UUID toolCallId,
+            ToolCallStatus callStatus, String terminationReason, Instant completedAt) {
+        if (callStatus != ToolCallStatus.FAILED && callStatus != ToolCallStatus.UNKNOWN) {
+            throw new AgentException(AgentException.Reason.INVALID_REQUEST);
+        }
+        int callUpdated = jdbc.sql("""
+                UPDATE tool_call SET status=:status, observation_summary=JSON_OBJECT('code',:reason),
+                    completed_at=:completedAt
+                WHERE tool_call_id=:callId AND run_id=:runId AND status='RUNNING'
+                """).param("status", callStatus.name()).param("reason", terminationReason)
+                .param("completedAt", completedAt).param("callId", toolCallId.toString())
+                .param("runId", runId.toString()).update();
+        if (callUpdated != 1) throw new AgentException(AgentException.Reason.CONFLICT);
+        terminate(leaseId, runId, expectedVersion, RunStatus.FAILED, terminationReason, completedAt);
+    }
+
+    @Override
     public void terminate(
             String leaseId, UUID runId, long expectedVersion,
             RunStatus status, String terminationReason, Instant completedAt) {
@@ -137,6 +220,12 @@ public class JdbcAgentStore implements AgentStore {
         }
         int updated = jdbc.sql("""
                 UPDATE agent_run SET status = :status, termination_reason = :reason,
+                    input_tokens = (SELECT COALESCE(SUM(input_units),0) FROM model_call WHERE run_id=:runId),
+                    output_tokens = (SELECT COALESCE(SUM(output_units),0) FROM model_call WHERE run_id=:runId),
+                    known_cost = (SELECT COALESCE(SUM(estimated_cost),0) FROM model_call WHERE run_id=:runId),
+                    unknown_cost_calls = (SELECT COUNT(*) FROM model_call
+                        WHERE run_id=:runId AND (status='UNKNOWN_OUTCOME'
+                          OR (status='SUCCEEDED' AND price_status='UNAVAILABLE'))),
                     completed_at = :completedAt, lease_id = NULL, lease_until = NULL,
                     version = version + 1
                 WHERE run_id = :runId AND status = 'RUNNING'
