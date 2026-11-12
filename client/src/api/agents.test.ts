@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import type { AgentRun, JobId } from './contracts'
+import type { AgentRun, GoalAnalysisResult, JobId } from './contracts'
 import { createAgentsApi } from './agents'
 
 const jobId = '10000000-0000-0000-0000-000000000008' as JobId
@@ -53,6 +53,13 @@ describe('agents API', () => {
       method: 'GET',
       credentials: 'same-origin',
       headers: { Accept: 'application/json' },
+    })
+
+    const goalResult = { state: 'RUNNING', run, answer: null } satisfies GoalAnalysisResult
+    request.mockResolvedValueOnce(jsonResponse(200, goalResult))
+    await expect(api.getGoalAnalysisResult(jobId)).resolves.toEqual(goalResult)
+    expect(request).toHaveBeenLastCalledWith(`/api/v1/analysis-jobs/${jobId}/goal-analysis-result`, {
+      method: 'GET', credentials: 'same-origin', headers: { Accept: 'application/json' },
     })
   })
 

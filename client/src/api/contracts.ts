@@ -68,6 +68,10 @@ export function jobAgentRunsPath(jobId: JobId): string {
   return `${API.analysisJobs}/${jobId}/agent-runs`
 }
 
+export function jobGoalAnalysisResultPath(jobId: JobId): string {
+  return `${API.analysisJobs}/${jobId}/goal-analysis-result`
+}
+
 export function agentRunPath(runId: AgentRunId | string): string {
   return `${API.prefix}/agent-runs/${runId}`
 }
@@ -685,4 +689,12 @@ export interface AgentRun {
   completedAt: string | null
   steps: AgentStep[]
   toolCalls: AgentToolCall[]
+}
+
+export type GoalAnalysisState = 'DISABLED' | 'PENDING' | 'REQUESTED' | 'RUNNING' | 'ANSWERED' | 'REFUSED' | 'FAILED'
+
+export interface GoalAnalysisResult {
+  state: GoalAnalysisState
+  run: AgentRun | null
+  answer: AnswerResponse | null
 }

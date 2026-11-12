@@ -20,6 +20,7 @@ public final class AgentWorker {
             initialDelayString = "${videopilot.agent.worker-initial-delay:PT2S}")
     void processNext() {
         try {
+            agents.ensureNextGoalAnalysis();
             agents.processNext();
         } catch (AgentException exception) {
             LOGGER.warn("Agent worker failed reason={}", exception.reason());

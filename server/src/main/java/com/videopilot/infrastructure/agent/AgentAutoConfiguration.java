@@ -49,7 +49,8 @@ public class AgentAutoConfiguration {
             @Value("${videopilot.answer.model:deepseek-ai/DeepSeek-V4-Flash}") String modelVersion,
             @Value("${videopilot.retrieval.embedding.version:siliconflow-bge-m3-1024-v1}")
             String embeddingVersion,
-            @Value("${videopilot.analysis.limits.version:m4-limits-v3}") String limitsVersion) {
+            @Value("${videopilot.analysis.limits.version:m4-limits-v3}") String limitsVersion,
+            @Value("${videopilot.agent.goal-analysis-enabled:false}") boolean goalAnalysisEnabled) {
         Clock clock = Clock.systemUTC();
         AgentVersions versions = new AgentVersions(
                 AgentApplicationService.POLICY_VERSION, AnswerApplicationService.PROMPT_VERSION, modelVersion,
@@ -60,7 +61,8 @@ public class AgentAutoConfiguration {
                 () -> new AgentBudget(
                         6, 2, 12_000, 6_000, new BigDecimal("1.00"),
                         clock.instant().plus(Duration.ofMinutes(3))),
-                clock::instant, UUID::randomUUID, policy, retrieval, contexts, answers);
+                clock::instant, UUID::randomUUID, policy, retrieval, contexts, answers,
+                goalAnalysisEnabled);
     }
 
     @Bean

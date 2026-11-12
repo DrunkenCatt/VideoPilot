@@ -208,6 +208,26 @@ class JdbcAgentStoreIT {
         assertThat(trace.toolCalls().getFirst().status()).isEqualTo(ToolCallStatus.UNKNOWN);
     }
 
+    @Test
+    void discoversOldReadyJobsAndStopsOfferingThemAfterTheGoalRunExists() {
+        var candidate = store.findNextGoalAnalysisJob().orElseThrow();
+        assertThat(candidate.ownerId()).isEqualTo(owner);
+        assertThat(candidate.jobId()).isEqualTo(jobId);
+        assertThat(candidate.goal()).isEqualTo("Agent lesson");
+        assertThat(candidate.ready()).isTrue();
+
+        AgentRun automatic = run("goal-analysis:" + jobId, "c".repeat(64));
+        store.create(owner, automatic);
+
+        assertThat(store.findTraceByIntent(owner, "goal-analysis:" + jobId)).isPresent();
+        assertThat(store.findNextGoalAnalysisJob()).isEmpty();
+        assertThat(store.findGoalAnalysisJob(new OwnerId(UUID.randomUUID()), jobId)).isEmpty();
+
+        jdbc.sql("UPDATE analysis_job SET status = 'FAILED' WHERE job_id = :jobId")
+                .param("jobId", jobId.toString()).update();
+        assertThat(store.findGoalAnalysisJob(owner, jobId).orElseThrow().ready()).isFalse();
+    }
+
     private AgentRun run(String key, String fingerprint) {
         return new AgentRun(
                 runId, owner, jobId, key, fingerprint, "解释课程内容", RunStatus.REQUESTED,

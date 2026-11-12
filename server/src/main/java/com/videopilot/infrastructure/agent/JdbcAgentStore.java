@@ -91,6 +91,41 @@ public class JdbcAgentStore implements AgentStore {
     }
 
     @Override
+    public Optional<GoalAnalysisJob> findNextGoalAnalysisJob() {
+        return jdbc.sql("""
+                SELECT job.owner_id, job.job_id, job.goal
+                FROM analysis_job job
+                WHERE job.status = 'READY'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM agent_run run
+                      WHERE run.owner_id = job.owner_id
+                        AND run.idempotency_key = CONCAT('goal-analysis:', job.job_id)
+                  )
+                ORDER BY job.created_at, job.job_id
+                LIMIT 1
+                """).query((row, ignored) -> new GoalAnalysisJob(
+                        new OwnerId(UUID.fromString(row.getString("owner_id"))),
+                        UUID.fromString(row.getString("job_id")), row.getString("goal"), true))
+                .optional();
+    }
+
+    @Override
+    public Optional<GoalAnalysisJob> findGoalAnalysisJob(OwnerId ownerId, UUID jobId) {
+        return jdbc.sql("""
+                SELECT owner_id, job_id, goal, status FROM analysis_job
+                WHERE owner_id = :owner AND job_id = :jobId
+                """).param("owner", ownerId.value().toString()).param("jobId", jobId.toString())
+                .query((row, ignored) -> new GoalAnalysisJob(
+                        ownerId, jobId, row.getString("goal"), "READY".equals(row.getString("status"))))
+                .optional();
+    }
+
+    @Override
+    public Optional<AgentTrace> findTraceByIntent(OwnerId ownerId, String idempotencyKey) {
+        return findByIntent(ownerId, idempotencyKey).flatMap(run -> findTrace(ownerId, run.runId()));
+    }
+
+    @Override
     @Transactional
     public Optional<ClaimedRun> claimNext(String leaseId, Instant leaseUntil, Instant now) {
         Optional<UUID> runId = jdbc.sql("""

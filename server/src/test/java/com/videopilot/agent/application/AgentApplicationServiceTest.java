@@ -2,12 +2,18 @@ package com.videopilot.agent.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.videopilot.agent.domain.AgentModels.AgentBudget;
 import com.videopilot.agent.domain.AgentModels.AgentRun;
 import com.videopilot.agent.domain.AgentModels.AgentTrace;
+import com.videopilot.agent.domain.AgentModels.AgentStep;
 import com.videopilot.agent.domain.AgentModels.AgentVersions;
 import com.videopilot.agent.port.AgentStore;
+import com.videopilot.agent.port.AgentStore.GoalAnalysisJob;
+import com.videopilot.answer.application.AnswerApplicationService;
+import com.videopilot.answer.port.AnswerStore.StoredAnswer;
 import com.videopilot.identity.application.OwnerContext;
 import com.videopilot.identity.domain.OwnerId;
 import java.math.BigDecimal;
@@ -98,8 +104,104 @@ class AgentApplicationServiceTest {
                 .isEqualTo(AgentException.Reason.NOT_FOUND);
     }
 
+    @Test
+    void createsAtMostOneGoalAnalysisRunFromTheOldestReadyJob() {
+        FakeAgentStore store = new FakeAgentStore();
+        store.readyJobs.put(JOB, new OwnerId(OWNER));
+        store.goalAnalysisJob = new GoalAnalysisJob(new OwnerId(OWNER), JOB, "总结课程核心命令", true);
+        AgentApplicationService service = goalAnalysisService(store);
+
+        assertThat(service.ensureNextGoalAnalysis()).isTrue();
+        assertThat(service.ensureNextGoalAnalysis()).isFalse();
+
+        AgentRun run = store.created.values().iterator().next();
+        assertThat(run.idempotencyKey()).isEqualTo("goal-analysis:" + JOB);
+        assertThat(run.goal()).isEqualTo("总结课程核心命令");
+    }
+
+    @Test
+    void leavesReadyJobsUntouchedWhenGoalAnalysisIsDisabled() {
+        FakeAgentStore store = new FakeAgentStore();
+        store.readyJobs.put(JOB, new OwnerId(OWNER));
+        store.goalAnalysisJob = new GoalAnalysisJob(new OwnerId(OWNER), JOB, "总结课程核心命令", true);
+
+        assertThat(service(store).ensureNextGoalAnalysis()).isFalse();
+        assertThat(store.created).isEmpty();
+    }
+
+    @Test
+    void returnsPendingThenTheExactAnswerOwnedByTheGoalRun() {
+        FakeAgentStore store = new FakeAgentStore();
+        store.readyJobs.put(JOB, new OwnerId(OWNER));
+        store.goalAnalysisJob = new GoalAnalysisJob(new OwnerId(OWNER), JOB, "总结课程核心命令", true);
+        AnswerApplicationService answers = mock(AnswerApplicationService.class);
+        AgentApplicationService service = goalAnalysisService(store, answers);
+
+        assertThat(service.goalAnalysisResult(owner(OWNER), JOB).state().name()).isEqualTo("PENDING");
+        service.ensureNextGoalAnalysis();
+        UUID answerId = UUID.randomUUID();
+        AgentRun completed = copyWithStatus(store.created.values().iterator().next(),
+                com.videopilot.agent.domain.AgentModels.RunStatus.COMPLETED);
+        store.created.put(new OwnerId(OWNER).value() + "|goal-analysis:" + JOB, completed);
+        store.steps = java.util.List.of(new AgentStep(
+                completed.runId(), 1, "GENERATE_AND_VERIFY", "ANSWER:ANSWERED",
+                "answer:" + answerId, NOW));
+        StoredAnswer answer = mock(StoredAnswer.class);
+        when(answer.status()).thenReturn("ANSWERED");
+        when(answers.get(owner(OWNER), JOB, answerId)).thenReturn(answer);
+
+        var result = service.goalAnalysisResult(owner(OWNER), JOB);
+
+        assertThat(result.state().name()).isEqualTo("ANSWERED");
+        assertThat(result.trace().run().runId()).isEqualTo(RUN);
+        assertThat(result.answer()).isSameAs(answer);
+    }
+
+    @Test
+    void rejectsMalformedAnswerReferencesInsteadOfGuessingAnAnswerId() {
+        FakeAgentStore store = new FakeAgentStore();
+        store.readyJobs.put(JOB, new OwnerId(OWNER));
+        store.goalAnalysisJob = new GoalAnalysisJob(new OwnerId(OWNER), JOB, "总结课程核心命令", true);
+        AgentApplicationService service = goalAnalysisService(store, mock(AnswerApplicationService.class));
+        service.ensureNextGoalAnalysis();
+        AgentRun completed = copyWithStatus(store.created.values().iterator().next(),
+                com.videopilot.agent.domain.AgentModels.RunStatus.COMPLETED);
+        store.created.put(new OwnerId(OWNER).value() + "|goal-analysis:" + JOB, completed);
+        store.steps = java.util.List.of(new AgentStep(
+                completed.runId(), 1, "GENERATE_AND_VERIFY", "ANSWER:ANSWERED", "answer:not-a-uuid", NOW));
+
+        assertThatThrownBy(() -> service.goalAnalysisResult(owner(OWNER), JOB))
+                .isInstanceOf(AgentException.class)
+                .extracting(value -> ((AgentException) value).reason())
+                .isEqualTo(AgentException.Reason.CONFLICT);
+    }
+
     private AgentApplicationService service(FakeAgentStore store) {
         return new AgentApplicationService(store, versions(), this::budget, () -> NOW, () -> RUN);
+    }
+
+    private AgentApplicationService goalAnalysisService(FakeAgentStore store) {
+        return new AgentApplicationService(
+                store, versions(), this::budget, () -> NOW, () -> RUN, true);
+    }
+
+    private AgentApplicationService goalAnalysisService(
+            FakeAgentStore store, AnswerApplicationService answers) {
+        return new AgentApplicationService(
+                store, versions(), this::budget, () -> NOW, () -> RUN,
+                mock(com.videopilot.agent.port.AgentPolicy.class),
+                mock(com.videopilot.retrieval.application.RetrievalApplicationService.class),
+                mock(com.videopilot.context.application.VideoContextQueryApplicationService.class),
+                answers, true);
+    }
+
+    private AgentRun copyWithStatus(
+            AgentRun run, com.videopilot.agent.domain.AgentModels.RunStatus status) {
+        return new AgentRun(
+                run.runId(), run.ownerId(), run.jobId(), run.evaluationRunId(), run.evaluationCaseId(),
+                run.idempotencyKey(), run.requestFingerprint(), run.goal(), status, run.versions(), run.budget(),
+                1, 1, run.inputTokens(), run.outputTokens(), run.knownCost(), run.unknownCostCalls(),
+                "COMPLETED", run.version() + 1, run.createdAt(), NOW);
     }
 
     private AgentVersions versions() {
@@ -120,6 +222,8 @@ class AgentApplicationServiceTest {
 
         private final Map<UUID, OwnerId> readyJobs = new HashMap<>();
         private final Map<String, AgentRun> created = new HashMap<>();
+        private GoalAnalysisJob goalAnalysisJob;
+        private java.util.List<AgentStep> steps = java.util.List.of();
 
         @Override
         public boolean ownsReadyJob(OwnerId ownerId, UUID jobId) {
@@ -142,7 +246,30 @@ class AgentApplicationServiceTest {
             return created.values().stream()
                     .filter(run -> run.ownerId().equals(ownerId) && run.runId().equals(runId))
                     .findFirst()
-                    .map(run -> new AgentTrace(run, java.util.List.of(), java.util.List.of()));
+                    .map(run -> new AgentTrace(run, steps, java.util.List.of()));
+        }
+
+        @Override
+        public Optional<GoalAnalysisJob> findNextGoalAnalysisJob() {
+            if (goalAnalysisJob == null || created.values().stream()
+                    .anyMatch(run -> run.jobId().equals(goalAnalysisJob.jobId())
+                            && run.idempotencyKey().equals("goal-analysis:" + goalAnalysisJob.jobId()))) {
+                return Optional.empty();
+            }
+            return Optional.of(goalAnalysisJob);
+        }
+
+        @Override
+        public Optional<GoalAnalysisJob> findGoalAnalysisJob(OwnerId ownerId, UUID jobId) {
+            return goalAnalysisJob != null && goalAnalysisJob.ownerId().equals(ownerId)
+                    && goalAnalysisJob.jobId().equals(jobId) ? Optional.of(goalAnalysisJob) : Optional.empty();
+        }
+
+        @Override
+        public Optional<AgentTrace> findTraceByIntent(OwnerId ownerId, String idempotencyKey) {
+            return created.values().stream()
+                    .filter(run -> run.ownerId().equals(ownerId) && run.idempotencyKey().equals(idempotencyKey))
+                    .findFirst().map(run -> new AgentTrace(run, steps, java.util.List.of()));
         }
 
         @Override

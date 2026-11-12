@@ -129,3 +129,35 @@ DeepSeek-V4-Flash 按调用开始时的北京时间和输入/输出 Token 估算
 即使前两条命中，候选仍必须同时达到 M5 的严格 Claim-Evidence 支持率 85% 和引用定位率 95%。
 比较结果只给出候选资格，不修改 `AGENT_ENABLED`、`AGENT_WORKER_ENABLED` 或前端开关；默认启用仍需
 负责人另行批准。
+
+## 8. T5 自动目标分析结果
+
+T5 复用同一个 Agent Worker 和 Answer 管线，不增加结果表。四个开关继续默认关闭：
+
+```text
+AGENT_ENABLED=false
+AGENT_WORKER_ENABLED=false
+AGENT_GOAL_ANALYSIS_ENABLED=false
+VITE_AGENT_ENABLED=false
+VITE_GOAL_ANALYSIS_ENABLED=false
+```
+
+本地验收需要同时启用 Agent、Worker、后端目标分析和两个前端入口。启用后，每个 Worker tick 先从
+MySQL 选择最早一个 READY 且缺少目标 Run 的 Job，以数据库中的原始 `goal` 和稳定幂等键
+`goal-analysis:<jobId>` 创建 Run，然后仍只推进一个 Agent Run。已有 READY Job 会逐个补齐；若不希望
+产生这部分受预算约束的模型调用，不要开启 `AGENT_GOAL_ANALYSIS_ENABLED`。
+
+页面通过以下 owner-scoped 接口读取状态：
+
+```http
+GET /api/v1/analysis-jobs/{jobId}/goal-analysis-result
+```
+
+状态为 `DISABLED/PENDING/REQUESTED/RUNNING/ANSWERED/REFUSED/FAILED`。服务端只从已提交的
+`GENERATE_AND_VERIFY` Step 接受严格 `answer:<uuid>`，再用现有 Answer service 校验 owner、Job 与
+Answer；非法引用返回一致性冲突，不猜测结果。自动 Answer 在普通 `GET .../answers` 列表中排除，
+但仍可由目标结果接口精确读取。Run 失败不反向修改 READY Job，也不自动创建替代 Run。
+
+排查顺序：先查目标结果接口，再按其中 `runId` 读取 Agent Trace，最后核对 `model_call.run_id`。不要删
+Run、改幂等键或把 UNKNOWN 调用重置为成功。Redis 清空和应用重启后，Worker 会从 MySQL 继续发现缺失
+Run；已有终态 Run 不重建。

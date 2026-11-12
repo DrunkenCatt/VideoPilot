@@ -240,10 +240,23 @@ public class AnswerPersistenceAdapter implements AnswerStore {
     public List<StoredAnswer> list(OwnerId ownerId, UUID jobId, Long cursor, int pageSize) {
         String sql = cursor == null ? """
                 SELECT * FROM answer_record WHERE owner_id = :owner AND job_id = :jobId
-                  AND status IN ('ANSWERED', 'REFUSED') ORDER BY sequence_id DESC LIMIT :limit
+                  AND status IN ('ANSWERED', 'REFUSED')
+                  AND NOT EXISTS (
+                      SELECT 1 FROM model_call call_record
+                      INNER JOIN agent_run run ON run.run_id = call_record.run_id
+                      WHERE call_record.model_call_id = answer_record.model_call_id
+                        AND run.idempotency_key = CONCAT('goal-analysis:', answer_record.job_id)
+                  )
+                ORDER BY sequence_id DESC LIMIT :limit
                 """ : """
                 SELECT * FROM answer_record WHERE owner_id = :owner AND job_id = :jobId
                   AND status IN ('ANSWERED', 'REFUSED') AND sequence_id < :cursor
+                  AND NOT EXISTS (
+                      SELECT 1 FROM model_call call_record
+                      INNER JOIN agent_run run ON run.run_id = call_record.run_id
+                      WHERE call_record.model_call_id = answer_record.model_call_id
+                        AND run.idempotency_key = CONCAT('goal-analysis:', answer_record.job_id)
+                  )
                 ORDER BY sequence_id DESC LIMIT :limit
                 """;
         Map<String, Object> parameters = new LinkedHashMap<>();

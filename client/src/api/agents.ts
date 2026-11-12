@@ -1,17 +1,19 @@
 import {
   API,
   agentRunPath,
+  jobGoalAnalysisResultPath,
   jobAgentRunsPath,
   type AgentRun,
   type AgentRunId,
+  type GoalAnalysisResult,
   type JobId,
 } from './contracts'
 import { ApiClientError } from './session'
 
 type Request = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 
-async function responseJson(response: Response): Promise<AgentRun> {
-  if (response.ok) return (await response.json()) as AgentRun
+async function responseJson<T>(response: Response): Promise<T> {
+  if (response.ok) return (await response.json()) as T
   try {
     throw new ApiClientError(response.status, await response.json())
   } catch (error) {
@@ -39,7 +41,7 @@ export function createAgentsApi(request: Request = fetch) {
         },
         body: JSON.stringify({ goal }),
       })
-      return responseJson(response)
+      return responseJson<AgentRun>(response)
     },
 
     async get(runId: AgentRunId): Promise<AgentRun> {
@@ -48,7 +50,16 @@ export function createAgentsApi(request: Request = fetch) {
         credentials: 'same-origin',
         headers: { Accept: 'application/json' },
       })
-      return responseJson(response)
+      return responseJson<AgentRun>(response)
+    },
+
+    async getGoalAnalysisResult(jobId: JobId): Promise<GoalAnalysisResult> {
+      const response = await request(jobGoalAnalysisResultPath(jobId), {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json' },
+      })
+      return responseJson<GoalAnalysisResult>(response)
     },
   }
 }

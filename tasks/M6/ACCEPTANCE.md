@@ -1,6 +1,8 @@
 # M6 验收记录：最小动态工具型 Agent Loop
 
-> 当前状态：T3 已完成，可以进入 T4；OWASP 因 NVD 数据不可用未形成结论，负责人以 `EX-2026-11-11-M6-OWASP` 接受该项本地遗留风险并要求继续。M5 仍未退出；M6 依据 `EX-2026-11-10-M6` 作为默认关闭的本地实验能力推进。
+> 当前状态：T5 自身退出门已通过；T4/M6 因 Claim 支撑率和引用定位率未达 M5 原门槛仍不可晋级。
+> `EX-2026-11-12-M6-T5` 只允许优先补齐体验闭环；Agent/目标分析保持默认关闭。OWASP 因 NVD
+> 数据不可用未形成结论，负责人以 `EX-2026-11-11-M6-OWASP` 接受该项本地遗留风险并要求继续。
 
 ## 1. 冻结事实
 
@@ -359,3 +361,51 @@ UNKNOWN 结果或降低晋级门。按依赖规则未提交 T4，也未开始目
 停止：不执行浏览器登录或桌面/320px 验收、不提交 T4、不开始目标分析结果 T5；Agent、Worker 与前端
 入口继续保持仓库默认关闭。下一步若继续，应针对 Claim 支撑与引用定位做根因分析和修复，再以全新
 series 重跑，不能降低质量门。
+
+## 11. T5 自动目标分析结果验收（2026-11-12）
+
+T4 已以 `8f47e9d` 独立保存不可晋级事实；负责人随后用 `EX-2026-11-12-M6-T5` 明确要求记录缺口并
+优先完成 T5。该例外只改变任务顺序，不把 T4 或 M6 标记为通过，也不修改 85% Claim 支撑、95% 引用
+定位、预算、权限或证据硬门。四个 Agent/目标分析开关继续默认关闭。
+
+### 自动创建、恢复与隔离
+
+- Worker 每 tick 最多从 MySQL 选择一个缺少目标 Run 的 READY Job，使用稳定键
+  `goal-analysis:<jobId>` 调用既有创建入口；数据库唯一约束、请求指纹和 CAS 负责并发单赢家与重启去重。
+- 目标结果接口按 owner 和 READY 状态读取，只接受已提交生成步骤中的严格 `answer:<uuid>`；Answer
+  仍经 owner、Job 和证据关系校验。拒答或失败只返回稳定去敏原因，不伪造 Answer，也不修改 READY Job。
+- 目标 Answer 仍使用标准 Answer/Claim/CitedEvidence 表，但从普通问答历史排除；页面只在独立的
+  “目标分析结果”区域恢复它，不增加结果表或第二套回答管线。
+
+### 自动化质量门
+
+- `server\mvnw.cmd clean test`：462 项测试通过，0 failure/error；宿主机 1 项 FFmpeg 条件跳过，
+  JaCoCo 与 ArchUnit 通过。
+- 规范 FFmpeg 容器、全新库 `videopilot_m6_t5_gate4` 和隔离 Qdrant collection 执行
+  `mvn verify -Pintegration -Dbenchmark.commit=8f47e9d`：462 项快速测试和 95 项集成测试通过，
+  0 failure/error；2 项既有付费/发布条件测试按设计跳过，JaCoCo 与 ArchUnit 通过。只有该运行所需的
+  SiliconFlow key 注入容器，未把整份 `.env` 注入测试进程。
+- `client\npm.cmd run check`：19 个测试文件、125 项测试通过；类型检查、ESLint、覆盖率和生产构建通过。
+  覆盖率为 statements 87.36%、branches 81.97%、functions 88.77%、lines 92.64%。
+- `client\npm.cmd audit --audit-level=high`：退出码 0；无 high/critical，仍有 10 个 moderate。
+- OWASP 依赖检查按负责人明确指示跳过，继续由 `EX-2026-11-11-M6-OWASP` 记录为“未形成结论”，
+  不冒充扫描通过。
+
+### localhost 真实浏览器
+
+负责人在操作时明确授权把 Git 忽略 `.env` 中的本地测试账号和密码仅提交到
+`http://127.0.0.1:5173`。验收没有读取 Cookie/localStorage，也没有输出或提交凭据。
+
+- 开启本地五个实验开关后，既有 READY Job
+  `4ecbe8d8-53f1-4692-8c44-0d4ee74d7fcd` 被 MySQL 扫描补齐唯一目标 Run；页面显示
+  `REFUSED / NO_SUFFICIENT_EVIDENCE`，刷新后仍从持久化结果恢复。
+- 通过页面复用同一 8 秒媒体创建新 Job `c97673c2-0ae2-483c-89b6-c1bba3035216`。Job 在 READY 后先显示
+  PENDING，随后显示 ANSWERED，并给出一条 ASR 和一条 OCR 的 `00:00-00:08` 引用；点击 ASR 引用把
+  播放器定位到 0 秒。刷新后仍只有一个目标结果区域，两条引用均恢复。
+- MySQL 取证显示两条 Job 各只有一个 `goal-analysis:<jobId>` Run；新 Job 为
+  `COMPLETED/COMPLETED`，既有 Job 为 `REFUSED/NO_SUFFICIENT_EVIDENCE`。目标 Answer 没有出现在普通
+  问答历史。
+- 桌面全页和 320x720 真实视口均完成；320px 时 `scrollWidth=clientWidth=305`，无横向溢出，目标区域
+  仍可访问。刷新、轮询、结果和引用交互均成功渲染，浏览器 warning/error 日志为空。
+
+T5 自身退出门通过，可以独立提交。T4 的效果缺口继续阻止 M6 晋级；本结论不启用任何默认开关。

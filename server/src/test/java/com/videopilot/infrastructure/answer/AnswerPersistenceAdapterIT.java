@@ -89,6 +89,18 @@ class AnswerPersistenceAdapterIT {
         assertThat(answers.find(owner, JOB, answerId)).contains(published);
         assertThat(answers.find(new OwnerId(UUID.randomUUID()), JOB, answerId)).isEmpty();
         assertThat(answers.list(owner, JOB, null, 20)).containsExactly(published);
+        jdbc.sql("""
+                INSERT INTO agent_run (
+                    run_id, owner_id, job_id, idempotency_key, request_fingerprint, goal,
+                    status, execution_versions, budget_snapshot, termination_reason, created_at, completed_at
+                ) VALUES (:runId,:owner,:jobId,:key,REPEAT('9',64),'answer test','COMPLETED',
+                    JSON_OBJECT('policyVersion','agent-policy-v1'),
+                    JSON_OBJECT('maxSteps',6),'COMPLETED',:createdAt,:createdAt)
+                """).param("runId", executionRunId.toString()).param("owner", OWNER.toString())
+                .param("jobId", JOB.toString()).param("key", "goal-analysis:" + JOB)
+                .param("createdAt", now).update();
+        assertThat(answers.list(owner, JOB, null, 20)).isEmpty();
+        assertThat(answers.find(owner, JOB, answerId)).contains(published);
         assertThat(jdbc.sql("SELECT status FROM model_call WHERE model_call_id = :id")
                 .param("id", callId.toString()).query(String.class).single()).isEqualTo("SUCCEEDED");
         assertThat(jdbc.sql("SELECT run_id FROM model_call WHERE model_call_id = :id")

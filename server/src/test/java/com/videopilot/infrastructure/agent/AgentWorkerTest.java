@@ -16,6 +16,7 @@ class AgentWorkerTest {
         AgentWorker worker = new AgentWorker(agents);
 
         worker.processNext();
+        verify(agents).ensureNextGoalAnalysis();
         verify(agents).processNext();
 
         doThrow(new AgentException(AgentException.Reason.CONFLICT)).when(agents).processNext();

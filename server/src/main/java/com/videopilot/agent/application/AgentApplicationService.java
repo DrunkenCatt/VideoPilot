@@ -32,6 +32,8 @@ public final class AgentApplicationService {
 
     public static final String POLICY_VERSION = "agent-policy-v1";
     private static final Pattern IDEMPOTENCY_KEY = Pattern.compile("[A-Za-z0-9._:-]{1,128}");
+    private static final Pattern ANSWER_REFERENCE = Pattern.compile(
+            "answer:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
     private static final int MAX_GOAL_LENGTH = 1_000;
     private static final Duration LEASE_DURATION = Duration.ofSeconds(30);
 
@@ -44,6 +46,7 @@ public final class AgentApplicationService {
     private final RetrievalApplicationService retrieval;
     private final VideoContextQueryApplicationService contexts;
     private final AnswerApplicationService answers;
+    private final boolean goalAnalysisEnabled;
 
     public AgentApplicationService(
             AgentStore store,
@@ -60,6 +63,26 @@ public final class AgentApplicationService {
         this.retrieval = null;
         this.contexts = null;
         this.answers = null;
+        this.goalAnalysisEnabled = false;
+    }
+
+    public AgentApplicationService(
+            AgentStore store,
+            AgentVersions versions,
+            Supplier<AgentBudget> budgets,
+            Supplier<Instant> now,
+            Supplier<UUID> ids,
+            boolean goalAnalysisEnabled) {
+        this.store = store;
+        this.versions = versions;
+        this.budgets = budgets;
+        this.now = now;
+        this.ids = ids;
+        this.policy = null;
+        this.retrieval = null;
+        this.contexts = null;
+        this.answers = null;
+        this.goalAnalysisEnabled = goalAnalysisEnabled;
     }
 
     public AgentApplicationService(
@@ -72,6 +95,20 @@ public final class AgentApplicationService {
             RetrievalApplicationService retrieval,
             VideoContextQueryApplicationService contexts,
             AnswerApplicationService answers) {
+        this(store, versions, budgets, now, ids, policy, retrieval, contexts, answers, false);
+    }
+
+    public AgentApplicationService(
+            AgentStore store,
+            AgentVersions versions,
+            Supplier<AgentBudget> budgets,
+            Supplier<Instant> now,
+            Supplier<UUID> ids,
+            AgentPolicy policy,
+            RetrievalApplicationService retrieval,
+            VideoContextQueryApplicationService contexts,
+            AnswerApplicationService answers,
+            boolean goalAnalysisEnabled) {
         this.store = store;
         this.versions = versions;
         this.budgets = budgets;
@@ -81,6 +118,7 @@ public final class AgentApplicationService {
         this.retrieval = retrieval;
         this.contexts = contexts;
         this.answers = answers;
+        this.goalAnalysisEnabled = goalAnalysisEnabled;
     }
 
     public AgentRun create(OwnerContext owner, UUID jobId, String goal, String idempotencyKey) {
@@ -129,6 +167,60 @@ public final class AgentApplicationService {
         if (runId == null) throw new AgentException(AgentException.Reason.INVALID_REQUEST);
         return store.findTrace(owner.ownerId(), runId)
                 .orElseThrow(() -> new AgentException(AgentException.Reason.NOT_FOUND));
+    }
+
+    public boolean ensureNextGoalAnalysis() {
+        if (!goalAnalysisEnabled) return false;
+        var job = store.findNextGoalAnalysisJob().orElse(null);
+        if (job == null) return false;
+        create(new OwnerContext(job.ownerId()), job.jobId(), job.goal(), goalAnalysisKey(job.jobId()));
+        return true;
+    }
+
+    public boolean goalAnalysisEnabled() {
+        return goalAnalysisEnabled;
+    }
+
+    public GoalAnalysisResult goalAnalysisResult(OwnerContext owner, UUID jobId) {
+        if (owner == null || jobId == null) throw new AgentException(AgentException.Reason.INVALID_REQUEST);
+        var job = store.findGoalAnalysisJob(owner.ownerId(), jobId)
+                .orElseThrow(() -> new AgentException(AgentException.Reason.NOT_FOUND));
+        if (!job.ready()) throw new AgentException(AgentException.Reason.CONFLICT);
+        if (!goalAnalysisEnabled) return new GoalAnalysisResult(GoalAnalysisState.DISABLED, null, null);
+        AgentTrace trace = store.findTraceByIntent(owner.ownerId(), goalAnalysisKey(jobId)).orElse(null);
+        if (trace == null) return new GoalAnalysisResult(GoalAnalysisState.PENDING, null, null);
+        return switch (trace.run().status()) {
+            case REQUESTED -> new GoalAnalysisResult(GoalAnalysisState.REQUESTED, trace, null);
+            case RUNNING -> new GoalAnalysisResult(GoalAnalysisState.RUNNING, trace, null);
+            case REFUSED -> new GoalAnalysisResult(GoalAnalysisState.REFUSED, trace, null);
+            case FAILED -> new GoalAnalysisResult(GoalAnalysisState.FAILED, trace, null);
+            case COMPLETED -> completedGoalAnalysis(owner, jobId, trace);
+        };
+    }
+
+    private GoalAnalysisResult completedGoalAnalysis(OwnerContext owner, UUID jobId, AgentTrace trace) {
+        AgentStep answerStep = trace.steps().stream()
+                .filter(step -> "GENERATE_AND_VERIFY".equals(step.action()))
+                .reduce((first, second) -> second)
+                .orElseThrow(() -> new AgentException(AgentException.Reason.CONFLICT));
+        String reference = answerStep.resultReference();
+        if (reference == null || !ANSWER_REFERENCE.matcher(reference).matches()) {
+            throw new AgentException(AgentException.Reason.CONFLICT);
+        }
+        UUID answerId;
+        try {
+            answerId = UUID.fromString(reference.substring("answer:".length()));
+        } catch (IllegalArgumentException exception) {
+            throw new AgentException(AgentException.Reason.CONFLICT, exception);
+        }
+        AnswerStore.StoredAnswer answer = answers.get(owner, jobId, answerId);
+        GoalAnalysisState state = "ANSWERED".equals(answer.status())
+                ? GoalAnalysisState.ANSWERED : GoalAnalysisState.REFUSED;
+        return new GoalAnalysisResult(state, trace, answer);
+    }
+
+    private String goalAnalysisKey(UUID jobId) {
+        return "goal-analysis:" + jobId;
     }
 
     public boolean processNext() {
@@ -304,6 +396,12 @@ public final class AgentApplicationService {
     }
 
     private record ActionResult(String observation, String reference) {
+    }
+
+    public enum GoalAnalysisState { DISABLED, PENDING, REQUESTED, RUNNING, ANSWERED, REFUSED, FAILED }
+
+    public record GoalAnalysisResult(
+            GoalAnalysisState state, AgentTrace trace, AnswerStore.StoredAnswer answer) {
     }
 
     private String normalizeGoal(String goal) {

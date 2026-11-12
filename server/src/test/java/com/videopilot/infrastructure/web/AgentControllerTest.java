@@ -6,6 +6,8 @@ import static org.mockito.Mockito.when;
 
 import com.videopilot.agent.application.AgentApplicationService;
 import com.videopilot.agent.application.AgentException;
+import com.videopilot.agent.application.AgentApplicationService.GoalAnalysisResult;
+import com.videopilot.agent.application.AgentApplicationService.GoalAnalysisState;
 import com.videopilot.agent.domain.AgentModels.AgentBudget;
 import com.videopilot.agent.domain.AgentModels.AgentRun;
 import com.videopilot.agent.domain.AgentModels.AgentTrace;
@@ -58,6 +60,29 @@ class AgentControllerTest {
         assertThat(handler.handleAgentFailure(
                 new AgentException(AgentException.Reason.IDEMPOTENCY_KEY_REUSED)).getBody().code())
                 .isEqualTo("IDEMPOTENCY_KEY_REUSED");
+    }
+
+    @Test
+    void returnsTheGoalAnalysisRunAndItsExactPublishedAnswer() {
+        AgentApplicationService service = mock(AgentApplicationService.class);
+        IdentityPrincipal principal = mock(IdentityPrincipal.class);
+        OwnerContext owner = new OwnerContext(new OwnerId(UUID.randomUUID()));
+        when(principal.ownerContext()).thenReturn(owner);
+        UUID jobId = UUID.randomUUID();
+        AgentRun run = run(owner, jobId);
+        var answer = new com.videopilot.answer.port.AnswerStore.StoredAnswer(
+                1, UUID.randomUUID(), "ANSWERED", run.goal(), null, List.of(),
+                "prompt-v1", "model-v1", "embedding-v1", "formula-v1", "chunk-v1",
+                List.of(), Instant.parse("2026-11-10T16:00:01Z"));
+        when(service.goalAnalysisResult(owner, jobId)).thenReturn(new GoalAnalysisResult(
+                GoalAnalysisState.ANSWERED, new AgentTrace(run, List.of(), List.of()), answer));
+        AgentController controller = new AgentController(service);
+
+        var response = controller.goalAnalysisResult(principal, jobId);
+
+        assertThat(response.state()).isEqualTo(M6ApiContracts.GoalAnalysisState.ANSWERED);
+        assertThat(response.run().runId()).isEqualTo(run.runId());
+        assertThat(response.answer().answerId()).isEqualTo(answer.answerId());
     }
 
     private AgentRun run(OwnerContext owner, UUID jobId) {

@@ -3,8 +3,10 @@ package com.videopilot.infrastructure.web;
 import com.videopilot.agent.application.AgentApplicationService;
 import com.videopilot.agent.domain.AgentModels.AgentRun;
 import com.videopilot.agent.domain.AgentModels.AgentTrace;
+import com.videopilot.answer.port.AnswerStore;
 import com.videopilot.infrastructure.security.IdentityPrincipal;
 import com.videopilot.infrastructure.web.contract.M1ApiContracts;
+import com.videopilot.infrastructure.web.contract.M3ApiContracts;
 import com.videopilot.infrastructure.web.contract.M6ApiContracts;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
@@ -51,6 +53,17 @@ public class AgentController {
         return response(agents.get(principal.ownerContext(), runId));
     }
 
+    @GetMapping("/analysis-jobs/{jobId}/goal-analysis-result")
+    M6ApiContracts.GoalAnalysisResultResponse goalAnalysisResult(
+            @AuthenticationPrincipal IdentityPrincipal principal,
+            @PathVariable UUID jobId) {
+        var result = agents.goalAnalysisResult(principal.ownerContext(), jobId);
+        return new M6ApiContracts.GoalAnalysisResultResponse(
+                M6ApiContracts.GoalAnalysisState.valueOf(result.state().name()),
+                result.trace() == null ? null : response(result.trace()),
+                result.answer() == null ? null : answerResponse(result.answer()));
+    }
+
     private M6ApiContracts.AgentRunResponse response(AgentTrace trace) {
         AgentRun run = trace.run();
         var versions = run.versions();
@@ -77,5 +90,23 @@ public class AgentController {
                         M6ApiContracts.ToolCallStatus.valueOf(call.status().name()),
                         call.parameterSummary(), call.observationSummary(), call.resultReference(),
                         call.latencyMs(), call.startedAt(), call.completedAt())).toList());
+    }
+
+    private M3ApiContracts.AnswerResponse answerResponse(AnswerStore.StoredAnswer answer) {
+        return new M3ApiContracts.AnswerResponse(
+                answer.answerId(), M3ApiContracts.AnswerStatus.valueOf(answer.status()), answer.question(),
+                answer.claims().stream().map(claim -> new M3ApiContracts.AnswerClaimResponse(
+                        claim.claimId(), claim.text(), claim.citations().stream().map(citation ->
+                                new M3ApiContracts.CitedEvidenceResponse(
+                                        citation.citationId(), citation.segmentId(), citation.startMs(),
+                                        citation.endMs(), M3ApiContracts.EvidenceChannel.valueOf(citation.channel()),
+                                        citation.quote())).toList())).toList(),
+                answer.refusalReason() == null ? null
+                        : M3ApiContracts.RefusalReason.valueOf(answer.refusalReason()),
+                answer.degradedChannels().stream().map(M3ApiContracts.DegradedChannel::valueOf).toList(),
+                new M3ApiContracts.ExecutionVersions(
+                        answer.promptVersion(), answer.modelVersion(), answer.embeddingVersion(),
+                        answer.retrievalFormulaVersion(), answer.chunkVersion()),
+                answer.createdAt());
     }
 }

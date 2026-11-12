@@ -42,6 +42,7 @@ videopilot:
   agent:
     enabled: ${AGENT_ENABLED:false}
     worker-enabled: ${AGENT_WORKER_ENABLED:false}
+    goal-analysis-enabled: ${AGENT_GOAL_ANALYSIS_ENABLED:false}
     worker-delay: ${AGENT_WORKER_DELAY:1s}
     worker-initial-delay: ${AGENT_WORKER_INITIAL_DELAY:2s}
   answer:

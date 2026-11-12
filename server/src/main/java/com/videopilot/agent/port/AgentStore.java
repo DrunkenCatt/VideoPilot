@@ -20,6 +20,12 @@ public interface AgentStore {
 
     Optional<AgentTrace> findTrace(OwnerId ownerId, UUID runId);
 
+    Optional<GoalAnalysisJob> findNextGoalAnalysisJob();
+
+    Optional<GoalAnalysisJob> findGoalAnalysisJob(OwnerId ownerId, UUID jobId);
+
+    Optional<AgentTrace> findTraceByIntent(OwnerId ownerId, String idempotencyKey);
+
     Optional<ClaimedRun> claimNext(String leaseId, Instant leaseUntil, Instant now);
 
     Optional<ClaimedRun> claim(
@@ -42,5 +48,8 @@ public interface AgentStore {
             RunStatus status, String terminationReason, Instant completedAt);
 
     record CreateResult(AgentRun run, boolean fingerprintConflict) {
+    }
+
+    record GoalAnalysisJob(OwnerId ownerId, UUID jobId, String goal, boolean ready) {
     }
 }

@@ -10,6 +10,7 @@ import type {
   AnswerResponse,
   CitedEvidence,
   DegradedChannel,
+  GoalAnalysisResult,
   RefusalReason,
 } from '../../api/contracts'
 import { ApiClientError } from '../../api/session'
@@ -20,12 +21,14 @@ const props = withDefaults(defineProps<{
   api?: AnswersApi
   agentApi?: AgentsApi
   agentAvailable?: boolean
+  goalAnalysisAvailable?: boolean
   agentPollMs?: number
   timeoutMs?: number
 }>(), {
   api: () => createAnswersApi(),
   agentApi: () => createAgentsApi(),
   agentAvailable: import.meta.env.VITE_AGENT_ENABLED === 'true',
+  goalAnalysisAvailable: import.meta.env.VITE_GOAL_ANALYSIS_ENABLED === 'true',
   agentPollMs: 1_000,
   timeoutMs: 35_000,
 })
@@ -40,13 +43,16 @@ const loading = ref(false)
 const submitting = ref(false)
 const useAgent = ref(false)
 const agentRun = ref<AgentRun | null>(null)
+const goalAnalysis = ref<GoalAnalysisResult | null>(null)
 const errorMessage = ref('')
 let revision = 0
 let idempotencyKey: string | null = null
 let requestController: globalThis.AbortController | null = null
 let pollTimer: ReturnType<typeof globalThis.setTimeout> | null = null
+let goalPollTimer: ReturnType<typeof globalThis.setTimeout> | null = null
 
 const terminalAgentStatuses = new Set<AgentRun['status']>(['COMPLETED', 'REFUSED', 'FAILED'])
+const terminalGoalStates = new Set<GoalAnalysisResult['state']>(['DISABLED', 'ANSWERED', 'REFUSED', 'FAILED'])
 const agentRunQueryParameter = 'agentRun'
 
 const terminationLabels: Record<string, string> = {
@@ -108,9 +114,20 @@ function publish(answer: AnswerResponse) {
   else answers.value.unshift(answer)
 }
 
+function withoutGoalAnswer(values: AnswerResponse[]): AnswerResponse[] {
+  const goalAnswerId = goalAnalysis.value?.answer?.answerId
+  return goalAnswerId ? values.filter((answer) => answer.answerId !== goalAnswerId) : values
+}
+
 function waitForPoll(): Promise<void> {
   return new Promise((resolve) => {
     pollTimer = globalThis.setTimeout(resolve, props.agentPollMs)
+  })
+}
+
+function waitForGoalPoll(): Promise<void> {
+  return new Promise((resolve) => {
+    goalPollTimer = globalThis.setTimeout(resolve, props.agentPollMs)
   })
 }
 
@@ -134,7 +151,23 @@ function forgetAgentRun() {
 
 async function restoreAnswers(currentRevision: number, jobId: AnalysisJob['jobId']) {
   const page = await props.api.list(jobId)
-  if (currentRevision === revision && props.job.jobId === jobId) answers.value = page.data
+  if (currentRevision === revision && props.job.jobId === jobId) answers.value = withoutGoalAnswer(page.data)
+}
+
+async function restoreGoalAnalysis(currentRevision: number, jobId: AnalysisJob['jobId']) {
+  if (!props.agentAvailable || !props.goalAnalysisAvailable) return
+  let current = await props.agentApi.getGoalAnalysisResult(jobId)
+  if (currentRevision !== revision || props.job.jobId !== jobId) return
+  goalAnalysis.value = current
+  answers.value = withoutGoalAnswer(answers.value)
+  while (!terminalGoalStates.has(current.state)) {
+    await waitForGoalPoll()
+    if (currentRevision !== revision || props.job.jobId !== jobId) return
+    current = await props.agentApi.getGoalAnalysisResult(jobId)
+    if (currentRevision !== revision || props.job.jobId !== jobId) return
+    goalAnalysis.value = current
+    answers.value = withoutGoalAnswer(answers.value)
+  }
 }
 
 async function pollAgent(initial: AgentRun, currentRevision: number, jobId: AnalysisJob['jobId']) {
@@ -160,8 +193,11 @@ async function load() {
   requestController = null
   if (pollTimer !== null) globalThis.clearTimeout(pollTimer)
   pollTimer = null
+  if (goalPollTimer !== null) globalThis.clearTimeout(goalPollTimer)
+  goalPollTimer = null
   answers.value = []
   agentRun.value = null
+  goalAnalysis.value = null
   useAgent.value = false
   question.value = ''
   idempotencyKey = null
@@ -173,6 +209,7 @@ async function load() {
   try {
     const page = await props.api.list(props.job.jobId)
     if (currentRevision === revision) answers.value = page.data
+    await restoreGoalAnalysis(currentRevision, props.job.jobId)
     const runId = props.agentAvailable ? rememberedAgentRunId() : null
     if (runId && currentRevision === revision) {
       const persisted = await props.agentApi.get(runId)
@@ -231,6 +268,7 @@ watch(() => [props.job.jobId, props.job.status] as const, load, { immediate: tru
 onBeforeUnmount(() => {
   requestController?.abort()
   if (pollTimer !== null) globalThis.clearTimeout(pollTimer)
+  if (goalPollTimer !== null) globalThis.clearTimeout(goalPollTimer)
 })
 </script>
 
@@ -259,6 +297,87 @@ onBeforeUnmount(() => {
       视频索引尚未就绪，暂时不能提问。
     </p>
     <template v-else>
+      <section
+        v-if="goalAnalysisAvailable && goalAnalysis"
+        class="goal-analysis"
+        data-test="goal-analysis-result"
+        aria-labelledby="goal-analysis-title"
+      >
+        <header>
+          <div>
+            <p class="section-index">
+              ANALYSIS GOAL
+            </p>
+            <h4 id="goal-analysis-title">
+              目标分析结果
+            </h4>
+          </div>
+          <strong :data-status="goalAnalysis.state">{{ goalAnalysis.state }}</strong>
+        </header>
+        <p class="goal-analysis__goal">
+          {{ job.goal }}
+        </p>
+        <p
+          v-if="goalAnalysis.state === 'DISABLED'"
+          class="answer-state"
+        >
+          未启用自动目标分析。
+        </p>
+        <p
+          v-else-if="goalAnalysis.state === 'PENDING'"
+          class="answer-state"
+        >
+          等待后台创建目标分析运行…
+        </p>
+        <p
+          v-else-if="goalAnalysis.state === 'REQUESTED' || goalAnalysis.state === 'RUNNING'"
+          class="answer-state"
+        >
+          正在基于视频证据生成目标分析结果…
+        </p>
+        <p
+          v-else-if="goalAnalysis.state === 'REFUSED'"
+          class="answer-refusal"
+          role="status"
+        >
+          {{ terminationLabels[goalAnalysis.run?.terminationReason ?? 'NO_SUFFICIENT_EVIDENCE'] ?? '目标分析未产生可发布答案。' }}
+        </p>
+        <p
+          v-else-if="goalAnalysis.state === 'FAILED'"
+          class="answer-state answer-state--error"
+          role="alert"
+        >
+          {{ terminationLabels[goalAnalysis.run?.terminationReason ?? 'FAILED'] ?? `目标分析失败：${goalAnalysis.run?.terminationReason ?? 'FAILED'}` }}
+        </p>
+        <ol
+          v-else-if="goalAnalysis.answer?.status === 'ANSWERED'"
+          class="claim-list"
+        >
+          <li
+            v-for="(claim, claimIndex) in goalAnalysis.answer.claims"
+            :key="claim.claimId"
+          >
+            <div class="claim-copy">
+              <span>{{ String(claimIndex + 1).padStart(2, '0') }}</span>
+              <p>{{ claim.text }}</p>
+            </div>
+            <div class="citation-list">
+              <button
+                v-for="evidence in claim.citations"
+                :key="evidence.citationId"
+                type="button"
+                data-test="goal-cited-evidence"
+                @click="emit('cite', evidence)"
+              >
+                <span class="citation-meta">{{ evidence.channel }} · {{ formatTime(evidence.startMs) }}–{{ formatTime(evidence.endMs) }}</span>
+                <q>{{ evidence.quote }}</q>
+                <span class="citation-action">跳到视频证据 →</span>
+              </button>
+            </div>
+          </li>
+        </ol>
+      </section>
+
       <form
         class="answer-form"
         data-test="ask-form"

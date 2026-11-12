@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type {
   AgentRun,
+  GoalAnalysisResult,
   AnalysisJob,
   AnswerPageResponse,
   AnswerResponse,
@@ -98,6 +99,7 @@ function agentsApi(overrides: Partial<AgentsApi> = {}): AgentsApi {
   return {
     create: vi.fn().mockResolvedValue(run()),
     get: vi.fn().mockResolvedValue(run({ status: 'COMPLETED', terminationReason: 'COMPLETED' })),
+    getGoalAnalysisResult: vi.fn().mockResolvedValue({ state: 'DISABLED', run: null, answer: null }),
     ...overrides,
   }
 }
@@ -113,6 +115,58 @@ describe('AnswerWorkspace', () => {
     await flushPromises()
 
     expect(wrapper.find('[data-test="agent-toggle"]').exists()).toBe(false)
+  })
+
+  it('shows the evidence-bound goal result before manual questions without duplicating it in history', async () => {
+    const result = {
+      state: 'ANSWERED',
+      run: run({ status: 'COMPLETED', goal: '总结课程核心命令' }),
+      answer: {
+        ...answered,
+        answerId: '60000000-0000-0000-0000-000000000010' as AnswerResponse['answerId'],
+        question: '总结课程核心命令',
+      },
+    } satisfies GoalAnalysisResult
+    const agentApi = agentsApi({ getGoalAnalysisResult: vi.fn().mockResolvedValue(result) })
+    const api = answersApi({ list: vi.fn().mockResolvedValue(page([result.answer, answered])) })
+    const wrapper = mount(AnswerWorkspace, {
+      props: {
+        job: { ...job, goal: '总结课程核心命令' }, csrfToken: session.csrfToken,
+        api, agentApi, agentAvailable: true, goalAnalysisAvailable: true,
+      },
+    })
+    await flushPromises()
+
+    expect(agentApi.getGoalAnalysisResult).toHaveBeenCalledWith(job.jobId)
+    expect(wrapper.get('[data-test="goal-analysis-result"]').text()).toContain('目标分析结果')
+    expect(wrapper.get('[data-test="goal-analysis-result"]').text()).toContain('String 可以保存')
+    expect(wrapper.findAll('[data-test="answer-claim"]')).toHaveLength(1)
+
+    await wrapper.get('[data-test="goal-cited-evidence"]').trigger('click')
+    expect(wrapper.emitted('cite')?.[0]).toEqual([citation])
+  })
+
+  it('polls a pending goal result until it reaches a terminal state', async () => {
+    vi.useFakeTimers()
+    const getGoalAnalysisResult = vi.fn()
+      .mockResolvedValueOnce({ state: 'PENDING', run: null, answer: null })
+      .mockResolvedValueOnce({
+        state: 'REFUSED', run: run({ status: 'REFUSED', terminationReason: 'NO_SUFFICIENT_EVIDENCE' }), answer: null,
+      })
+    const wrapper = mount(AnswerWorkspace, {
+      props: {
+        job: { ...job, goal: '总结不存在的主题' }, csrfToken: session.csrfToken,
+        api: answersApi(), agentApi: agentsApi({ getGoalAnalysisResult }),
+        agentAvailable: true, goalAnalysisAvailable: true, agentPollMs: 1,
+      },
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-test="goal-analysis-result"]').text()).toContain('等待后台创建')
+
+    await vi.advanceTimersByTimeAsync(1)
+    await flushPromises()
+    expect(getGoalAnalysisResult).toHaveBeenCalledTimes(2)
+    expect(wrapper.get('[data-test="goal-analysis-result"]').text()).toContain('视频证据不足')
   })
 
   it('polls an enabled Agent run and reuses the existing verified answer list', async () => {
