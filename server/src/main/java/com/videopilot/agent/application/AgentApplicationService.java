@@ -30,6 +30,7 @@ import java.util.regex.Pattern;
 
 public final class AgentApplicationService {
 
+    public static final String POLICY_VERSION = "agent-policy-v1";
     private static final Pattern IDEMPOTENCY_KEY = Pattern.compile("[A-Za-z0-9._:-]{1,128}");
     private static final int MAX_GOAL_LENGTH = 1_000;
     private static final Duration LEASE_DURATION = Duration.ofSeconds(30);
@@ -83,6 +84,21 @@ public final class AgentApplicationService {
     }
 
     public AgentRun create(OwnerContext owner, UUID jobId, String goal, String idempotencyKey) {
+        return create(owner, jobId, goal, idempotencyKey, null, null);
+    }
+
+    public AgentRun createForEvaluation(
+            OwnerContext owner, UUID jobId, String goal, String idempotencyKey,
+            UUID evaluationRunId, String evaluationCaseId) {
+        if (evaluationRunId == null || evaluationCaseId == null || evaluationCaseId.isBlank()) {
+            throw new AgentException(AgentException.Reason.INVALID_REQUEST);
+        }
+        return create(owner, jobId, goal, idempotencyKey, evaluationRunId, evaluationCaseId);
+    }
+
+    private AgentRun create(
+            OwnerContext owner, UUID jobId, String goal, String idempotencyKey,
+            UUID evaluationRunId, String evaluationCaseId) {
         String normalizedGoal = normalizeGoal(goal);
         if (jobId == null || idempotencyKey == null || !IDEMPOTENCY_KEY.matcher(idempotencyKey).matches()) {
             throw new AgentException(AgentException.Reason.INVALID_REQUEST);
@@ -92,12 +108,14 @@ public final class AgentApplicationService {
         }
         AgentBudget budget = budgets.get();
         String requestFingerprint = sha256(jobId + "|" + normalizedGoal + "|"
+                + evaluationRunId + "|" + evaluationCaseId + "|"
                 + String.join("|", versions.values()) + "|"
                 + budget.maxSteps() + "|" + budget.maxAnswerAttempts() + "|"
                 + budget.maxInputTokens() + "|" + budget.maxOutputTokens() + "|"
                 + budget.maxKnownCost());
         AgentRun requested = new AgentRun(
-                ids.get(), owner.ownerId(), jobId, idempotencyKey, requestFingerprint,
+                ids.get(), owner.ownerId(), jobId, evaluationRunId, evaluationCaseId,
+                idempotencyKey, requestFingerprint,
                 normalizedGoal, RunStatus.REQUESTED, versions, budget,
                 0, 0, 0, 0, BigDecimal.ZERO, 0, null, 0, now.get(), null);
         AgentStore.CreateResult result = store.create(owner.ownerId(), requested);
@@ -114,10 +132,21 @@ public final class AgentApplicationService {
     }
 
     public boolean processNext() {
+        return processClaim(null, null);
+    }
+
+    public boolean process(OwnerContext owner, UUID runId) {
+        if (owner == null || runId == null) throw new AgentException(AgentException.Reason.INVALID_REQUEST);
+        return processClaim(owner, runId);
+    }
+
+    private boolean processClaim(OwnerContext owner, UUID runId) {
         requireRuntime();
         Instant claimedAt = now.get();
         String leaseId = ids.get().toString();
-        var claimed = store.claimNext(leaseId, claimedAt.plus(LEASE_DURATION), claimedAt);
+        var claimed = owner == null
+                ? store.claimNext(leaseId, claimedAt.plus(LEASE_DURATION), claimedAt)
+                : store.claim(owner.ownerId(), runId, leaseId, claimedAt.plus(LEASE_DURATION), claimedAt);
         if (claimed.isEmpty()) return false;
 
         AgentRun run = claimed.orElseThrow().run();
@@ -211,7 +240,10 @@ public final class AgentApplicationService {
     }
 
     private ActionResult retrieve(OwnerContext owner, AgentRun run) {
-        var result = retrieval.retrieve(owner, run.jobId(), run.goal(), 5, run.runId());
+        var result = run.evaluationRunId() == null
+                ? retrieval.retrieve(owner, run.jobId(), run.goal(), 5, run.runId())
+                : retrieval.retrieve(owner, run.jobId(), run.goal(), 5,
+                        run.evaluationRunId(), run.evaluationCaseId(), run.runId());
         int hitCount = result.hits().size();
         if (hitCount == 0) return new ActionResult("EVIDENCE:none", null);
         var first = result.hits().getFirst();
@@ -234,7 +266,10 @@ public final class AgentApplicationService {
 
     private ActionResult answer(OwnerContext owner, AgentRun run) {
         String key = "agent-" + run.runId() + "-answer-" + (run.answerAttemptCount() + 1);
-        AnswerStore.StoredAnswer answer = answers.ask(owner, run.jobId(), run.goal(), key, run.runId());
+        AnswerStore.StoredAnswer answer = run.evaluationRunId() == null
+                ? answers.ask(owner, run.jobId(), run.goal(), key, run.runId())
+                : answers.ask(owner, run.jobId(), run.goal(), key,
+                        run.evaluationRunId(), run.evaluationCaseId(), run.runId());
         return new ActionResult("ANSWER:" + answer.status(), "answer:" + answer.answerId());
     }
 

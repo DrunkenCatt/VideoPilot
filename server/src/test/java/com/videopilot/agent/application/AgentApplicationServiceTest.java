@@ -152,6 +152,12 @@ class AgentApplicationServiceTest {
         }
 
         @Override
+        public Optional<com.videopilot.agent.domain.AgentModels.ClaimedRun> claim(
+                OwnerId ownerId, UUID runId, String leaseId, Instant leaseUntil, Instant now) {
+            return Optional.empty();
+        }
+
+        @Override
         public void appendStep(
                 String leaseId, UUID runId, long expectedVersion,
                 com.videopilot.agent.domain.AgentModels.AgentStep step) {

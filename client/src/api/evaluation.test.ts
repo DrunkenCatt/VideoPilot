@@ -35,7 +35,8 @@ describe('evaluation API', () => {
 
   it('creates runs with CSRF and idempotency without leaking either into the body', async () => {
     const request = vi.fn().mockResolvedValue(new Response(JSON.stringify([]), { status: 201 }))
-    const input = { baselineType: 'BASELINE_V1' as const, repetitions: 2 as const, versions: report.versions }
+    const input = { baselineType: 'BASELINE_V1' as const, repetitions: 2 as const,
+      versions: report.versions, executionMode: 'BASELINE' as const, agentPolicyVersion: null }
     await createEvaluationApi(request).createRuns(report.datasetId, input, 'intent-1', 'csrf-1')
     expect(request).toHaveBeenCalledWith(
       `/api/v1/evaluation-datasets/${report.datasetId}/runs`,

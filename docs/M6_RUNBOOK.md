@@ -101,11 +101,31 @@ cd server
 
 ## 6. T3 本地验收
 
-真实浏览器使用一条已完成 ASR/OCR/索引的 8 秒教学视频验证三条路径：真实 SiliconFlow Embedding
-成功但价格不可得时，相关问题在首个安全 Step 后以 `UNKNOWN_COST` 停止；注入 Embedding 连接故障
+T3 当时尚未冻结价格目录，真实浏览器使用一条已完成 ASR/OCR/索引的 8 秒教学视频验证三条路径：
+真实 SiliconFlow Embedding 成功但价格不可得时，相关问题在首个安全 Step 后以 `UNKNOWN_COST` 停止；注入 Embedding 连接故障
 后，短问题以 `NEEDS_CLARIFICATION` 终止，长且无关问题以 `NO_SUFFICIENT_EVIDENCE` 拒答。三条路径
 都显示未知费用调用 1 次，没有伪造成本或测试数据。
 
 浏览器刷新、应用重启和 Redis `FLUSHDB` 后，同一 URL 指向的 Run 轨迹仍可回放。桌面和 320px
 视口均保留开关、预算、终止原因和折叠轨迹的语义结构；控制台只有 Vite debug 连接消息，没有
 warning/error。Agent 创建、轮询与刷新读取均返回可渲染响应，没有页面级 4xx/5xx 或失败提示。
+
+## 7. T4 同题 A/B 与价格
+
+V21 在既有 `evaluation_run` 上增加 `BASELINE/AGENT` 执行模式和可空的 `agentPolicyVersion`，并把
+AgentRun 关联到 evaluation run/case；没有新建第二套数据集、Runner 或报告。Agent 候选只接受与运行时
+冻结版本完全相同的 `agent-policy-v1`。同一冻结 DEV 的基线与候选各至少运行三轮；TEST 和运行后才
+定义的 challenge/复杂题子集不能用于晋级。
+
+成本目录固定为 ADR-0016 的 `siliconflow-pricing-2026-11-11`：BGE-M3 成功调用为免费，
+DeepSeek-V4-Flash 按调用开始时的北京时间和输入/输出 Token 估算 CNY。缓存 Token 不可核验时不套用
+缓存折扣；任一成功调用价格未知时报告 `unavailablePriceCalls`，成本相关晋级规则失败关闭。
+
+评测报告新增答案硬门通过率、答案 P95 延迟、每题平均成本和 Agent 终止路径分布。随机项仍按 series
+输出至少三轮的均值和样本标准差。`GET /api/v1/evaluation-runs/comparison` 只比较同一数据集指纹下已
+完成的 BASELINE 与 AGENT run；Java 确定性裁决 Roadmap 8.3 前两条。第三条在复杂题子集、显著收益
+阈值和条件路由均未预冻结时固定为不可参与晋级。
+
+即使前两条命中，候选仍必须同时达到 M5 的严格 Claim-Evidence 支持率 85% 和引用定位率 95%。
+比较结果只给出候选资格，不修改 `AGENT_ENABLED`、`AGENT_WORKER_ENABLED` 或前端开关；默认启用仍需
+负责人另行批准。

@@ -19,7 +19,7 @@ public final class EvaluationReportCalculator {
     public List<MetricValue> metrics(List<EvaluationCase> cases, List<CaseResult> results) {
         Map<String, CaseResult> byCase = new LinkedHashMap<>();
         results.forEach(result -> byCase.put(result.caseId(), result));
-        List<MetricValue> metrics = new ArrayList<>(7);
+        List<MetricValue> metrics = new ArrayList<>(8);
         List<EvaluationCase> retrieval = cases.stream()
                 .filter(value -> value.type() == CaseType.RETRIEVAL && !value.expectedSegmentIds().isEmpty())
                 .toList();
@@ -31,7 +31,7 @@ public final class EvaluationReportCalculator {
                 result -> Integer.valueOf(1).equals(result.rank()) ? 1 : 0,
                 Map.of("MISSING_EXPECTED_HIT", missingExpected)));
         metrics.add(ratio("mrrAt3", retrieval, byCase,
-                result -> result.rank() == null ? 0 : 1.0 / result.rank(),
+                result -> result.rank() == null || result.rank() < 1 ? 0 : 1.0 / result.rank(),
                 Map.of("MISSING_EXPECTED_HIT", missingExpected)));
 
         List<CaseResult> published = results.stream()
@@ -67,6 +67,11 @@ public final class EvaluationReportCalculator {
         metrics.add(ratio("answerableStatusAccuracy", answerable, byCase,
                 result -> result.outcome() == CaseOutcome.COMPLETED ? 1 : 0,
                 outcomeExclusions(answerable, byCase)));
+        List<EvaluationCase> answers = cases.stream()
+                .filter(value -> value.type() == CaseType.ANSWER).toList();
+        metrics.add(ratio("answerHardGatePassRate", answers, byCase,
+                result -> hardGatePassed(casesById.get(result.caseId()), result) ? 1 : 0,
+                outcomeExclusions(answers, byCase)));
         for (ReliabilityFact fact : ReliabilityFact.values()) {
             List<EvaluationCase> reliability = cases.stream()
                     .filter(value -> value.type() == CaseType.RELIABILITY && value.reliability() != null
@@ -78,6 +83,17 @@ public final class EvaluationReportCalculator {
             }
         }
         return List.copyOf(metrics);
+    }
+
+    private boolean hardGatePassed(EvaluationCase evaluationCase, CaseResult result) {
+        if (evaluationCase == null) return false;
+        if (evaluationCase.answerability() == Answerability.UNANSWERABLE) {
+            return result.outcome() == CaseOutcome.REFUSED;
+        }
+        return result.outcome() == CaseOutcome.COMPLETED
+                && result.claimCount() > 0 && result.supportedClaimCount() == result.claimCount()
+                && result.citationCount() > 0
+                && result.localizedCitationCount() == result.citationCount();
     }
 
     private String reliabilityMetricName(ReliabilityFact fact) {

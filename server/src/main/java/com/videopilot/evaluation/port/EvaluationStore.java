@@ -8,6 +8,7 @@ import com.videopilot.evaluation.domain.EvaluationModels.UsageSummary;
 import com.videopilot.identity.domain.OwnerId;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -36,6 +37,8 @@ public interface EvaluationStore {
     List<EvaluationRun> findSeriesRuns(OwnerId ownerId, UUID seriesId);
 
     UsageSummary summarizeUsage(OwnerId ownerId, UUID runId);
+
+    Map<String, Long> summarizeAgentPaths(OwnerId ownerId, UUID runId);
 
     Optional<ClaimedRun> claimNext(String leaseId, Instant leaseUntil, Instant now);
 

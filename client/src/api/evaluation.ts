@@ -4,12 +4,14 @@ import {
   type EvaluationDataset,
   type EvaluationDatasetId,
   type EvaluationReport,
+  type EvaluationPromotionDecision,
   type EvaluationRun,
   type EvaluationRunId,
   type EvaluationRunRequest,
   evaluationDatasetRunsPath,
   evaluationRunReportPath,
   evaluationRunResultsPath,
+  evaluationRunsComparisonPath,
 } from './contracts'
 import { ApiClientError } from './session'
 
@@ -41,6 +43,9 @@ export function createEvaluationApi(request: Request = fetch) {
       json<EvaluationCaseResult[]>(request, evaluationRunResultsPath(runId), read),
     report: (runId: EvaluationRunId | string) =>
       json<EvaluationReport>(request, evaluationRunReportPath(runId), read),
+    comparison: (baseRunId: EvaluationRunId | string, candidateRunId: EvaluationRunId | string) =>
+      json<EvaluationPromotionDecision>(request,
+        `${evaluationRunsComparisonPath()}?baseRunId=${encodeURIComponent(baseRunId)}&candidateRunId=${encodeURIComponent(candidateRunId)}`, read),
     createRuns: (
       datasetId: EvaluationDatasetId | string,
       input: EvaluationRunRequest,

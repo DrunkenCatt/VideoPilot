@@ -6,6 +6,7 @@ import type {
   EvaluationDataset,
   EvaluationExecutionVersions,
   EvaluationReport,
+  EvaluationPromotionDecision,
   EvaluationRun,
   Session,
 } from '../../api/contracts'
@@ -27,6 +28,9 @@ const activeRun = ref<EvaluationRun | null>(null)
 const results = ref<EvaluationCaseResult[]>([])
 const report = ref<EvaluationReport | null>(null)
 const comparison = ref<ReturnType<typeof compareEvaluationReports> | null>(null)
+const promotion = ref<EvaluationPromotionDecision | null>(null)
+const executionMode = ref<'BASELINE' | 'AGENT'>('BASELINE')
+const agentPolicyVersion = ref('agent-policy-v1')
 const compareBase = ref('')
 const compareCandidate = ref('')
 const loading = ref(true)
@@ -53,9 +57,12 @@ const runGuard = computed(() => {
     return 'TEST 数据集必须冻结并全部批准，双人复核由服务端再次校验。'
   }
   if (versionFields.some((field) => !versions[field.key].trim())) return '填写全部冻结版本后才能运行。'
+  if (executionMode.value === 'AGENT' && !agentPolicyVersion.value.trim()) return 'Agent 候选必须冻结 policy version。'
   return ''
 })
 const completedRuns = computed(() => runs.value.filter((run) => run.status === 'COMPLETED'))
+const completedBaselines = computed(() => completedRuns.value.filter((run) => run.executionMode === 'BASELINE'))
+const completedCandidates = computed(() => completedRuns.value.filter((run) => run.executionMode === 'AGENT'))
 
 function handle(errorValue: unknown) {
   error.value = errorValue instanceof ApiClientError && errorValue.code === 'AUTHENTICATION_REQUIRED'
@@ -85,6 +92,7 @@ async function chooseDataset(dataset: EvaluationDataset) {
   results.value = []
   report.value = null
   comparison.value = null
+  promotion.value = null
   error.value = ''
   try {
     const values = await api.listRuns(dataset.datasetId)
@@ -121,7 +129,9 @@ async function startRun() {
   try {
     const repetitions = (selected.value.answerCaseCount > 0 ? 3 : 2) as 2 | 3
     const created = await api.createRuns(selected.value.datasetId, {
-      baselineType: 'BASELINE_V1', repetitions, versions: { ...versions },
+      baselineType: executionMode.value === 'AGENT' ? 'AGENT_CANDIDATE' : 'BASELINE_V1',
+      repetitions, versions: { ...versions }, executionMode: executionMode.value,
+      agentPolicyVersion: executionMode.value === 'AGENT' ? agentPolicyVersion.value.trim() : null,
     }, globalThis.crypto.randomUUID(), props.session.csrfToken)
     runs.value = [...created, ...runs.value.filter((run) => !created.some((value) => value.runId === run.runId))]
     if (created[0]) await loadRun(created[0])
@@ -132,8 +142,12 @@ async function compare() {
   if (!compareBase.value || !compareCandidate.value || compareBase.value === compareCandidate.value) return
   busy.value = true
   try {
-    const [base, candidate] = await Promise.all([api.report(compareBase.value), api.report(compareCandidate.value)])
+    const [base, candidate, decision] = await Promise.all([
+      api.report(compareBase.value), api.report(compareCandidate.value),
+      api.comparison(compareBase.value, compareCandidate.value),
+    ])
     comparison.value = compareEvaluationReports(base, candidate)
+    promotion.value = decision
   } catch (errorValue) { handle(errorValue) } finally { busy.value = false }
 }
 
@@ -247,6 +261,14 @@ onMounted(async () => {
               >
             </label>
           </div>
+          <div class="candidate-controls">
+            <label>执行模式<select v-model="executionMode"><option value="BASELINE">非 Agent 基线</option><option value="AGENT">Agent 候选</option></select></label>
+            <label v-if="executionMode === 'AGENT'">Policy version<input
+              v-model.trim="agentPolicyVersion"
+              name="agentPolicyVersion"
+              autocomplete="off"
+            ></label>
+          </div>
           <p class="guard-note">
             {{ runGuard || `将运行 ${selected.answerCaseCount > 0 ? 3 : 2} 次；服务端再次执行全部硬门。` }}
           </p>
@@ -323,9 +345,28 @@ onMounted(async () => {
             </div>
           </div>
           <dl>
-            <div><dt>延迟</dt><dd>{{ report.usage.latencyMs }} ms</dd></div><div><dt>Token</dt><dd>{{ report.usage.inputUnits }} in / {{ report.usage.outputUnits }} out</dd></div>
-            <div><dt>调用</dt><dd>{{ report.usage.totalCalls }}</dd></div><div><dt>成本</dt><dd>{{ report.usage.estimatedCost ?? 'UNKNOWN' }}</dd></div>
+            <div>
+              <dt>模式</dt><dd>
+                {{ report.executionMode }}<template v-if="report.agentPolicyVersion">
+                  / {{ report.agentPolicyVersion }}
+                </template>
+              </dd>
+            </div>
+            <div><dt>P95 延迟</dt><dd>{{ report.operations.p95LatencyMs }} ms</dd></div><div><dt>Token</dt><dd>{{ report.usage.inputUnits }} in / {{ report.usage.outputUnits }} out</dd></div>
+            <div><dt>调用</dt><dd>{{ report.usage.totalCalls }}</dd></div><div><dt>平均成本</dt><dd>{{ report.operations.averageCost ?? 'UNKNOWN' }}</dd></div>
+            <div><dt>未知价格调用</dt><dd>{{ report.operations.unavailablePriceCalls }}</dd></div>
           </dl>
+          <details v-if="Object.keys(report.operations.pathDistribution).length">
+            <summary>Agent 路径分布</summary>
+            <dl>
+              <div
+                v-for="(count, path) in report.operations.pathDistribution"
+                :key="path"
+              >
+                <dt>{{ path }}</dt><dd>{{ count }}</dd>
+              </div>
+            </dl>
+          </details>
           <details class="version-trace">
             <summary>全部执行版本</summary>
             <dl>
@@ -344,17 +385,17 @@ onMounted(async () => {
           <p class="section-index">
             COMPARE
           </p><h2>运行差值</h2>
-          <p v-if="completedRuns.length < 2">
-            尚无可比较的已完成运行。
+          <p v-if="completedBaselines.length === 0 || completedCandidates.length === 0">
+            需要同一冻结数据集上的已完成基线与 Agent 候选。
           </p>
           <template v-else>
             <label>基线<select v-model="compareBase"><option value="">选择运行</option><option
-              v-for="run in completedRuns"
+              v-for="run in completedBaselines"
               :key="run.runId"
               :value="run.runId"
             >{{ run.runId }}</option></select></label>
             <label>候选<select v-model="compareCandidate"><option value="">选择运行</option><option
-              v-for="run in completedRuns"
+              v-for="run in completedCandidates"
               :key="run.runId"
               :value="run.runId"
             >{{ run.runId }}</option></select></label>
@@ -377,6 +418,13 @@ onMounted(async () => {
             </p>
             <p><span>latencyMs</span><strong>{{ comparison.usageDeltas.latencyMs }}</strong></p><p><span>tokens in/out</span><strong>{{ comparison.usageDeltas.inputUnits }} / {{ comparison.usageDeltas.outputUnits }}</strong></p>
             <p><span>calls</span><strong>{{ comparison.usageDeltas.totalCalls }}</strong></p><p><span>cost</span><strong>{{ comparison.usageDeltas.estimatedCost ?? 'UNKNOWN' }}</strong></p>
+            <template v-if="promotion">
+              <p><span>Java 晋级裁决</span><strong>{{ promotion.promotionEligible ? 'ELIGIBLE' : 'KEEP_DISABLED' }}</strong></p>
+              <p><span>原因</span><strong>{{ promotion.reason }}</strong></p>
+              <p><span>硬门通过率差</span><strong>{{ promotion.hardGatePassRateDelta.toFixed(3) }}</strong></p>
+              <p><span>规则 1 / 规则 2</span><strong>{{ promotion.ruleOneMet }} / {{ promotion.ruleTwoMet }}</strong></p>
+              <p><span>M5 原门 / 成本已知</span><strong>{{ promotion.m5GatesMet }} / {{ promotion.costKnown }}</strong></p>
+            </template>
           </div>
         </article>
       </section>
@@ -388,6 +436,8 @@ onMounted(async () => {
 .evaluation-shell{width:min(1220px,calc(100% - 48px));margin:0 auto;padding:42px 0 64px}.evaluation-heading,.card-title{display:flex;align-items:center;justify-content:space-between;gap:20px}.evaluation-heading h1{margin:4px 0 0;font-size:clamp(2rem,5vw,4.6rem);letter-spacing:-.055em}.dataset-rail{display:flex;gap:10px;overflow-x:auto;padding:18px 0 22px}.dataset-rail button{min-width:210px;text-align:left;background:#f4f0e6;color:#1c2823;border:1px solid #c9c0ad;padding:14px}.dataset-rail button.active{background:#173d30;color:#fff;border-color:#173d30}.dataset-rail span,.dataset-rail small{display:block;margin-top:5px}.evaluation-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px}.evaluation-card{min-width:0;background:#f7f3e9;border:1px solid #cec5b2;padding:22px}.dataset-card,.runs-card,.trace-card{grid-column:span 5}.run-card,.report-card,.compare-card{grid-column:span 7}.evaluation-card h2{margin:4px 0 18px;font-size:1.45rem}.evaluation-card dl{margin:0}.evaluation-card dl div{display:grid;grid-template-columns:120px minmax(0,1fr);gap:12px;padding:8px 0;border-top:1px solid #ddd4c2}.evaluation-card dt{color:#647069}.evaluation-card dd{margin:0;overflow-wrap:anywhere}.mono{font-family:"IBM Plex Mono","Courier New",monospace;font-size:.75rem}.version-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.version-grid label,.compare-card label{display:grid;gap:5px}.version-grid input,.compare-card select{width:100%;box-sizing:border-box}.guard-note{min-height:2.8em;color:#625f55}.run-row{display:grid;width:100%;gap:5px;margin:8px 0;text-align:left}.run-row span:nth-child(2){font-variant-numeric:tabular-nums}.fingerprint{overflow-wrap:anywhere}details{border-top:1px solid #ddd4c2;padding:10px 0}summary{display:flex;justify-content:space-between;gap:12px;cursor:pointer}.metric-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.metric-grid div{display:grid;background:#e7eadf;padding:12px}.metric-grid strong{font-size:1.5rem}.comparison{margin-top:16px}.comparison p{display:flex;justify-content:space-between;border-top:1px solid #ddd4c2;padding:8px 0;margin:0}.evaluation-empty{border:1px dashed #928c7d;padding:36px}.section-index{font-family:"IBM Plex Mono","Courier New",monospace;letter-spacing:.12em;font-size:.72rem}
 .dataset-rail{min-width:0;max-width:100%}
 .comparison p>*{min-width:0;overflow-wrap:anywhere}.comparison strong{text-align:right}
+.candidate-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}.candidate-controls label{display:grid;gap:5px}.candidate-controls input,.candidate-controls select{width:100%;box-sizing:border-box}
 @media(max-width:900px){.evaluation-card{grid-column:1/-1}.evaluation-shell{width:min(100% - 32px,760px)}.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:480px){.evaluation-shell{width:calc(100% - 24px);padding-top:24px}.evaluation-heading{align-items:flex-start}.version-grid,.metric-grid{grid-template-columns:1fr}.evaluation-card{padding:16px}.evaluation-card dl div{grid-template-columns:1fr}.dataset-rail button{min-width:180px}}
+@media(max-width:480px){.candidate-controls{grid-template-columns:1fr}}
 </style>

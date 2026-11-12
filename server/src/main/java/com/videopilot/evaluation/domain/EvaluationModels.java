@@ -20,6 +20,8 @@ public final class EvaluationModels {
 
     public enum RunStatus { REQUESTED, RUNNING, COMPLETED, FAILED }
 
+    public enum ExecutionMode { BASELINE, AGENT }
+
     public enum CaseOutcome { COMPLETED, REFUSED, ERROR, UNKNOWN }
 
     public enum Answerability { ANSWERABLE, UNANSWERABLE, NOT_APPLICABLE }
@@ -129,6 +131,8 @@ public final class EvaluationModels {
             String requestFingerprint,
             String executionFingerprint,
             ExecutionVersions versions,
+            ExecutionMode executionMode,
+            String agentPolicyVersion,
             RunStatus status,
             int repetitionIndex,
             int repetitionCount,
@@ -137,6 +141,18 @@ public final class EvaluationModels {
             String errorCode,
             Instant createdAt,
             Instant completedAt) {
+
+        public EvaluationRun(
+                UUID runId, UUID seriesId, UUID datasetId, String datasetFingerprint,
+                String idempotencyKey, String requestFingerprint, String executionFingerprint,
+                ExecutionVersions versions, RunStatus status, int repetitionIndex,
+                int repetitionCount, int completedCaseCount, int totalCaseCount,
+                String errorCode, Instant createdAt, Instant completedAt) {
+            this(runId, seriesId, datasetId, datasetFingerprint, idempotencyKey,
+                    requestFingerprint, executionFingerprint, versions, ExecutionMode.BASELINE,
+                    null, status, repetitionIndex, repetitionCount, completedCaseCount,
+                    totalCaseCount, errorCode, createdAt, completedAt);
+        }
     }
 
     public record CaseResult(
@@ -203,20 +219,46 @@ public final class EvaluationModels {
         }
     }
 
+    public record OperationalSummary(
+            long p95LatencyMs,
+            BigDecimal averageCost,
+            long unavailablePriceCalls,
+            Map<String, Long> pathDistribution) {
+
+        public OperationalSummary {
+            pathDistribution = Map.copyOf(pathDistribution);
+        }
+    }
+
     public record EvaluationReport(
             UUID runId,
             UUID datasetId,
             String datasetFingerprint,
             String executionFingerprint,
             ExecutionVersions versions,
+            ExecutionMode executionMode,
+            String agentPolicyVersion,
             List<MetricValue> metrics,
             UsageSummary usage,
+            OperationalSummary operations,
             Map<String, SeriesStatistics> series,
             Instant generatedAt) {
 
         public EvaluationReport {
             metrics = List.copyOf(metrics);
             series = Map.copyOf(series);
+        }
+
+        public EvaluationReport(
+                UUID runId, UUID datasetId, String datasetFingerprint,
+                String executionFingerprint, ExecutionVersions versions,
+                List<MetricValue> metrics, UsageSummary usage,
+                Map<String, SeriesStatistics> series, Instant generatedAt) {
+            this(runId, datasetId, datasetFingerprint, executionFingerprint, versions,
+                    ExecutionMode.BASELINE, null, metrics, usage,
+                    new OperationalSummary(usage.latencyMs(), null,
+                            usage.unavailablePriceCalls(), Map.of()),
+                    series, generatedAt);
         }
     }
 

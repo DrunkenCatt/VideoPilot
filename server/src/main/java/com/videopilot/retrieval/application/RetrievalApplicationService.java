@@ -102,21 +102,28 @@ public final class RetrievalApplicationService {
     }
 
     public RetrievalResult retrieve(OwnerContext owner, UUID jobId, String query, int topK) {
-        return retrieve(owner, jobId, query, topK, null, null, null);
+        return retrieveInternal(owner, jobId, query, topK, null, null, null);
     }
 
     public RetrievalResult retrieve(
             OwnerContext owner, UUID jobId, String query, int topK, UUID executionRunId) {
-        return retrieve(owner, jobId, query, topK, null, null, executionRunId);
+        return retrieveInternal(owner, jobId, query, topK, null, null, executionRunId);
     }
 
     public RetrievalResult retrieve(
             OwnerContext owner, UUID jobId, String query, int topK,
             UUID evaluationRunId, String evaluationCaseId) {
-        return retrieve(owner, jobId, query, topK, evaluationRunId, evaluationCaseId, null);
+        return retrieveInternal(owner, jobId, query, topK, evaluationRunId, evaluationCaseId, null);
     }
 
-    private RetrievalResult retrieve(
+    public RetrievalResult retrieve(
+            OwnerContext owner, UUID jobId, String query, int topK,
+            UUID evaluationRunId, String evaluationCaseId, UUID executionRunId) {
+        return retrieveInternal(owner, jobId, query, topK,
+                evaluationRunId, evaluationCaseId, executionRunId);
+    }
+
+    private RetrievalResult retrieveInternal(
             OwnerContext owner, UUID jobId, String query, int topK,
             UUID evaluationRunId, String evaluationCaseId, UUID executionRunId) {
         String normalizedQuery = normalizeQuery(query);
@@ -195,7 +202,8 @@ public final class RetrievalApplicationService {
             queryVector = result.vectors().getFirst();
             Instant completedAt = now.get();
             store.completeRetrievalEmbeddingCall(new VideoIndexStore.RetrievalEmbeddingCompletion(
-                    callId, result.inputTokens(), latency(startedAt, completedAt), completedAt));
+                    callId, embeddingModel, result.inputTokens(), latency(startedAt, completedAt),
+                    startedAt, completedAt));
             if (budget != null) {
                 if (evaluationRunId == null) {
                     budget.afterInteractiveCall(snapshot.jobId());

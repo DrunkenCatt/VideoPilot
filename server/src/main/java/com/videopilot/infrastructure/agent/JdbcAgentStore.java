@@ -51,14 +51,18 @@ public class JdbcAgentStore implements AgentStore {
         try {
             int inserted = jdbc.sql("""
                     INSERT INTO agent_run (
-                        run_id, owner_id, job_id, idempotency_key, request_fingerprint, goal,
+                        run_id, owner_id, job_id, evaluation_run_id, evaluation_case_id,
+                        idempotency_key, request_fingerprint, goal,
                         status, execution_versions, budget_snapshot, created_at
-                    ) SELECT :runId,:owner,:jobId,:key,:fingerprint,:goal,
+                    ) SELECT :runId,:owner,:jobId,:evaluationRunId,:evaluationCaseId,:key,:fingerprint,:goal,
                         'REQUESTED',CAST(:versions AS JSON),CAST(:budget AS JSON),:createdAt
                     FROM analysis_job
                     WHERE job_id = :jobId AND owner_id = :owner AND status = 'READY'
                     """).param("runId", run.runId().toString()).param("owner", ownerId.value().toString())
                     .param("jobId", run.jobId().toString()).param("key", run.idempotencyKey())
+                    .param("evaluationRunId", run.evaluationRunId() == null
+                            ? null : run.evaluationRunId().toString())
+                    .param("evaluationCaseId", run.evaluationCaseId())
                     .param("fingerprint", run.requestFingerprint()).param("goal", run.goal())
                     .param("versions", write(run.versions())).param("budget", write(run.budget()))
                     .param("createdAt", run.createdAt()).update();
@@ -104,6 +108,30 @@ public class JdbcAgentStore implements AgentStore {
                 .param("runId", runId.orElseThrow().toString()).update();
         if (updated != 1) throw new AgentException(AgentException.Reason.CONFLICT);
         AgentRun run = findByRunId(runId.orElseThrow()).orElseThrow();
+        return Optional.of(new ClaimedRun(run.ownerId(), run));
+    }
+
+    @Override
+    @Transactional
+    public Optional<ClaimedRun> claim(
+            OwnerId ownerId, UUID runId, String leaseId, Instant leaseUntil, Instant now) {
+        Optional<UUID> candidate = jdbc.sql("""
+                SELECT run_id FROM agent_run
+                WHERE owner_id = :owner AND run_id = :runId
+                  AND (status = 'REQUESTED' OR (status = 'RUNNING' AND lease_until < :now))
+                FOR UPDATE
+                """).param("owner", ownerId.value().toString()).param("runId", runId.toString())
+                .param("now", now).query(String.class).optional().map(UUID::fromString);
+        if (candidate.isEmpty()) return Optional.empty();
+        int updated = jdbc.sql("""
+                UPDATE agent_run SET status = 'RUNNING', lease_id = :leaseId,
+                    lease_until = :leaseUntil, version = version + 1
+                WHERE owner_id = :owner AND run_id = :runId
+                  AND (status = 'REQUESTED' OR (status = 'RUNNING' AND lease_until < :now))
+                """).param("owner", ownerId.value().toString()).param("runId", runId.toString())
+                .param("leaseId", leaseId).param("leaseUntil", leaseUntil).param("now", now).update();
+        if (updated != 1) throw new AgentException(AgentException.Reason.CONFLICT);
+        AgentRun run = findByRunId(runId).orElseThrow();
         return Optional.of(new ClaimedRun(run.ownerId(), run));
     }
 
@@ -256,7 +284,10 @@ public class JdbcAgentStore implements AgentStore {
         return new AgentRun(
                 UUID.fromString(rs.getString("run_id")),
                 new OwnerId(UUID.fromString(rs.getString("owner_id"))),
-                UUID.fromString(rs.getString("job_id")), rs.getString("idempotency_key"),
+                UUID.fromString(rs.getString("job_id")),
+                rs.getString("evaluation_run_id") == null
+                        ? null : UUID.fromString(rs.getString("evaluation_run_id")),
+                rs.getString("evaluation_case_id"), rs.getString("idempotency_key"),
                 rs.getString("request_fingerprint"), rs.getString("goal"),
                 RunStatus.valueOf(rs.getString("status")),
                 read(rs.getString("execution_versions"), AgentVersions.class),

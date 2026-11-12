@@ -18,14 +18,18 @@ const completed = {
   status: 'COMPLETED', completedCaseCount: 2, totalCaseCount: 2, executionFingerprint: 'b'.repeat(64),
   repetitionIndex: 1, repetitionCount: 2, createdAt: '2026-11-08T00:00:00Z',
   completedAt: '2026-11-08T00:01:00Z', baselineType: 'BASELINE_V1',
+  executionMode: 'BASELINE', agentPolicyVersion: null,
 } as EvaluationRun
-const secondCompleted = { ...completed, runId: '00000000-0000-0000-0000-000000000212', repetitionIndex: 2 } as EvaluationRun
+const secondCompleted = { ...completed, runId: '00000000-0000-0000-0000-000000000212', repetitionIndex: 2,
+  baselineType: 'AGENT_CANDIDATE', executionMode: 'AGENT', agentPolicyVersion: 'agent-policy-v1' } as EvaluationRun
 const report = {
   runId: completed.runId, datasetId: devDataset.datasetId, datasetFingerprint: 'a'.repeat(64),
   executionFingerprint: 'b'.repeat(64),
+  executionMode: 'BASELINE', agentPolicyVersion: null,
   versions: { codeCommit: 'c', pipelineVersion: 'p', promptVersion: 'pr', modelVersion: 'm', embeddingVersion: 'e', chunkVersion: 'ch', retrievalFormulaVersion: 'r', evidenceGateVersion: 'g', limitsVersion: 'l', configurationVersion: 'cfg' },
   metrics: [{ name: 'recallAt3', numerator: 1, denominator: 2, value: 0.5, exclusions: {} }],
   usage: { totalCalls: 1, inputUnits: 2, outputUnits: 3, latencyMs: 50, estimatedCost: null, currency: null, unavailablePriceCalls: 1, callOutcomes: {} },
+  operations: { p95LatencyMs: 50, averageCost: null, unavailablePriceCalls: 1, pathDistribution: {} },
   series: {}, generatedAt: '2026-11-08T00:01:00Z',
 }
 const trace = [{ caseId: 'case-1', caseType: 'RETRIEVAL', outcome: 'COMPLETED', rank: 1, claimCount: 0, citationCount: 0, supportedClaimCount: 0, localizedCitationCount: 0, latencyMs: 10, tokenCount: 0, estimatedCost: null, errorCode: null }]
@@ -34,7 +38,13 @@ function api(overrides: Record<string, unknown> = {}) {
   return {
     listDatasets: vi.fn().mockResolvedValue([devDataset, draftTest]),
     listRuns: vi.fn().mockResolvedValue([]), createRuns: vi.fn(), getRun: vi.fn(),
-    results: vi.fn().mockResolvedValue([]), report: vi.fn(), ...overrides,
+    results: vi.fn().mockResolvedValue([]), report: vi.fn(),
+    comparison: vi.fn().mockResolvedValue({
+      baseRunId: completed.runId, candidateRunId: secondCompleted.runId,
+      hardGatePassRateDelta: 0, ruleOneMet: false, ruleTwoMet: false,
+      complexSubsetRuleEligible: false, m5GatesMet: false, costKnown: false,
+      promotionEligible: false, reason: 'M5_GATES_NOT_MET',
+    }), ...overrides,
   }
 }
 
@@ -46,6 +56,16 @@ describe('EvaluationWorkbench', () => {
     await wrapper.get('[data-test="dataset-1"]').trigger('click')
     expect(wrapper.get('[data-test="start-run"]').attributes('disabled')).toBeDefined()
     expect(wrapper.text()).toContain('TEST 数据集必须冻结并全部批准')
+  })
+
+  it('defaults agent candidates to the frozen runtime policy version', async () => {
+    const wrapper = mount(EvaluationWorkbench, { props: { session, api: api() } })
+    await flushPromises()
+
+    await wrapper.get('.candidate-controls select').setValue('AGENT')
+
+    expect((wrapper.get('.candidate-controls input').element as HTMLInputElement).value)
+      .toBe('agent-policy-v1')
   })
 
   it('ignores a late run response after another dataset is selected', async () => {
@@ -66,7 +86,7 @@ describe('EvaluationWorkbench', () => {
     const wrapper = mount(EvaluationWorkbench, { props: { session, api: api({ listRuns: vi.fn().mockResolvedValue([running]) }) }, attrs: { onUnauthenticated: emit } })
     await flushPromises()
     expect(wrapper.text()).toContain('1 / 2')
-    expect(wrapper.text()).toContain('尚无可比较的已完成运行')
+    expect(wrapper.text()).toContain('需要同一冻结数据集上的已完成基线与 Agent 候选')
     expect(wrapper.text()).not.toMatch(/question|transcript|promptText|rawResponse/)
   })
 
@@ -99,7 +119,7 @@ describe('EvaluationWorkbench', () => {
       expect.objectContaining({ repetitions: 2 }), expect.any(String), 'csrf')
     expect(wrapper.text()).toContain('case-1')
     expect(wrapper.text()).toContain('recallAt3')
-    const selects = wrapper.findAll('select')
+    const selects = wrapper.findAll('.compare-card select')
     await selects[0]!.setValue(completed.runId)
     await selects[1]!.setValue(secondCompleted.runId)
     await wrapper.get('.compare-card button').trigger('click')

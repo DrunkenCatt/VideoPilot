@@ -2,8 +2,9 @@ package com.videopilot.answer.application;
 
 import java.text.Normalizer;
 import java.util.ArrayList;
-import java.util.List;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
@@ -12,7 +13,8 @@ import java.util.regex.Pattern;
 
 public final class AnswerEvidenceGate {
 
-    private static final Pattern TOKEN_RUN = Pattern.compile("[\\p{IsHan}]+|[\\p{L}\\p{N}]{2,}");
+    private static final Pattern TOKEN_RUN =
+            Pattern.compile("[\\p{IsHan}]+|[\\p{L}\\p{N}&&[^\\p{IsHan}]]{2,}");
 
     private final int maxClaims;
     private final int maxClaimCharacters;
@@ -47,9 +49,11 @@ public final class AnswerEvidenceGate {
             }
             List<VerifiedCitation> citations = new ArrayList<>();
             for (CandidateCitation citation : claim.citations()) {
-                VerifiedCitation aligned = align(citation, sources);
-                if (aligned == null) return ValidationResult.rejected("CITATION_VALIDATION_FAILED");
-                citations.add(aligned);
+                List<VerifiedCitation> aligned = align(citation, sources);
+                if (aligned.isEmpty()) {
+                    return ValidationResult.rejected("CITATION_VALIDATION_FAILED");
+                }
+                citations.addAll(aligned);
             }
             if (!supported(claim.text(), citations)) {
                 return ValidationResult.rejected("CITATION_VALIDATION_FAILED");
@@ -59,29 +63,70 @@ public final class AnswerEvidenceGate {
         return new ValidationResult(true, List.copyOf(verified), null);
     }
 
-    private VerifiedCitation align(CandidateCitation citation, List<EvidenceSource> sources) {
+    private List<VerifiedCitation> align(CandidateCitation citation, List<EvidenceSource> sources) {
         if (citation.evidenceId() == null || citation.evidenceId().isBlank()
                 || citation.quote() == null || citation.quote().isBlank()
-                || citation.quote().length() > maxQuoteCharacters) return null;
+                || citation.quote().length() > maxQuoteCharacters) return List.of();
         EvidenceSource declared = sources.stream()
                 .filter(EvidenceSource::selectable)
                 .filter(source -> source.evidenceId().equals(citation.evidenceId()))
                 .findFirst().orElse(null);
-        if (declared == null) return null;
+        if (declared == null) return List.of();
         List<EvidenceSource> neighborhood = sources.stream()
                 .filter(source -> source.chunkId().equals(declared.chunkId()))
                 .filter(source -> source.channel().equals(declared.channel()))
                 .filter(source -> Math.abs(source.ordinal() - declared.ordinal()) <= 1)
+                .sorted(Comparator.comparingInt(EvidenceSource::ordinal))
                 .toList();
         for (EvidenceSource source : neighborhood) {
             String type = alignment(citation.quote(), source.text());
             if (type != null) {
-                return new VerifiedCitation(
+                return List.of(new VerifiedCitation(
                         citation.evidenceId(), source.segmentId(), source.startMs(), source.endMs(),
-                        source.channel(), citation.quote().trim(), type);
+                        source.channel(), citation.quote().trim(), type));
             }
         }
-        return null;
+        for (int index = 0; index + 1 < neighborhood.size(); index++) {
+            EvidenceSource left = neighborhood.get(index);
+            EvidenceSource right = neighborhood.get(index + 1);
+            if (right.ordinal() != left.ordinal() + 1) continue;
+            List<VerifiedCitation> split = alignAcrossBoundary(citation, left, right);
+            if (!split.isEmpty()) return split;
+        }
+        return List.of();
+    }
+
+    private List<VerifiedCitation> alignAcrossBoundary(
+            CandidateCitation citation, EvidenceSource left, EvidenceSource right) {
+        String quote = citation.quote().trim();
+        for (int offset = quote.offsetByCodePoints(0, 1);
+                offset < quote.length();
+                offset = quote.offsetByCodePoints(offset, 1)) {
+            String leftQuote = quote.substring(0, offset).trim();
+            String rightQuote = quote.substring(offset).trim();
+            if (normalize(leftQuote).length() < 2 || normalize(rightQuote).length() < 2) continue;
+            String leftType = strictAlignment(leftQuote, left.text());
+            String rightType = strictAlignment(rightQuote, right.text());
+            if (leftType != null && rightType != null) {
+                return List.of(
+                        verified(citation.evidenceId(), left, leftQuote, leftType),
+                        verified(citation.evidenceId(), right, rightQuote, rightType));
+            }
+        }
+        return List.of();
+    }
+
+    private VerifiedCitation verified(
+            String originalEvidenceId, EvidenceSource source, String quote, String alignmentType) {
+        return new VerifiedCitation(
+                originalEvidenceId, source.segmentId(), source.startMs(), source.endMs(),
+                source.channel(), quote, alignmentType);
+    }
+
+    private String strictAlignment(String quote, String source) {
+        if (source.contains(quote)) return "EXACT";
+        String needle = normalize(quote);
+        return !needle.isEmpty() && normalize(source).contains(needle) ? "NORMALIZED" : null;
     }
 
     private String alignment(String quote, String source) {

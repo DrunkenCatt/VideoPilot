@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.videopilot.identity.domain.OwnerId;
+import com.videopilot.infrastructure.model.SiliconFlowPricing;
 import com.videopilot.retrieval.domain.VideoChunk;
 import com.videopilot.retrieval.port.VideoIndexStore;
 import java.util.List;
@@ -243,11 +244,15 @@ public class VideoIndexPersistenceAdapter implements VideoIndexStore {
     @Override
     @Transactional
     public void completeEmbedding(OwnerId ownerId, EmbeddingCompletion completion) {
+        var price = SiliconFlowPricing.estimate(
+                completion.model(), completion.startedAt(), completion.inputTokens(), 0);
         int updated = jdbc.sql("""
                 UPDATE model_call call_record
                 INNER JOIN analysis_job job ON job.job_id = call_record.job_id
                 SET call_record.status = 'SUCCEEDED', call_record.input_units = :inputTokens,
                     call_record.output_artifact_ref = :artifactRef, call_record.latency_ms = :latency,
+                    call_record.estimated_cost = :cost, call_record.currency = :currency,
+                    call_record.price_version = :priceVersion, call_record.price_status = :priceStatus,
                     call_record.completed_at = :completedAt, call_record.updated_at = :completedAt
                 WHERE call_record.model_call_id = :callId AND call_record.status = 'STARTED'
                   AND job.owner_id = :owner
@@ -255,6 +260,9 @@ public class VideoIndexPersistenceAdapter implements VideoIndexStore {
                 .param("inputTokens", completion.inputTokens())
                 .param("artifactRef", "mysql:video-index/" + completion.indexId() + "/embeddings")
                 .param("latency", completion.latencyMs()).param("completedAt", completion.completedAt())
+                .param("cost", price.cost()).param("currency", price.currency())
+                .param("priceVersion", price.version())
+                .param("priceStatus", price.available() ? "AVAILABLE" : "UNAVAILABLE")
                 .param("callId", completion.modelCallId().toString())
                 .param("owner", ownerId.value().toString()).update();
         if (updated != 1) throw new IllegalStateException("embedding completion lost its model call");
@@ -340,13 +348,20 @@ public class VideoIndexPersistenceAdapter implements VideoIndexStore {
     @Override
     @Transactional
     public void completeRetrievalEmbeddingCall(RetrievalEmbeddingCompletion completion) {
+        var price = SiliconFlowPricing.estimate(
+                completion.model(), completion.startedAt(), completion.inputTokens(), 0);
         int updated = jdbc.sql("""
                 UPDATE model_call
                 SET status = 'SUCCEEDED', input_units = :inputTokens, latency_ms = :latency,
+                    estimated_cost = :cost, currency = :currency, price_version = :priceVersion,
+                    price_status = :priceStatus,
                     completed_at = :completedAt, updated_at = :completedAt
                 WHERE model_call_id = :callId AND status = 'STARTED'
                 """)
                 .param("inputTokens", completion.inputTokens()).param("latency", completion.latencyMs())
+                .param("cost", price.cost()).param("currency", price.currency())
+                .param("priceVersion", price.version())
+                .param("priceStatus", price.available() ? "AVAILABLE" : "UNAVAILABLE")
                 .param("completedAt", completion.completedAt())
                 .param("callId", completion.modelCallId().toString()).update();
         if (updated != 1) throw new IllegalStateException("retrieval embedding completion lost its model call");

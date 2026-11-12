@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.videopilot.answer.application.AnswerEvidenceGate;
 import com.videopilot.answer.port.AnswerStore;
 import com.videopilot.identity.domain.OwnerId;
+import com.videopilot.infrastructure.model.SiliconFlowPricing;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -162,12 +163,20 @@ public class AnswerPersistenceAdapter implements AnswerStore {
                 .update();
         if (updated != 1) throw new IllegalStateException("answer publication lost its processing state");
         if (publication.modelCallId() != null) {
+            var price = SiliconFlowPricing.estimate(
+                    publication.modelVersion(), publication.startedAt(),
+                    publication.inputTokens(), publication.outputTokens());
             int call = jdbc.sql("""
                     UPDATE model_call
                     SET status = 'SUCCEEDED', input_units = :input, output_units = :output,
+                        estimated_cost = :cost, currency = :currency, price_version = :priceVersion,
+                        price_status = :priceStatus,
                         latency_ms = :latency, completed_at = :completedAt, updated_at = :completedAt
                     WHERE model_call_id = :callId AND status = 'STARTED'
                     """).param("input", publication.inputTokens()).param("output", publication.outputTokens())
+                    .param("cost", price.cost()).param("currency", price.currency())
+                    .param("priceVersion", price.version())
+                    .param("priceStatus", price.available() ? "AVAILABLE" : "UNAVAILABLE")
                     .param("latency", publication.latencyMs()).param("completedAt", publication.publishedAt())
                     .param("callId", publication.modelCallId().toString()).update();
             if (call != 1) throw new IllegalStateException("answer publication lost its model call");

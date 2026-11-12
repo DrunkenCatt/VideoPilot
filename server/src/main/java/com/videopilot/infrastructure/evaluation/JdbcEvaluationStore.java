@@ -121,10 +121,11 @@ public class JdbcEvaluationStore implements EvaluationStore {
                         INSERT INTO evaluation_run (
                             run_id, series_id, owner_id, dataset_id, dataset_fingerprint,
                             idempotency_key, request_fingerprint, baseline_type, status,
+                            execution_mode, agent_policy_version,
                             execution_fingerprint, execution_versions, repetition_index, repetition_count,
                             completed_case_count, total_case_count, created_at
                         ) VALUES (:runId,:seriesId,:owner,:datasetId,:datasetFingerprint,
-                            :key,:requestFingerprint,'BASELINE_V1','REQUESTED',
+                            :key,:requestFingerprint,'BASELINE_V1','REQUESTED',:executionMode,:policyVersion,
                             :executionFingerprint,CAST(:versions AS JSON),:repetitionIndex,:repetitionCount,
                             0,:totalCases,:createdAt)
                         """).param("runId", run.runId().toString()).param("seriesId", seriesId.toString())
@@ -132,6 +133,8 @@ public class JdbcEvaluationStore implements EvaluationStore {
                         .param("datasetId", dataset.datasetId().toString())
                         .param("datasetFingerprint", dataset.fingerprint()).param("key", idempotencyKey)
                         .param("requestFingerprint", requestFingerprint)
+                        .param("executionMode", run.executionMode().name())
+                        .param("policyVersion", run.agentPolicyVersion())
                         .param("executionFingerprint", run.executionFingerprint())
                         .param("versions", write(run.versions())).param("repetitionIndex", run.repetitionIndex())
                         .param("repetitionCount", run.repetitionCount()).param("totalCases", run.totalCaseCount())
@@ -231,6 +234,23 @@ public class JdbcEvaluationStore implements EvaluationStore {
                 usage.totalCalls(), usage.inputUnits(), usage.outputUnits(),
                 Math.max(resultLatency, usage.callLatencyMs()), usage.estimatedCost(), usage.currency(),
                 usage.unavailablePrices(), outcomes);
+    }
+
+    @Override
+    public Map<String, Long> summarizeAgentPaths(OwnerId ownerId, UUID runId) {
+        Map<String, Long> paths = new LinkedHashMap<>();
+        jdbc.sql("""
+                SELECT agent.termination_reason, COUNT(*) AS total
+                FROM agent_run agent
+                INNER JOIN evaluation_run run ON run.run_id = agent.evaluation_run_id
+                WHERE run.owner_id = :owner AND run.run_id = :runId
+                  AND agent.termination_reason IS NOT NULL
+                GROUP BY agent.termination_reason ORDER BY agent.termination_reason
+                """).param("owner", ownerId.value().toString()).param("runId", runId.toString())
+                .query((row, ignored) -> Map.entry(
+                        row.getString("termination_reason"), row.getLong("total")))
+                .list().forEach(entry -> paths.put(entry.getKey(), entry.getValue()));
+        return Map.copyOf(paths);
     }
 
     @Override
@@ -397,6 +417,11 @@ public class JdbcEvaluationStore implements EvaluationStore {
                 row.getString("idempotency_key"), row.getString("request_fingerprint"),
                 row.getString("execution_fingerprint"),
                 read(row.getString("execution_versions"), ExecutionVersions.class),
+                row.getString("execution_mode") == null
+                        ? com.videopilot.evaluation.domain.EvaluationModels.ExecutionMode.BASELINE
+                        : com.videopilot.evaluation.domain.EvaluationModels.ExecutionMode.valueOf(
+                                row.getString("execution_mode")),
+                row.getString("agent_policy_version"),
                 RunStatus.valueOf(row.getString("status")), row.getInt("repetition_index"),
                 row.getInt("repetition_count"), row.getInt("completed_case_count"),
                 row.getInt("total_case_count"), row.getString("error_code"),
@@ -405,10 +430,11 @@ public class JdbcEvaluationStore implements EvaluationStore {
 
     private CaseResult resultRow(ResultSet row, int ignored) throws SQLException {
         int rank = row.getInt("result_rank");
+        boolean rankWasNull = row.wasNull();
         return new CaseResult(
                 UUID.fromString(row.getString("run_id")), row.getString("case_id"),
                 CaseType.valueOf(row.getString("case_type")), CaseOutcome.valueOf(row.getString("outcome")),
-                row.wasNull() ? null : rank, row.getInt("claim_count"), row.getInt("citation_count"),
+                rankWasNull ? null : rank, row.getInt("claim_count"), row.getInt("citation_count"),
                 row.getInt("supported_claim_count"), row.getInt("localized_citation_count"),
                 row.getString("answer_id") == null ? null : UUID.fromString(row.getString("answer_id")),
                 row.getLong("latency_ms"), row.getLong("token_count"), row.getBigDecimal("estimated_cost"),

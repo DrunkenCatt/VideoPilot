@@ -48,7 +48,8 @@ class EvaluationReportCalculatorTest {
 
         assertThat(metrics).extracting(value -> value.name()).containsExactly(
                 "recallAt3", "hitAt1", "mrrAt3", "strictClaimEvidenceSupport",
-                "citationLocalization", "refusalAccuracy", "answerableStatusAccuracy");
+                "citationLocalization", "refusalAccuracy", "answerableStatusAccuracy",
+                "answerHardGatePassRate");
         assertMetric(metrics, "recallAt3", 1.0, 2, 0.5);
         assertMetric(metrics, "hitAt1", 1.0, 2, 0.5);
         assertMetric(metrics, "mrrAt3", 1.0, 2, 0.5);
@@ -56,6 +57,7 @@ class EvaluationReportCalculatorTest {
         assertMetric(metrics, "citationLocalization", 2.0, 3, 2.0 / 3.0);
         assertMetric(metrics, "refusalAccuracy", 1.0, 2, 0.5);
         assertMetric(metrics, "answerableStatusAccuracy", 1.0, 1, 1.0);
+        assertMetric(metrics, "answerHardGatePassRate", 1.0, 3, 1.0 / 3.0);
         assertThat(metric(metrics, "recallAt3").exclusions()).containsEntry("MISSING_EXPECTED_HIT", 1L);
         assertThat(metric(metrics, "refusalAccuracy").exclusions()).containsEntry("UNKNOWN", 1L);
     }
@@ -71,6 +73,16 @@ class EvaluationReportCalculatorTest {
                 List.of(evaluationCase("r1", RETRIEVAL, NOT_APPLICABLE, true)),
                 List.of(result(runId, "r1", RETRIEVAL, COMPLETED, 2, 0, 0, 0, 0)));
         assertMetric(metrics, "mrrAt3", 0.5, 1, 0.5);
+    }
+
+    @Test
+    void treatsInvalidZeroRankAsAMissInsteadOfProducingInfinity() {
+        UUID runId = UUID.randomUUID();
+        var metrics = calculator.metrics(
+                List.of(evaluationCase("r-zero", RETRIEVAL, NOT_APPLICABLE, true)),
+                List.of(result(runId, "r-zero", RETRIEVAL, COMPLETED, 0, 0, 0, 0, 0)));
+
+        assertThat(metric(metrics, "mrrAt3").value()).isZero().isFinite();
     }
 
     @Test

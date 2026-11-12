@@ -2,6 +2,7 @@ package com.videopilot.infrastructure.evaluation;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.videopilot.answer.application.AnswerApplicationService;
+import com.videopilot.agent.application.AgentApplicationService;
 import com.videopilot.evaluation.application.EvaluationApplicationService;
 import com.videopilot.evaluation.application.EvaluationBaselineRunner;
 import com.videopilot.infrastructure.web.EvaluationController;
@@ -14,6 +15,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 @AutoConfiguration(afterName = "com.videopilot.infrastructure.answer.AnswerAutoConfiguration")
@@ -27,8 +29,10 @@ public class EvaluationAutoConfiguration {
 
     @Bean
     EvaluationBaselineRunner evaluationBaselineRunner(
-            RetrievalApplicationService retrieval, AnswerApplicationService answers) {
-        return new EvaluationBaselineRunner(retrieval, answers, Clock.systemUTC()::instant);
+            RetrievalApplicationService retrieval, AnswerApplicationService answers,
+            ObjectProvider<AgentApplicationService> agents) {
+        return new EvaluationBaselineRunner(
+                retrieval, answers, agents.getIfAvailable(), Clock.systemUTC()::instant);
     }
 
     @Bean

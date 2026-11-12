@@ -94,6 +94,11 @@ class AnswerPersistenceAdapterIT {
         assertThat(jdbc.sql("SELECT run_id FROM model_call WHERE model_call_id = :id")
                 .param("id", callId.toString()).query(String.class).single())
                 .isEqualTo(executionRunId.toString());
+        assertThat(jdbc.sql("""
+                SELECT CONCAT(price_status, '|', currency, '|', price_version)
+                FROM model_call WHERE model_call_id = :id
+                """).param("id", callId.toString()).query(String.class).single())
+                .isEqualTo("AVAILABLE|CNY|siliconflow-pricing-2026-11-11");
     }
 
     private void seed() {

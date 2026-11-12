@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -56,7 +57,13 @@ public class EvaluationController {
             @Valid @RequestBody M5ApiContracts.CreateRunRequest request) {
         return evaluations.createRuns(
                 principal.ownerContext(), datasetId, idempotencyKey,
-                new EvaluationApplicationService.StartRun(request.repetitions(), versions(request.versions())))
+                new EvaluationApplicationService.StartRun(
+                        request.repetitions(), versions(request.versions()),
+                        request.executionMode() == null
+                                ? com.videopilot.evaluation.domain.EvaluationModels.ExecutionMode.BASELINE
+                                : com.videopilot.evaluation.domain.EvaluationModels.ExecutionMode.valueOf(
+                                        request.executionMode().name()),
+                        request.agentPolicyVersion()))
                 .stream().map(this::run).toList();
     }
 
@@ -90,6 +97,8 @@ public class EvaluationController {
         return new M5ApiContracts.EvaluationReport(
                 report.runId(), report.datasetId(), report.datasetFingerprint(),
                 report.executionFingerprint(), versions(report.versions()),
+                M5ApiContracts.ExecutionMode.valueOf(report.executionMode().name()),
+                report.agentPolicyVersion(),
                 report.metrics().stream().map(value -> new M5ApiContracts.MetricValue(
                         value.name(), value.numerator(), value.denominator(), value.value(),
                         value.exclusions())).toList(),
@@ -97,6 +106,10 @@ public class EvaluationController {
                         usage.totalCalls(), usage.inputUnits(), usage.outputUnits(), usage.latencyMs(),
                         usage.estimatedCost(), usage.currency(), usage.unavailablePriceCalls(),
                         usage.callOutcomes()),
+                new M5ApiContracts.OperationalSummary(
+                        report.operations().p95LatencyMs(), report.operations().averageCost(),
+                        report.operations().unavailablePriceCalls(),
+                        report.operations().pathDistribution()),
                 report.series().entrySet().stream().collect(java.util.stream.Collectors.toMap(
                         java.util.Map.Entry::getKey,
                         entry -> new M5ApiContracts.SeriesStatistics(
@@ -104,6 +117,20 @@ public class EvaluationController {
                                 entry.getValue().sampleStandardDeviation(),
                                 entry.getValue().outcomeDistribution()))),
                 report.generatedAt());
+    }
+
+    @GetMapping("/evaluation-runs/comparison")
+    M5ApiContracts.RunComparison comparison(
+            @AuthenticationPrincipal IdentityPrincipal principal,
+            @RequestParam UUID baseRunId,
+            @RequestParam UUID candidateRunId) {
+        var comparison = evaluations.compare(principal.ownerContext(), baseRunId, candidateRunId);
+        var decision = comparison.decision();
+        return new M5ApiContracts.RunComparison(
+                comparison.baseline().runId(), comparison.candidate().runId(),
+                decision.hardGatePassRateDelta(), decision.ruleOneMet(), decision.ruleTwoMet(),
+                decision.complexSubsetRuleEligible(), decision.m5GatesMet(), decision.costKnown(),
+                decision.promotionEligible(), decision.reason());
     }
 
     private M5ApiContracts.DatasetSummary dataset(EvaluationDataset value) {
@@ -122,7 +149,11 @@ public class EvaluationController {
 
     private M5ApiContracts.RunSummary run(EvaluationRun value) {
         return new M5ApiContracts.RunSummary(
-                value.runId(), value.datasetId(), M5ApiContracts.BaselineType.BASELINE_V1,
+                value.runId(), value.datasetId(), value.executionMode()
+                        == com.videopilot.evaluation.domain.EvaluationModels.ExecutionMode.AGENT
+                        ? M5ApiContracts.BaselineType.AGENT_CANDIDATE
+                        : M5ApiContracts.BaselineType.BASELINE_V1,
+                M5ApiContracts.ExecutionMode.valueOf(value.executionMode().name()), value.agentPolicyVersion(),
                 M5ApiContracts.RunStatus.valueOf(value.status().name()), value.executionFingerprint(),
                 value.repetitionIndex(), value.repetitionCount(), value.completedCaseCount(),
                 value.totalCaseCount(), value.createdAt(), value.completedAt());

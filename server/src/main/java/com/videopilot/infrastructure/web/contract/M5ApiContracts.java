@@ -60,7 +60,13 @@ public final class M5ApiContracts {
     }
 
     public enum BaselineType {
-        BASELINE_V1
+        BASELINE_V1,
+        AGENT_CANDIDATE
+    }
+
+    public enum ExecutionMode {
+        BASELINE,
+        AGENT
     }
 
     public enum RunStatus {
@@ -105,7 +111,17 @@ public final class M5ApiContracts {
     public record CreateRunRequest(
             @NotNull BaselineType baselineType,
             @Min(1) @Max(MAX_REPETITIONS) int repetitions,
-            @NotNull @Valid ExecutionVersions versions) {
+            @NotNull @Valid ExecutionVersions versions,
+            ExecutionMode executionMode,
+            String agentPolicyVersion) {
+
+        public CreateRunRequest(
+                BaselineType baselineType, int repetitions, ExecutionVersions versions) {
+            this(baselineType, repetitions, versions,
+                    baselineType == BaselineType.AGENT_CANDIDATE
+                            ? ExecutionMode.AGENT : ExecutionMode.BASELINE,
+                    null);
+        }
     }
 
     public record DatasetSummary(
@@ -126,6 +142,8 @@ public final class M5ApiContracts {
             UUID runId,
             UUID datasetId,
             BaselineType baselineType,
+            ExecutionMode executionMode,
+            String agentPolicyVersion,
             RunStatus status,
             String executionFingerprint,
             int repetitionIndex,
@@ -182,14 +200,24 @@ public final class M5ApiContracts {
             Map<String, Long> outcomeDistribution) {
     }
 
+    public record OperationalSummary(
+            long p95LatencyMs,
+            BigDecimal averageCost,
+            long unavailablePriceCalls,
+            Map<String, Long> pathDistribution) {
+    }
+
     public record EvaluationReport(
             UUID runId,
             UUID datasetId,
             String datasetFingerprint,
             String executionFingerprint,
             ExecutionVersions versions,
+            ExecutionMode executionMode,
+            String agentPolicyVersion,
             List<MetricValue> metrics,
             UsageSummary usage,
+            OperationalSummary operations,
             Map<String, SeriesStatistics> series,
             Instant generatedAt) {
     }
@@ -197,7 +225,13 @@ public final class M5ApiContracts {
     public record RunComparison(
             UUID baseRunId,
             UUID candidateRunId,
-            List<MetricValue> baseMetrics,
-            List<MetricValue> candidateMetrics) {
+            double hardGatePassRateDelta,
+            boolean ruleOneMet,
+            boolean ruleTwoMet,
+            boolean complexSubsetRuleEligible,
+            boolean m5GatesMet,
+            boolean costKnown,
+            boolean promotionEligible,
+            String reason) {
     }
 }

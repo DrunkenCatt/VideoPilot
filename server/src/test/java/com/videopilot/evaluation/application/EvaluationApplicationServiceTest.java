@@ -3,6 +3,7 @@ package com.videopilot.evaluation.application;
 import static com.videopilot.evaluation.domain.EvaluationModels.CaseOutcome.COMPLETED;
 import static com.videopilot.evaluation.domain.EvaluationModels.CaseOutcome.ERROR;
 import static com.videopilot.evaluation.domain.EvaluationModels.CaseType.RETRIEVAL;
+import static com.videopilot.evaluation.domain.EvaluationModels.CaseType.ANSWER;
 import static com.videopilot.evaluation.domain.EvaluationModels.DatasetSplit.DEV;
 import static com.videopilot.evaluation.domain.EvaluationModels.DatasetSplit.TEST;
 import static com.videopilot.evaluation.domain.EvaluationModels.DatasetStatus.DRAFT;
@@ -24,7 +25,9 @@ import com.videopilot.evaluation.domain.EvaluationModels.EvaluationCase;
 import com.videopilot.evaluation.domain.EvaluationModels.EvaluationDataset;
 import com.videopilot.evaluation.domain.EvaluationModels.EvaluationRun;
 import com.videopilot.evaluation.domain.EvaluationModels.ExecutionVersions;
+import com.videopilot.evaluation.domain.EvaluationModels.ExecutionMode;
 import com.videopilot.evaluation.domain.EvaluationModels.UsageSummary;
+import java.math.BigDecimal;
 import com.videopilot.evaluation.port.EvaluationStore;
 import com.videopilot.identity.application.OwnerContext;
 import com.videopilot.identity.domain.OwnerId;
@@ -151,6 +154,26 @@ class EvaluationApplicationServiceTest {
                 .isInstanceOf(EvaluationException.class)
                 .extracting(exception -> ((EvaluationException) exception).reason())
                 .isEqualTo(EvaluationException.Reason.DATASET_NOT_READY);
+        verify(store, never()).createRuns(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void rejectsAgentCandidateWhenPolicyVersionDiffersFromRuntime() {
+        EvaluationStore store = mock(EvaluationStore.class);
+        UUID datasetId = UUID.randomUUID();
+        EvaluationDataset dataset = new EvaluationDataset(
+                datasetId, "m6-dev", "b".repeat(64), DEV, FROZEN, 1,
+                List.of(answerCase("answer-001", 1)), NOW, NOW);
+        when(store.findDataset(OWNER.ownerId(), datasetId)).thenReturn(Optional.of(dataset));
+        EvaluationApplicationService service = service(
+                store, mock(EvaluationBaselineRunner.class), UUID.randomUUID().toString());
+
+        assertThatThrownBy(() -> service.createRuns(OWNER, datasetId, "agent-version-drift",
+                new EvaluationApplicationService.StartRun(
+                        3, versions(), ExecutionMode.AGENT, "m6-rule-policy-v1")))
+                .isInstanceOf(EvaluationException.class)
+                .extracting(exception -> ((EvaluationException) exception).reason())
+                .isEqualTo(EvaluationException.Reason.INVALID_REQUEST);
         verify(store, never()).createRuns(any(), any(), any(), any(), any(), any());
     }
 
@@ -292,6 +315,74 @@ class EvaluationApplicationServiceTest {
     }
 
     @Test
+    void comparesCompletedBaselineAndAgentUsingOperationalFacts() {
+        EvaluationStore store = mock(EvaluationStore.class);
+        UUID datasetId = UUID.randomUUID();
+        UUID baselineId = UUID.randomUUID();
+        UUID candidateId = UUID.randomUUID();
+        EvaluationCase first = answerCase("answer-1", 1);
+        EvaluationCase second = answerCase("answer-2", 2);
+        EvaluationDataset dataset = new EvaluationDataset(
+                datasetId, "m6-dev", "b".repeat(64), DEV, FROZEN, 1,
+                List.of(first, second), NOW, NOW);
+        EvaluationRun baseline = completedRun(
+                baselineId, datasetId, dataset.fingerprint(), ExecutionMode.BASELINE, null);
+        EvaluationRun candidate = completedRun(
+                candidateId, datasetId, dataset.fingerprint(), ExecutionMode.AGENT, "m6-policy-v1");
+        List<CaseResult> baselineResults = List.of(
+                answerResult(baselineId, first.caseId(), 100, 1, 1),
+                answerResult(baselineId, second.caseId(), 90, 0, 0));
+        List<CaseResult> candidateResults = List.of(
+                answerResult(candidateId, first.caseId(), 120, 1, 1),
+                answerResult(candidateId, second.caseId(), 110, 1, 1));
+        when(store.findRun(OWNER.ownerId(), baselineId)).thenReturn(Optional.of(baseline));
+        when(store.findRun(OWNER.ownerId(), candidateId)).thenReturn(Optional.of(candidate));
+        when(store.findDataset(OWNER.ownerId(), datasetId)).thenReturn(Optional.of(dataset));
+        when(store.findResults(OWNER.ownerId(), baselineId)).thenReturn(baselineResults);
+        when(store.findResults(OWNER.ownerId(), candidateId)).thenReturn(candidateResults);
+        when(store.findSeriesRuns(OWNER.ownerId(), baseline.seriesId())).thenReturn(List.of(baseline));
+        when(store.findSeriesRuns(OWNER.ownerId(), candidate.seriesId())).thenReturn(List.of(candidate));
+        when(store.summarizeUsage(OWNER.ownerId(), baselineId)).thenReturn(
+                new UsageSummary(2, 100, 20, 190, new BigDecimal("0.00200000"), "CNY", 0, Map.of()));
+        when(store.summarizeUsage(OWNER.ownerId(), candidateId)).thenReturn(
+                new UsageSummary(2, 110, 22, 230, new BigDecimal("0.00240000"), "CNY", 0, Map.of()));
+        when(store.summarizeAgentPaths(OWNER.ownerId(), baselineId)).thenReturn(Map.of());
+        when(store.summarizeAgentPaths(OWNER.ownerId(), candidateId))
+                .thenReturn(Map.of("ANSWERED", 2L));
+        EvaluationApplicationService service = service(
+                store, mock(EvaluationBaselineRunner.class), UUID.randomUUID().toString());
+
+        var comparison = service.compare(OWNER, baselineId, candidateId);
+
+        assertThat(comparison.baseline().operations().p95LatencyMs()).isEqualTo(100);
+        assertThat(comparison.candidate().operations().averageCost())
+                .isEqualByComparingTo("0.00120000");
+        assertThat(comparison.candidate().operations().pathDistribution())
+                .containsEntry("ANSWERED", 2L);
+        assertThat(comparison.decision().promotionEligible()).isTrue();
+        assertThat(comparison.decision().reason()).isEqualTo("RULE_1");
+    }
+
+    @Test
+    void rejectsComparisonWhenCandidateIsNotAnAgentRun() {
+        EvaluationStore store = mock(EvaluationStore.class);
+        UUID datasetId = UUID.randomUUID();
+        EvaluationRun baseline = completedRun(
+                UUID.randomUUID(), datasetId, "b".repeat(64), ExecutionMode.BASELINE, null);
+        EvaluationRun candidate = completedRun(
+                UUID.randomUUID(), datasetId, "b".repeat(64), ExecutionMode.BASELINE, null);
+        when(store.findRun(OWNER.ownerId(), baseline.runId())).thenReturn(Optional.of(baseline));
+        when(store.findRun(OWNER.ownerId(), candidate.runId())).thenReturn(Optional.of(candidate));
+        EvaluationApplicationService service = service(
+                store, mock(EvaluationBaselineRunner.class), UUID.randomUUID().toString());
+
+        assertThatThrownBy(() -> service.compare(OWNER, baseline.runId(), candidate.runId()))
+                .isInstanceOf(EvaluationException.class)
+                .extracting(exception -> ((EvaluationException) exception).reason())
+                .isEqualTo(EvaluationException.Reason.INVALID_REQUEST);
+    }
+
+    @Test
     void failsLaterRepetitionWhenRetrievalRankChanges() {
         EvaluationStore store = mock(EvaluationStore.class);
         EvaluationBaselineRunner runner = mock(EvaluationBaselineRunner.class);
@@ -337,6 +428,27 @@ class EvaluationApplicationServiceTest {
     private EvaluationCase evaluationCase(String caseId, int ordinal) {
         return new EvaluationCase(caseId, ordinal, RETRIEVAL, UUID.randomUUID(), "question",
                 List.of(UUID.randomUUID()), "APPROVED", 1, "a".repeat(64));
+    }
+
+    private EvaluationCase answerCase(String caseId, int ordinal) {
+        return new EvaluationCase(caseId, ordinal, ANSWER, UUID.randomUUID(), "question",
+                List.of(), "APPROVED", 1, "a".repeat(64));
+    }
+
+    private EvaluationRun completedRun(
+            UUID runId, UUID datasetId, String fingerprint, ExecutionMode mode, String policyVersion) {
+        return new EvaluationRun(
+                runId, UUID.randomUUID(), datasetId, fingerprint, "request", "c".repeat(64),
+                "d".repeat(64), versions(), mode, policyVersion,
+                com.videopilot.evaluation.domain.EvaluationModels.RunStatus.COMPLETED,
+                1, 1, 2, 2, null, NOW, NOW);
+    }
+
+    private CaseResult answerResult(
+            UUID runId, String caseId, long latencyMs, int supportedClaims, int localizedCitations) {
+        return new CaseResult(runId, caseId, ANSWER, COMPLETED, null,
+                1, 1, supportedClaims, localizedCitations, UUID.randomUUID(),
+                latencyMs, 10, null, null, NOW);
     }
 
     private CaseResult result(UUID runId, String caseId) {

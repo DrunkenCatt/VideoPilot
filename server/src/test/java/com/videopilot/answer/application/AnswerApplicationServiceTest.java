@@ -182,6 +182,31 @@ class AnswerApplicationServiceTest {
     }
 
     @Test
+    void coversEachRetrievedSegmentBeforeAddingSecondaryChannelsToThePrompt() {
+        when(retrieval.retrieve(owner, jobId, "老师的核心建议是什么？", 5))
+                .thenReturn(result(List.of(hit(.85))));
+        List<AnswerEvidenceGate.EvidenceSource> sources = new java.util.ArrayList<>();
+        for (int ordinal = 0; ordinal < 8; ordinal++) {
+            UUID segment = UUID.randomUUID();
+            sources.add(new AnswerEvidenceGate.EvidenceSource(
+                    segment + "#ASR", chunkId, segment, ordinal, ordinal * 1_000L, ordinal * 1_000L + 1_000,
+                    "ASR", "asr-segment-" + ordinal, true));
+            sources.add(new AnswerEvidenceGate.EvidenceSource(
+                    segment + "#OCR", chunkId, segment, ordinal, ordinal * 1_000L, ordinal * 1_000L + 1_000,
+                    "OCR", "ocr-segment-" + ordinal, true));
+        }
+        when(store.loadEvidence(any(), any(), any(), any())).thenReturn(sources);
+        when(model.generate(any())).thenReturn(new LanguageModelPort.Response(
+                "{\"answerable\":false,\"claims\":[]}", new LanguageModelPort.Usage(10, 5)));
+
+        service.ask(owner, jobId, "老师的核心建议是什么？", "intent-segment-coverage");
+
+        ArgumentCaptor<LanguageModelPort.Request> request = ArgumentCaptor.forClass(LanguageModelPort.Request.class);
+        verify(model).generate(request.capture());
+        assertThat(request.getValue().prompt()).contains("asr-segment-6", "asr-segment-7");
+    }
+
+    @Test
     void instructsTheModelToCopyEvidenceIdsAndVerbatimQuotesForEveryQuestionPart() {
         when(retrieval.retrieve(owner, jobId, "Hash 和 List 有什么特点？", 5))
                 .thenReturn(result(List.of(hit(.85))));

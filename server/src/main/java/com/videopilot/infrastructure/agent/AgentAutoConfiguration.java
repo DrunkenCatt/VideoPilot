@@ -52,7 +52,7 @@ public class AgentAutoConfiguration {
             @Value("${videopilot.analysis.limits.version:m4-limits-v3}") String limitsVersion) {
         Clock clock = Clock.systemUTC();
         AgentVersions versions = new AgentVersions(
-                "agent-policy-v1", AnswerApplicationService.PROMPT_VERSION, modelVersion,
+                AgentApplicationService.POLICY_VERSION, AnswerApplicationService.PROMPT_VERSION, modelVersion,
                 embeddingVersion, RetrievalApplicationService.FORMULA_VERSION,
                 "answer-evidence-gate-v1", limitsVersion);
         return new AgentApplicationService(

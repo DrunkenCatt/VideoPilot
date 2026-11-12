@@ -320,7 +320,8 @@ export interface ReliabilitySummary {
 
 export type EvaluationDatasetSplit = 'DEV' | 'TEST'
 export type EvaluationDatasetStatus = 'DRAFT' | 'FROZEN'
-export type EvaluationBaselineType = 'BASELINE_V1'
+export type EvaluationBaselineType = 'BASELINE_V1' | 'AGENT_CANDIDATE'
+export type EvaluationExecutionMode = 'BASELINE' | 'AGENT'
 export type EvaluationRunStatus = 'REQUESTED' | 'RUNNING' | 'COMPLETED' | 'FAILED'
 export type EvaluationCaseType = 'RETRIEVAL' | 'ANSWER' | 'RELIABILITY'
 export type EvaluationCaseOutcome = 'COMPLETED' | 'REFUSED' | 'ERROR' | 'UNKNOWN'
@@ -342,6 +343,8 @@ export interface EvaluationRunRequest {
   baselineType: EvaluationBaselineType
   repetitions: 1 | 2 | 3
   versions: EvaluationExecutionVersions
+  executionMode?: EvaluationExecutionMode
+  agentPolicyVersion?: string | null
 }
 
 export interface EvaluationDataset {
@@ -362,6 +365,8 @@ export interface EvaluationRun {
   runId: EvaluationRunId
   datasetId: EvaluationDatasetId
   baselineType: EvaluationBaselineType
+  executionMode: EvaluationExecutionMode
+  agentPolicyVersion: string | null
   status: EvaluationRunStatus
   executionFingerprint: string
   repetitionIndex: number
@@ -419,10 +424,31 @@ export interface EvaluationReport {
   datasetFingerprint: string
   executionFingerprint: string
   versions: EvaluationExecutionVersions
+  executionMode: EvaluationExecutionMode
+  agentPolicyVersion: string | null
   metrics: EvaluationMetric[]
   usage: EvaluationUsage
+  operations: {
+    p95LatencyMs: number
+    averageCost: number | null
+    unavailablePriceCalls: number
+    pathDistribution: Record<string, number>
+  }
   series: Record<string, EvaluationSeriesStatistics>
   generatedAt: string
+}
+
+export interface EvaluationPromotionDecision {
+  baseRunId: EvaluationRunId
+  candidateRunId: EvaluationRunId
+  hardGatePassRateDelta: number
+  ruleOneMet: boolean
+  ruleTwoMet: boolean
+  complexSubsetRuleEligible: false
+  m5GatesMet: boolean
+  costKnown: boolean
+  promotionEligible: boolean
+  reason: string
 }
 
 export interface JobEvent {

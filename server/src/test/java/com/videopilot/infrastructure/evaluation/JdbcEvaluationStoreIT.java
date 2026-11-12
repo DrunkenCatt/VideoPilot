@@ -147,7 +147,8 @@ class JdbcEvaluationStoreIT {
         EvaluationRun completed = store.findRun(ownerId, resumed.run().runId()).orElseThrow();
         assertThat(completed.status().name()).isEqualTo("COMPLETED");
         assertThat(completed.completedCaseCount()).isEqualTo(2);
-        assertThat(store.findResults(ownerId, completed.runId())).hasSize(2);
+        assertThat(store.findResults(ownerId, completed.runId())).hasSize(2)
+                .first().extracting(CaseResult::rank).isNull();
     }
 
     private EvaluationDataset dataset(Instant now) {
@@ -172,7 +173,8 @@ class JdbcEvaluationStoreIT {
 
     private CaseResult result(UUID runId, EvaluationCase evaluationCase, Instant now) {
         return new CaseResult(
-                runId, evaluationCase.caseId(), evaluationCase.type(), COMPLETED, 1, 0, 0, 0, 0,
+                runId, evaluationCase.caseId(), evaluationCase.type(), COMPLETED,
+                evaluationCase.type() == RETRIEVAL ? null : 1, 0, 0, 0, 0,
                 evaluationCase.type() == ANSWER ? answerId : null, 10, 0, null, null, now);
     }
 

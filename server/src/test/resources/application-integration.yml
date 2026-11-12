@@ -22,6 +22,9 @@ spring:
     connection-timeout: ${RABBITMQ_CONNECTION_TIMEOUT:2s}
 
 videopilot:
+  evaluation:
+    # Integration contexts share one database; background claims must be enabled explicitly.
+    worker-enabled: false
   analysis:
     recovery:
       scan-delay: 1h

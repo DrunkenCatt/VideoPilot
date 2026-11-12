@@ -60,6 +60,8 @@ public final class AgentModels {
             UUID runId,
             OwnerId ownerId,
             UUID jobId,
+            UUID evaluationRunId,
+            String evaluationCaseId,
             String idempotencyKey,
             String requestFingerprint,
             String goal,
@@ -76,6 +78,19 @@ public final class AgentModels {
             long version,
             Instant createdAt,
             Instant completedAt) {
+
+        public AgentRun(
+                UUID runId, OwnerId ownerId, UUID jobId, String idempotencyKey,
+                String requestFingerprint, String goal, RunStatus status,
+                AgentVersions versions, AgentBudget budget, int stepCount,
+                int answerAttemptCount, long inputTokens, long outputTokens,
+                BigDecimal knownCost, int unknownCostCalls, String terminationReason,
+                long version, Instant createdAt, Instant completedAt) {
+            this(runId, ownerId, jobId, null, null, idempotencyKey, requestFingerprint,
+                    goal, status, versions, budget, stepCount, answerAttemptCount,
+                    inputTokens, outputTokens, knownCost, unknownCostCalls,
+                    terminationReason, version, createdAt, completedAt);
+        }
     }
 
     public record AgentStep(

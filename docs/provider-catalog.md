@@ -4,9 +4,9 @@ MVP 固定下列四个能力实现，但业务代码只依赖项目 Port。供�
 
 | 能力 | MVP 实现 | 版本配置 | 超时配置 | 成本计量 |
 | --- | --- | --- | --- | --- |
-| LLM | SiliconFlow 托管的 `deepseek-ai/DeepSeek-V4-Flash` | `SILICONFLOW_LLM_MODEL_VERSION` | `SILICONFLOW_LLM_TIMEOUT` | 输入/输出 Token；响应无成本字段时记录不可得 |
+| LLM | SiliconFlow 托管的 `deepseek-ai/DeepSeek-V4-Flash` | `SILICONFLOW_LLM_MODEL_VERSION` | `SILICONFLOW_LLM_TIMEOUT` | 输入/输出 Token；按版本化官方价格快照估算 CNY |
 | ASR | SiliconFlow `TeleAI/TeleSpeechASR` | `TELESPEECH_ASR_MODEL_VERSION` | `TELESPEECH_ASR_TIMEOUT` | 本地可信音频秒数 + 供应商 `usage.seconds`；价格不可得时不伪造成本 |
-| Embedding | BGE-M3 | `BGE_M3_MODEL_VERSION` | `BGE_M3_TIMEOUT` | 输入 Token |
+| Embedding | BGE-M3 | `BGE_M3_MODEL_VERSION` | `BGE_M3_TIMEOUT` | 输入 Token；官方价格快照为免费 |
 | OCR | Tesseract | 启动时探测二进制版本 + 语言包 SHA-256 | `TESSERACT_TIMEOUT` | 图片像素/文本字符；本地成本 `0 USD` |
 
 ## Port 与 Adapter 边界
@@ -29,7 +29,11 @@ MVP 固定下列四个能力实现，但业务代码只依赖项目 Port。供�
 - Qdrant collection 为 `videopilot_chunks_m3_bge_m3_1024_v1`，cosine 1024 维；point ID 使用稳定 Chunk UUID，payload 仅含 index/owner/media/context 与时间窗。MySQL 的 Chunk、向量事实和索引发布记录才是真源。
 - 检索固定 `hybrid-0.60-0.25-0.15-v1`。Qdrant 不可用时从 MySQL 向量执行有界内存 cosine；query Embedding 不可用时保留 keyword/OCR，并显式返回降级通道。
 - LLM 固定 SiliconFlow `deepseek-ai/DeepSeek-V4-Flash`、JSON mode、60 秒、最多 1,200 output tokens、20,000 Prompt 字符、64 KiB 响应、并发 1。候选 JSON 必须再经过 Java 引用硬门；timeout 为 UNKNOWN，不自动重发。60 秒只扩大单次有界等待，不增加重试次数。
-- SiliconFlow 响应未提供可核验价格时，`priceStatus=UNAVAILABLE` 且成本保持空值，不能写成 0 USD。
+- SiliconFlow 价格目录冻结为 `siliconflow-pricing-2026-11-11`：DeepSeek-V4-Flash 按调用开始时的
+  北京时间和输入/输出 Token 估算 CNY；BGE-M3 为 `0.00000000 CNY`。响应没有缓存命中 Token 明细，
+  因此不猜测缓存折扣。未知模型或目录外能力仍以 `priceStatus=UNAVAILABLE` 保持成本空值。
+
+价格来源、时段边界和历史版本规则见 ADR-0016。估算成本只用于离线 A/B，不替代供应商账单。
 
 实际启动、故障判断、collection 重建边界和基线命令见 `docs/M3_RUNBOOK.md`。
 

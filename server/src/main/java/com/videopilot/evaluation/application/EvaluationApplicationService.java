@@ -2,6 +2,7 @@ package com.videopilot.evaluation.application;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.videopilot.agent.application.AgentApplicationService;
 import com.videopilot.evaluation.domain.EvaluationModels.CaseResult;
 import com.videopilot.evaluation.domain.EvaluationModels.CaseType;
 import com.videopilot.evaluation.domain.EvaluationModels.Answerability;
@@ -12,14 +13,17 @@ import com.videopilot.evaluation.domain.EvaluationModels.EvaluationCase;
 import com.videopilot.evaluation.domain.EvaluationModels.EvaluationDataset;
 import com.videopilot.evaluation.domain.EvaluationModels.EvaluationRun;
 import com.videopilot.evaluation.domain.EvaluationModels.ExecutionVersions;
+import com.videopilot.evaluation.domain.EvaluationModels.ExecutionMode;
 import com.videopilot.evaluation.domain.EvaluationModels.RunStatus;
 import com.videopilot.evaluation.domain.EvaluationModels.ReliabilityFact;
 import com.videopilot.evaluation.domain.EvaluationModels.ReliabilityObservation;
 import com.videopilot.evaluation.domain.EvaluationModels.EvaluationReport;
+import com.videopilot.evaluation.domain.EvaluationModels.OperationalSummary;
 import com.videopilot.evaluation.domain.EvaluationModels.SeriesStatistics;
 import com.videopilot.evaluation.port.EvaluationStore;
 import com.videopilot.identity.application.OwnerContext;
 import java.nio.charset.StandardCharsets;
+import java.math.RoundingMode;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
@@ -48,6 +52,7 @@ public final class EvaluationApplicationService {
     private final Supplier<Instant> now;
     private final Supplier<UUID> ids;
     private final EvaluationReportCalculator reports = new EvaluationReportCalculator();
+    private final EvaluationPromotionCalculator promotions = new EvaluationPromotionCalculator();
 
     public EvaluationApplicationService(
             EvaluationStore store,
@@ -104,7 +109,10 @@ public final class EvaluationApplicationService {
             OwnerContext owner, UUID datasetId, String idempotencyKey, StartRun command) {
         if (command == null || command.repetitions() < 1 || command.repetitions() > MAX_REPETITIONS
                 || idempotencyKey == null || !IDEMPOTENCY_KEY.matcher(idempotencyKey).matches()
-                || !complete(command.versions())) {
+                || !complete(command.versions()) || command.executionMode() == null
+                || command.executionMode() == ExecutionMode.BASELINE && hasText(command.agentPolicyVersion())
+                || command.executionMode() == ExecutionMode.AGENT
+                && !AgentApplicationService.POLICY_VERSION.equals(command.agentPolicyVersion())) {
             throw new EvaluationException(EvaluationException.Reason.INVALID_REQUEST);
         }
         EvaluationDataset dataset = getDataset(owner, datasetId);
@@ -114,15 +122,17 @@ public final class EvaluationApplicationService {
         if (command.repetitions() < requiredRepetitions) {
             throw new EvaluationException(EvaluationException.Reason.INVALID_REQUEST);
         }
-        String executionFingerprint = sha256(String.join("|", command.versions().values()));
+        String executionFingerprint = sha256(String.join("|", command.versions().values())
+                + '|' + command.executionMode() + '|' + command.agentPolicyVersion());
         String requestFingerprint = sha256(dataset.fingerprint() + '|' + executionFingerprint
-                + '|' + command.repetitions() + "|BASELINE_V1");
+                + '|' + command.repetitions() + '|' + command.executionMode());
         UUID seriesId = ids.get();
         List<EvaluationRun> runs = new ArrayList<>();
         for (int index = 1; index <= command.repetitions(); index++) {
             runs.add(new EvaluationRun(
                     ids.get(), seriesId, dataset.datasetId(), dataset.fingerprint(), idempotencyKey,
-                    requestFingerprint, executionFingerprint, command.versions(), RunStatus.REQUESTED,
+                    requestFingerprint, executionFingerprint, command.versions(), command.executionMode(),
+                    command.agentPolicyVersion(), RunStatus.REQUESTED,
                     index, command.repetitions(), 0, dataset.cases().size(), null, now.get(), null));
         }
         return store.createRuns(
@@ -168,10 +178,36 @@ public final class EvaluationApplicationService {
             }
             series.put(metric.name(), reports.seriesStatistics(observations));
         }
+        var usage = store.summarizeUsage(owner.ownerId(), runId);
+        List<Long> answerLatencies = results.stream()
+                .filter(value -> value.caseType() == CaseType.ANSWER)
+                .map(CaseResult::latencyMs).sorted().toList();
+        long p95Latency = answerLatencies.isEmpty() ? 0
+                : answerLatencies.get(Math.max(0, (int) Math.ceil(answerLatencies.size() * 0.95) - 1));
+        long answerCount = results.stream().filter(value -> value.caseType() == CaseType.ANSWER).count();
+        var averageCost = usage.estimatedCost() == null || answerCount == 0 ? null
+                : usage.estimatedCost().divide(java.math.BigDecimal.valueOf(answerCount), 8, RoundingMode.HALF_UP);
         return new EvaluationReport(
                 run.runId(), run.datasetId(), run.datasetFingerprint(), run.executionFingerprint(),
-                run.versions(), metrics, store.summarizeUsage(owner.ownerId(), runId),
+                run.versions(), run.executionMode(), run.agentPolicyVersion(), metrics, usage,
+                new OperationalSummary(p95Latency, averageCost, usage.unavailablePriceCalls(),
+                        store.summarizeAgentPaths(owner.ownerId(), runId)),
                 series, now.get());
+    }
+
+    public EvaluationComparison compare(OwnerContext owner, UUID baselineRunId, UUID candidateRunId) {
+        EvaluationRun baseline = getRun(owner, baselineRunId);
+        EvaluationRun candidate = getRun(owner, candidateRunId);
+        if (baseline.status() != RunStatus.COMPLETED || candidate.status() != RunStatus.COMPLETED
+                || baseline.executionMode() != ExecutionMode.BASELINE
+                || candidate.executionMode() != ExecutionMode.AGENT
+                || !baseline.datasetFingerprint().equals(candidate.datasetFingerprint())) {
+            throw new EvaluationException(EvaluationException.Reason.INVALID_REQUEST);
+        }
+        EvaluationReport baselineReport = getReport(owner, baselineRunId);
+        EvaluationReport candidateReport = getReport(owner, candidateRunId);
+        return new EvaluationComparison(
+                baselineReport, candidateReport, promotions.decide(baselineReport, candidateReport));
     }
 
     public boolean processNext() {
@@ -337,6 +373,19 @@ public final class EvaluationApplicationService {
         }
     }
 
-    public record StartRun(int repetitions, ExecutionVersions versions) {
+    public record StartRun(
+            int repetitions,
+            ExecutionVersions versions,
+            ExecutionMode executionMode,
+            String agentPolicyVersion) {
+        public StartRun(int repetitions, ExecutionVersions versions) {
+            this(repetitions, versions, ExecutionMode.BASELINE, null);
+        }
+    }
+
+    public record EvaluationComparison(
+            EvaluationReport baseline,
+            EvaluationReport candidate,
+            EvaluationPromotionCalculator.PromotionDecision decision) {
     }
 }

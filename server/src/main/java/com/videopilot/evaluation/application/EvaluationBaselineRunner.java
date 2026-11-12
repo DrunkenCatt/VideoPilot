@@ -3,6 +3,10 @@ package com.videopilot.evaluation.application;
 import com.videopilot.answer.application.AnswerApplicationService;
 import com.videopilot.answer.application.AnswerException;
 import com.videopilot.answer.port.AnswerStore;
+import com.videopilot.agent.application.AgentApplicationService;
+import com.videopilot.agent.application.AgentException;
+import com.videopilot.agent.domain.AgentModels.AgentTrace;
+import com.videopilot.agent.domain.AgentModels.RunStatus;
 import com.videopilot.evaluation.domain.EvaluationModels.CaseOutcome;
 import com.videopilot.evaluation.domain.EvaluationModels.CaseResult;
 import com.videopilot.evaluation.domain.EvaluationModels.CaseType;
@@ -19,6 +23,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -31,6 +36,7 @@ public class EvaluationBaselineRunner {
 
     private final RetrievalApplicationService retrieval;
     private final AnswerApplicationService answers;
+    private final AgentApplicationService agents;
     private final Supplier<Instant> now;
 
     public EvaluationBaselineRunner(
@@ -39,6 +45,18 @@ public class EvaluationBaselineRunner {
             Supplier<Instant> now) {
         this.retrieval = retrieval;
         this.answers = answers;
+        this.agents = null;
+        this.now = now;
+    }
+
+    public EvaluationBaselineRunner(
+            RetrievalApplicationService retrieval,
+            AnswerApplicationService answers,
+            AgentApplicationService agents,
+            Supplier<Instant> now) {
+        this.retrieval = retrieval;
+        this.answers = answers;
+        this.agents = agents;
         this.now = now;
     }
 
@@ -47,7 +65,10 @@ public class EvaluationBaselineRunner {
         try {
             return switch (evaluationCase.type()) {
                 case RETRIEVAL -> retrieval(run, evaluationCase, owner, startedAt);
-                case ANSWER -> answer(run, evaluationCase, owner, startedAt);
+                case ANSWER -> run.executionMode()
+                        == com.videopilot.evaluation.domain.EvaluationModels.ExecutionMode.AGENT
+                        ? agentAnswer(run, evaluationCase, owner, startedAt)
+                        : answer(run, evaluationCase, owner, startedAt);
                 case RELIABILITY -> result(run, evaluationCase,
                         evaluationCase.reliability() != null && evaluationCase.reliability().passed()
                                 ? CaseOutcome.COMPLETED : CaseOutcome.ERROR,
@@ -63,7 +84,57 @@ public class EvaluationBaselineRunner {
                     ? CaseOutcome.UNKNOWN : CaseOutcome.ERROR;
             return result(run, evaluationCase, outcome, null, 0, 0,
                     0, 0, null, startedAt, "ANSWER_" + exception.reason().name());
+        } catch (AgentException exception) {
+            return result(run, evaluationCase, CaseOutcome.ERROR, null, 0, 0,
+                    0, 0, null, startedAt, "AGENT_" + exception.reason().name());
         }
+    }
+
+    private CaseResult agentAnswer(
+            EvaluationRun run,
+            EvaluationCase evaluationCase,
+            OwnerContext owner,
+            Instant startedAt) {
+        if (agents == null) {
+            return result(run, evaluationCase, CaseOutcome.ERROR, null, 0, 0,
+                    0, 0, null, startedAt, "AGENT_RUNTIME_UNAVAILABLE");
+        }
+        String key = "eval-agent:" + run.runId() + ':' + evaluationCase.fingerprint().substring(0, 16);
+        var agentRun = agents.createForEvaluation(
+                owner, evaluationCase.jobId(), evaluationCase.question(), key,
+                run.runId(), evaluationCase.caseId());
+        if (!agentRun.versions().policyVersion().equals(run.agentPolicyVersion())) {
+            return result(run, evaluationCase, CaseOutcome.ERROR, null, 0, 0,
+                    0, 0, null, startedAt, "VERSION_DRIFT");
+        }
+        AgentTrace trace = agents.get(owner, agentRun.runId());
+        for (int attempt = 0; attempt < 8 && !terminal(trace.run().status()); attempt++) {
+            if (!agents.process(owner, agentRun.runId())) {
+                return result(run, evaluationCase, CaseOutcome.ERROR, null, 0, 0,
+                        0, 0, null, startedAt, "AGENT_NOT_PROGRESSING");
+            }
+            trace = agents.get(owner, agentRun.runId());
+        }
+        if (trace.run().status() == RunStatus.REFUSED) {
+            return result(run, evaluationCase, CaseOutcome.REFUSED, null, 0, 0,
+                    0, 0, null, startedAt, null);
+        }
+        if (trace.run().status() != RunStatus.COMPLETED || trace.steps().isEmpty()) {
+            return result(run, evaluationCase, CaseOutcome.UNKNOWN, null, 0, 0,
+                    0, 0, null, startedAt, trace.run().terminationReason());
+        }
+        String reference = trace.steps().getLast().resultReference();
+        if (reference == null || !reference.startsWith("answer:")) {
+            return result(run, evaluationCase, CaseOutcome.ERROR, null, 0, 0,
+                    0, 0, null, startedAt, "AGENT_RESULT_MISSING");
+        }
+        UUID answerId = UUID.fromString(reference.substring("answer:".length()));
+        return scoreAnswer(run, evaluationCase,
+                answers.get(owner, evaluationCase.jobId(), answerId), startedAt);
+    }
+
+    private boolean terminal(RunStatus status) {
+        return status == RunStatus.COMPLETED || status == RunStatus.REFUSED || status == RunStatus.FAILED;
     }
 
     private CaseResult retrieval(
@@ -101,6 +172,14 @@ public class EvaluationBaselineRunner {
         AnswerStore.StoredAnswer answer = answers.ask(
                 owner, evaluationCase.jobId(), evaluationCase.question(), idempotencyKey,
                 run.runId(), evaluationCase.caseId());
+        return scoreAnswer(run, evaluationCase, answer, startedAt);
+    }
+
+    private CaseResult scoreAnswer(
+            EvaluationRun run,
+            EvaluationCase evaluationCase,
+            AnswerStore.StoredAnswer answer,
+            Instant startedAt) {
         if (!run.versions().promptVersion().equals(answer.promptVersion())
                 || !run.versions().modelVersion().equals(answer.modelVersion())
                 || !run.versions().embeddingVersion().equals(answer.embeddingVersion())

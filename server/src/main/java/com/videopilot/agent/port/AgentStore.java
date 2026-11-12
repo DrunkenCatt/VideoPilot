@@ -22,6 +22,9 @@ public interface AgentStore {
 
     Optional<ClaimedRun> claimNext(String leaseId, Instant leaseUntil, Instant now);
 
+    Optional<ClaimedRun> claim(
+            OwnerId ownerId, UUID runId, String leaseId, Instant leaseUntil, Instant now);
+
     void appendStep(String leaseId, UUID runId, long expectedVersion, AgentStep step);
 
     long beginToolCall(String leaseId, UUID runId, long expectedVersion, ToolCall call);

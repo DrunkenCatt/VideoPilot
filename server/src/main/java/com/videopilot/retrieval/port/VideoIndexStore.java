@@ -97,16 +97,25 @@ public interface VideoIndexStore {
     record EmbeddingCompletion(
             UUID modelCallId,
             UUID indexId,
+            String model,
             String embeddingVersion,
             List<EmbeddedChunk> chunks,
             long inputTokens,
             long latencyMs,
+            Instant startedAt,
             Instant completedAt) {
         public EmbeddingCompletion {
             chunks = List.copyOf(chunks);
             if (chunks.isEmpty() || inputTokens < 0 || latencyMs < 0) {
                 throw new IllegalArgumentException("embedding completion is invalid");
             }
+        }
+
+        public EmbeddingCompletion(
+                UUID modelCallId, UUID indexId, String embeddingVersion, List<EmbeddedChunk> chunks,
+                long inputTokens, long latencyMs, Instant completedAt) {
+            this(modelCallId, indexId, "BAAI/bge-m3", embeddingVersion, chunks,
+                    inputTokens, latencyMs, completedAt, completedAt);
         }
     }
 
@@ -152,9 +161,16 @@ public interface VideoIndexStore {
 
     record RetrievalEmbeddingCompletion(
             UUID modelCallId,
+            String model,
             long inputTokens,
             long latencyMs,
-            Instant completedAt) { }
+            Instant startedAt,
+            Instant completedAt) {
+        public RetrievalEmbeddingCompletion(
+                UUID modelCallId, long inputTokens, long latencyMs, Instant completedAt) {
+            this(modelCallId, "BAAI/bge-m3", inputTokens, latencyMs, completedAt, completedAt);
+        }
+    }
 
     record IndexCompletion(
             UUID indexId,

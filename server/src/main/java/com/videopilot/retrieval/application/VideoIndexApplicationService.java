@@ -181,8 +181,8 @@ public final class VideoIndexApplicationService {
             }
             Instant completedAt = now.get();
             indexes.completeEmbedding(owner.ownerId(), new VideoIndexStore.EmbeddingCompletion(
-                    callId, publication.indexId(), embeddingVersion, completed, result.inputTokens(),
-                    latency(startedAt, completedAt), completedAt));
+                    callId, publication.indexId(), embeddingModel, embeddingVersion, completed,
+                    result.inputTokens(), latency(startedAt, completedAt), startedAt, completedAt));
             if (budget != null) budget.afterCall(publication.sourceJobId());
             return null;
         } catch (EmbeddingException exception) {

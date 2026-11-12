@@ -58,6 +58,7 @@ public interface AnswerStore {
     record Publication(
             UUID answerId,
             UUID modelCallId,
+            String modelVersion,
             String status,
             String refusalReason,
             List<String> degradedChannels,
@@ -68,10 +69,22 @@ public interface AnswerStore {
             long outputTokens,
             long latencyMs,
             List<AnswerEvidenceGate.VerifiedClaim> claims,
+            Instant startedAt,
             Instant publishedAt) {
         public Publication {
             degradedChannels = List.copyOf(degradedChannels);
             claims = List.copyOf(claims);
+        }
+
+        public Publication(
+                UUID answerId, UUID modelCallId, String status, String refusalReason,
+                List<String> degradedChannels, String embeddingVersion,
+                String retrievalFormulaVersion, String chunkVersion, long inputTokens,
+                long outputTokens, long latencyMs, List<AnswerEvidenceGate.VerifiedClaim> claims,
+                Instant publishedAt) {
+            this(answerId, modelCallId, "deepseek-ai/DeepSeek-V4-Flash", status, refusalReason,
+                    degradedChannels, embeddingVersion, retrievalFormulaVersion, chunkVersion,
+                    inputTokens, outputTokens, latencyMs, claims, publishedAt, publishedAt);
         }
     }
 

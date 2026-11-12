@@ -43,6 +43,56 @@ class AnswerEvidenceGateTest {
     }
 
     @Test
+    void alignsAContinuousQuoteAcrossOneAdjacentSegmentBoundary() {
+        var declared = evidence(
+                SEGMENT, 6, 360_000, 420_000,
+                "忘了没关系，我只要会查是不是就ok了。最关键的就是要学会通过查询的方式。", true);
+        var neighbor = evidence(
+                NEIGHBOR, 7, 420_000, 434_747,
+                "自己去使用啊，那我们接下来按照顺序逐个学习每一组命令。", false);
+        var candidate = new AnswerEvidenceGate.Candidate(true, List.of(
+                new AnswerEvidenceGate.CandidateClaim("最关键的是学会查询并自己使用", List.of(
+                        new AnswerEvidenceGate.CandidateCitation(
+                                SEGMENT + "#ASR", "最关键的就是要学会通过查询的方式自己去使用啊")))));
+
+        var result = new AnswerEvidenceGate(8, 600, 4, 300).validate(candidate, List.of(declared, neighbor));
+
+        assertThat(result.accepted()).isTrue();
+        assertThat(result.claims().getFirst().citations())
+                .extracting(AnswerEvidenceGate.VerifiedCitation::segmentId)
+                .containsExactly(SEGMENT, NEIGHBOR);
+    }
+
+    @Test
+    void acceptsChineseClaimsSupportedByRealBenchmarkQuotes() {
+        var website = evidence(
+                SEGMENT, 4, 240_000, 300_000,
+                "学习命令行肯定要去查看帮助文档。这些帮助文档可以在官方网站看到，"
+                        + "所有命令可以根据组做分类和过滤。", true);
+        var commandLine = evidence(
+                NEIGHBOR, 5, 300_000, 360_000,
+                "除了官方网站以外，在命令行也能看到这些帮助文档。通过一个help命令获取帮助，"
+                        + "圈圈后面跟上group代表组，比如help generic代表通用的。", true);
+        List<AnswerEvidenceGate.CandidateClaim> claims = List.of(
+                claim("查询 Redis 命令帮助文档的方法包括在官方网站上查看。", SEGMENT,
+                        "这些帮助文档可以在官方网站看到"),
+                claim("查询 Redis 命令帮助文档的方法包括在命令行中查看。", NEIGHBOR,
+                        "在命令行也能看到这些帮助文档"),
+                claim("命令行中使用 help 命令可以获取帮助。", NEIGHBOR,
+                        "通过一个help命令获取帮助"),
+                claim("命令行中可以使用 help @group 格式获取某组命令的帮助。", NEIGHBOR,
+                        "圈圈后面跟上group代表组"),
+                claim("官方网站提供了命令的分组过滤功能。", SEGMENT,
+                        "所有命令可以根据组做分类和过滤"));
+
+        for (AnswerEvidenceGate.CandidateClaim claim : claims) {
+            var result = new AnswerEvidenceGate(8, 600, 4, 300)
+                    .validate(new AnswerEvidenceGate.Candidate(true, List.of(claim)), List.of(website, commandLine));
+            assertThat(result.accepted()).as(claim.text()).isTrue();
+        }
+    }
+
+    @Test
     void rejectsFabricatedEvidenceAndRejectsWholeAnswerWhenOneClaimFails() {
         var evidence = evidence(SEGMENT, 0, 10_000, "Redis String 可以存储文本。", true);
         var valid = new AnswerEvidenceGate.CandidateClaim("String 可保存文本", List.of(
@@ -87,6 +137,11 @@ class AnswerEvidenceGateTest {
     private AnswerEvidenceGate.Candidate candidate(String evidenceId, String quote) {
         return new AnswerEvidenceGate.Candidate(true, List.of(new AnswerEvidenceGate.CandidateClaim(
                 "Redis 数据结构说明", List.of(new AnswerEvidenceGate.CandidateCitation(evidenceId, quote)))));
+    }
+
+    private AnswerEvidenceGate.CandidateClaim claim(String text, UUID segmentId, String quote) {
+        return new AnswerEvidenceGate.CandidateClaim(
+                text, List.of(new AnswerEvidenceGate.CandidateCitation(segmentId + "#ASR", quote)));
     }
 
     private AnswerEvidenceGate.EvidenceSource evidence(

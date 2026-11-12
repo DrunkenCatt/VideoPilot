@@ -5,6 +5,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.videopilot.evaluation.application.EvaluationApplicationService;
+import com.videopilot.evaluation.application.EvaluationApplicationService.EvaluationComparison;
+import com.videopilot.evaluation.application.EvaluationPromotionCalculator.PromotionDecision;
 import com.videopilot.evaluation.domain.EvaluationModels.DatasetSplit;
 import com.videopilot.evaluation.domain.EvaluationModels.DatasetStatus;
 import com.videopilot.evaluation.domain.EvaluationModels.EvaluationDataset;
@@ -91,6 +93,31 @@ class EvaluationControllerTest {
         assertThat(report.usage().estimatedCost()).isNull();
         assertThat(report.usage().unavailablePriceCalls()).isEqualTo(1);
         assertThat(report.series().get("mrrAt3").sampleStandardDeviation()).isEqualTo(0.1);
+    }
+
+    @Test
+    void mapsServerComputedPromotionDecision() {
+        EvaluationApplicationService service = mock(EvaluationApplicationService.class);
+        IdentityPrincipal principal = mock(IdentityPrincipal.class);
+        OwnerContext owner = new OwnerContext(new OwnerId(UUID.randomUUID()));
+        UUID baselineId = UUID.randomUUID();
+        UUID candidateId = UUID.randomUUID();
+        EvaluationReport baseline = mock(EvaluationReport.class);
+        EvaluationReport candidate = mock(EvaluationReport.class);
+        when(principal.ownerContext()).thenReturn(owner);
+        when(baseline.runId()).thenReturn(baselineId);
+        when(candidate.runId()).thenReturn(candidateId);
+        when(service.compare(owner, baselineId, candidateId)).thenReturn(new EvaluationComparison(
+                baseline, candidate, new PromotionDecision(
+                        0.1, true, false, false, true, true, true, "RULE_1")));
+
+        var comparison = new EvaluationController(service)
+                .comparison(principal, baselineId, candidateId);
+
+        assertThat(comparison.baseRunId()).isEqualTo(baselineId);
+        assertThat(comparison.candidateRunId()).isEqualTo(candidateId);
+        assertThat(comparison.promotionEligible()).isTrue();
+        assertThat(comparison.reason()).isEqualTo("RULE_1");
     }
 
     private EvaluationRun run(UUID datasetId) {

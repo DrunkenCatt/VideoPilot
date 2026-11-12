@@ -17,6 +17,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -92,22 +93,29 @@ public final class AnswerApplicationService {
 
     public AnswerStore.StoredAnswer ask(
             OwnerContext owner, UUID jobId, String question, String idempotencyKey) {
-        return ask(owner, jobId, question, idempotencyKey, null, null, null);
+        return askInternal(owner, jobId, question, idempotencyKey, null, null, null);
     }
 
     public AnswerStore.StoredAnswer ask(
             OwnerContext owner, UUID jobId, String question, String idempotencyKey,
             UUID executionRunId) {
-        return ask(owner, jobId, question, idempotencyKey, null, null, executionRunId);
+        return askInternal(owner, jobId, question, idempotencyKey, null, null, executionRunId);
     }
 
     public AnswerStore.StoredAnswer ask(
             OwnerContext owner, UUID jobId, String question, String idempotencyKey,
             UUID evaluationRunId, String evaluationCaseId) {
-        return ask(owner, jobId, question, idempotencyKey, evaluationRunId, evaluationCaseId, null);
+        return askInternal(owner, jobId, question, idempotencyKey, evaluationRunId, evaluationCaseId, null);
     }
 
-    private AnswerStore.StoredAnswer ask(
+    public AnswerStore.StoredAnswer ask(
+            OwnerContext owner, UUID jobId, String question, String idempotencyKey,
+            UUID evaluationRunId, String evaluationCaseId, UUID executionRunId) {
+        return askInternal(owner, jobId, question, idempotencyKey,
+                evaluationRunId, evaluationCaseId, executionRunId);
+    }
+
+    private AnswerStore.StoredAnswer askInternal(
             OwnerContext owner, UUID jobId, String question, String idempotencyKey,
             UUID evaluationRunId, String evaluationCaseId, UUID executionRunId) {
         String normalizedQuestion = normalizeQuestion(question);
@@ -131,7 +139,11 @@ public final class AnswerApplicationService {
         RetrievalApplicationService.RetrievalResult result;
         try {
             result = executionRunId != null
-                    ? retrieval.retrieve(owner, jobId, normalizedQuestion, TOP_K, executionRunId)
+                    ? evaluationRunId == null
+                            ? retrieval.retrieve(owner, jobId, normalizedQuestion, TOP_K, executionRunId)
+                            : retrieval.retrieve(
+                                    owner, jobId, normalizedQuestion, TOP_K,
+                                    evaluationRunId, evaluationCaseId, executionRunId)
                     : evaluationRunId == null
                             ? retrieval.retrieve(owner, jobId, normalizedQuestion, TOP_K)
                             : retrieval.retrieve(
@@ -167,10 +179,19 @@ public final class AnswerApplicationService {
             return refuse(owner, answerId, result, degraded, "NO_SUFFICIENT_EVIDENCE");
         }
 
-        List<AnswerEvidenceGate.EvidenceSource> exposed = evidence.stream()
+        List<AnswerEvidenceGate.EvidenceSource> selectableEvidence = evidence.stream()
                 .filter(AnswerEvidenceGate.EvidenceSource::selectable)
-                .limit(MAX_PROMPT_EVIDENCE)
                 .toList();
+        List<AnswerEvidenceGate.EvidenceSource> prioritizedEvidence = new ArrayList<>();
+        Set<UUID> coveredSegments = new LinkedHashSet<>();
+        selectableEvidence.forEach(source -> {
+            if (coveredSegments.add(source.segmentId())) prioritizedEvidence.add(source);
+        });
+        selectableEvidence.forEach(source -> {
+            if (!prioritizedEvidence.contains(source)) prioritizedEvidence.add(source);
+        });
+        List<AnswerEvidenceGate.EvidenceSource> exposed = prioritizedEvidence.stream()
+                .limit(MAX_PROMPT_EVIDENCE).toList();
         Set<String> exposedIds = exposed.stream().map(AnswerEvidenceGate.EvidenceSource::evidenceId)
                 .collect(Collectors.toUnmodifiableSet());
         List<AnswerEvidenceGate.EvidenceSource> validationEvidence = evidence.stream()
@@ -237,11 +258,11 @@ public final class AnswerApplicationService {
         Instant completed = now.get();
         String status = validation.accepted() ? "ANSWERED" : "REFUSED";
         return store.publish(owner.ownerId(), new AnswerStore.Publication(
-                answerId, callId, status, validation.failure(), degraded,
+                answerId, callId, modelVersion, status, validation.failure(), degraded,
                 result.embeddingVersion(), result.formulaVersion(), result.chunkVersion(),
                 response.usage().inputTokens(), response.usage().outputTokens(),
                 Math.max(0, Duration.between(started, completed).toMillis()),
-                validation.claims(), completed));
+                validation.claims(), started, completed));
     }
 
     public AnswerStore.StoredAnswer get(OwnerContext owner, UUID jobId, UUID answerId) {
@@ -281,9 +302,9 @@ public final class AnswerApplicationService {
             List<String> degraded,
             String reason) {
         return store.publish(owner.ownerId(), new AnswerStore.Publication(
-                answerId, null, "REFUSED", reason, degraded,
+                answerId, null, modelVersion, "REFUSED", reason, degraded,
                 result.embeddingVersion(), result.formulaVersion(), result.chunkVersion(),
-                0, 0, 0, List.of(), now.get()));
+                0, 0, 0, List.of(), null, now.get()));
     }
 
     private String prompt(String question, List<AnswerEvidenceGate.EvidenceSource> evidence) {

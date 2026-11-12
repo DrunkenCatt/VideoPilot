@@ -114,8 +114,11 @@ class VideoIndexPersistenceAdapterIT {
                 .query(Integer.class).single()).isEqualTo(2);
         assertThat(jdbc.sql("SELECT status FROM video_index WHERE context_id = :contextId")
                 .param("contextId", CONTEXT_ID.toString()).query(String.class).single()).isEqualTo("READY");
-        assertThat(jdbc.sql("SELECT price_status FROM model_call WHERE job_id = :jobId")
-                .param("jobId", JOB_ID.toString()).query(String.class).single()).isEqualTo("UNAVAILABLE");
+        assertThat(jdbc.sql("""
+                SELECT CONCAT(price_status, '|', estimated_cost, '|', currency, '|', price_version)
+                FROM model_call WHERE job_id = :jobId
+                """).param("jobId", JOB_ID.toString()).query(String.class).single())
+                .isEqualTo("AVAILABLE|0.00000000|CNY|siliconflow-pricing-2026-11-11");
     }
 
     @Test

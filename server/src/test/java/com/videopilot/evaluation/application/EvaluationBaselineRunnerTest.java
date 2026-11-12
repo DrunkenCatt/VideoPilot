@@ -7,9 +7,16 @@ import static com.videopilot.evaluation.domain.EvaluationModels.CaseType.RETRIEV
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 
 import com.videopilot.answer.application.AnswerApplicationService;
 import com.videopilot.answer.port.AnswerStore;
+import com.videopilot.agent.application.AgentApplicationService;
+import com.videopilot.agent.domain.AgentModels.AgentBudget;
+import com.videopilot.agent.domain.AgentModels.AgentRun;
+import com.videopilot.agent.domain.AgentModels.AgentStep;
+import com.videopilot.agent.domain.AgentModels.AgentTrace;
+import com.videopilot.agent.domain.AgentModels.AgentVersions;
 import com.videopilot.evaluation.domain.EvaluationModels.EvaluationCase;
 import com.videopilot.evaluation.domain.EvaluationModels.AnswerScoring;
 import com.videopilot.evaluation.domain.EvaluationModels.Answerability;
@@ -21,6 +28,7 @@ import com.videopilot.identity.domain.OwnerId;
 import com.videopilot.retrieval.application.RetrievalApplicationService;
 import com.videopilot.retrieval.domain.EvidenceHit;
 import java.time.Instant;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -274,6 +282,71 @@ class EvaluationBaselineRunnerTest {
         assertThat(result.supportedClaimCount()).isZero();
     }
 
+    @Test
+    void runsAgentCandidateWithFrozenPolicyAndScoresTheVerifiedAnswer() {
+        RetrievalApplicationService retrieval = mock(RetrievalApplicationService.class);
+        AnswerApplicationService answers = mock(AnswerApplicationService.class);
+        AgentApplicationService agents = mock(AgentApplicationService.class);
+        EvaluationCase evaluationCase = evaluationCase(ANSWER, List.of(UUID.randomUUID()));
+        EvaluationRun evaluationRun = agentRun();
+        UUID agentRunId = UUID.randomUUID();
+        UUID answerId = UUID.randomUUID();
+        AgentRun requested = agentState(agentRunId,
+                com.videopilot.agent.domain.AgentModels.RunStatus.REQUESTED, null);
+        AgentRun completed = agentState(agentRunId,
+                com.videopilot.agent.domain.AgentModels.RunStatus.COMPLETED, "COMPLETED");
+        AgentStep step = new AgentStep(agentRunId, 1, "GENERATE_AND_VERIFY",
+                "ANSWER:ANSWERED", "answer:" + answerId, NOW);
+        when(agents.createForEvaluation(
+                org.mockito.ArgumentMatchers.eq(OWNER), org.mockito.ArgumentMatchers.eq(evaluationCase.jobId()),
+                org.mockito.ArgumentMatchers.eq(evaluationCase.question()), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq(evaluationRun.runId()),
+                org.mockito.ArgumentMatchers.eq(evaluationCase.caseId()))).thenReturn(requested);
+        when(agents.get(OWNER, agentRunId)).thenReturn(
+                new AgentTrace(requested, List.of(), List.of()),
+                new AgentTrace(completed, List.of(step), List.of()));
+        when(agents.process(OWNER, agentRunId)).thenReturn(true);
+        when(answers.get(OWNER, evaluationCase.jobId(), answerId)).thenReturn(new AnswerStore.StoredAnswer(
+                1, answerId, "ANSWERED", evaluationCase.question(), null, List.of(),
+                "prompt-v1", "model-v1", "embedding-v1", "formula-v1", "chunk-v1",
+                List.of(new AnswerStore.StoredClaim(UUID.randomUUID(), "fact", List.of(
+                        new AnswerStore.StoredCitation(UUID.randomUUID(), evaluationCase.expectedSegmentIds().getFirst(),
+                                0, 1_000, "ASR", "fact", "EXACT")))), NOW));
+
+        var result = new EvaluationBaselineRunner(retrieval, answers, agents, () -> NOW)
+                .run(OWNER, evaluationRun, evaluationCase);
+
+        assertThat(result.outcome()).isEqualTo(COMPLETED);
+        assertThat(result.answerId()).isEqualTo(answerId);
+        verify(agents).process(OWNER, agentRunId);
+    }
+
+    @Test
+    void refusesAgentCandidateWhenTheFrozenPolicyDrifts() {
+        RetrievalApplicationService retrieval = mock(RetrievalApplicationService.class);
+        AnswerApplicationService answers = mock(AnswerApplicationService.class);
+        AgentApplicationService agents = mock(AgentApplicationService.class);
+        EvaluationCase evaluationCase = evaluationCase(ANSWER, List.of());
+        EvaluationRun evaluationRun = agentRun();
+        AgentRun drifted = new AgentRun(
+                UUID.randomUUID(), OWNER.ownerId(), evaluationCase.jobId(), "key", "a".repeat(64),
+                evaluationCase.question(), com.videopilot.agent.domain.AgentModels.RunStatus.REQUESTED,
+                new AgentVersions("other-policy", "prompt-v1", "model-v1", "embedding-v1",
+                        "formula-v1", "gate", "limits"),
+                new AgentBudget(6, 2, 10, 10, BigDecimal.ONE, NOW.plusSeconds(60)),
+                0, 0, 0, 0, BigDecimal.ZERO, 0, null, 0, NOW, null);
+        when(agents.createForEvaluation(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(drifted);
+
+        var result = new EvaluationBaselineRunner(retrieval, answers, agents, () -> NOW)
+                .run(OWNER, evaluationRun, evaluationCase);
+
+        assertThat(result.errorCode()).isEqualTo("VERSION_DRIFT");
+    }
+
     private EvaluationCase evaluationCase(
             com.videopilot.evaluation.domain.EvaluationModels.CaseType type,
             List<UUID> expected) {
@@ -289,6 +362,30 @@ class EvaluationBaselineRunnerTest {
                         "commit", "pipeline", "prompt-v1", "model-v1", "embedding-v1", "chunk-v1",
                         "formula-v1", "gate", "limits", "config"),
                 RunStatus.RUNNING, 1, 1, 0, 1, null, NOW, null);
+    }
+
+    private EvaluationRun agentRun() {
+        EvaluationRun baseline = run();
+        return new EvaluationRun(
+                baseline.runId(), baseline.seriesId(), baseline.datasetId(), baseline.datasetFingerprint(),
+                baseline.idempotencyKey(), baseline.requestFingerprint(), baseline.executionFingerprint(),
+                baseline.versions(), com.videopilot.evaluation.domain.EvaluationModels.ExecutionMode.AGENT,
+                "policy-v1", baseline.status(), baseline.repetitionIndex(), baseline.repetitionCount(),
+                baseline.completedCaseCount(), baseline.totalCaseCount(), baseline.errorCode(),
+                baseline.createdAt(), baseline.completedAt());
+    }
+
+    private AgentRun agentState(
+            UUID runId, com.videopilot.agent.domain.AgentModels.RunStatus status, String reason) {
+        return new AgentRun(
+                runId, OWNER.ownerId(), UUID.randomUUID(), "key", "a".repeat(64), "question", status,
+                new AgentVersions("policy-v1", "prompt-v1", "model-v1", "embedding-v1",
+                        "formula-v1", "gate", "limits"),
+                new AgentBudget(6, 2, 10, 10, BigDecimal.ONE, NOW.plusSeconds(60)),
+                status == com.videopilot.agent.domain.AgentModels.RunStatus.COMPLETED ? 1 : 0,
+                status == com.videopilot.agent.domain.AgentModels.RunStatus.COMPLETED ? 1 : 0,
+                0, 0, BigDecimal.ZERO, 0, reason, 0, NOW,
+                status == com.videopilot.agent.domain.AgentModels.RunStatus.COMPLETED ? NOW : null);
     }
 
     private EvidenceHit hit(UUID segmentId) {
