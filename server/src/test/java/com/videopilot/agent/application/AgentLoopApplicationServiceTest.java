@@ -22,6 +22,7 @@ import com.videopilot.agent.port.AgentPolicy;
 import com.videopilot.agent.port.AgentDecisionPort;
 import com.videopilot.agent.port.AgentStore;
 import com.videopilot.answer.application.AnswerApplicationService;
+import com.videopilot.answer.port.LanguageModelException;
 import com.videopilot.answer.port.AnswerStore;
 import com.videopilot.context.application.VideoContextQueryApplicationService;
 import com.videopilot.context.domain.VideoSegment;
@@ -142,15 +143,32 @@ class AgentLoopApplicationServiceTest {
         when(policy.next(trace)).thenReturn(AgentPolicy.Decision.action(AgentPolicy.Action.PLAN));
         when(store.beginToolCall(any(), eq(runId), eq(1L), any())).thenReturn(2L);
         when(decisions.plan(any())).thenThrow(new AgentDecisionPort.InvalidDecisionException(
-                new IllegalArgumentException("invalid json")));
+                "MALFORMED_JSON", new IllegalArgumentException("invalid json")));
 
         assertThat(service.processNext()).isTrue();
 
         verify(store).failDecisionModelCall(any(), eq("AGENT_PLAN"), eq("FAILED"), eq("INVALID_OUTPUT"),
-                eq("INVALID_DECISION"), eq(NOW));
+                eq("MALFORMED_JSON"), eq(NOW));
         verify(store).failToolCallAndTerminate(any(), eq(runId), eq(2L), any(),
                 eq(ToolCallStatus.FAILED), eq("TOOL_EXECUTION_FAILED"), eq(NOW));
         verify(retrieval, never()).retrieve(any(), any(), any(), any(Integer.class));
+    }
+
+    @Test
+    void preservesPlannerProviderTimeoutInModelCallAudit() {
+        AgentTrace trace = trace(run(0, 0, NOW.plusSeconds(180)), List.of());
+        claimed(trace);
+        when(policy.next(trace)).thenReturn(AgentPolicy.Decision.action(AgentPolicy.Action.PLAN));
+        when(store.beginToolCall(any(), eq(runId), eq(1L), any())).thenReturn(2L);
+        when(decisions.plan(any())).thenThrow(new LanguageModelException(
+                LanguageModelException.Reason.UNKNOWN_OUTCOME, "TIMEOUT"));
+
+        assertThat(service.processNext()).isTrue();
+
+        verify(store).failDecisionModelCall(any(), eq("AGENT_PLAN"), eq("UNKNOWN_OUTCOME"),
+                eq("UNKNOWN_OUTCOME"), eq("TIMEOUT"), eq(NOW));
+        verify(store).failToolCallAndTerminate(any(), eq(runId), eq(2L), any(),
+                eq(ToolCallStatus.UNKNOWN), eq("UNKNOWN_OUTCOME"), eq(NOW));
     }
 
     @Test
@@ -177,6 +195,10 @@ class AgentLoopApplicationServiceTest {
 
         assertThat(service.processNext()).isTrue();
 
+        ArgumentCaptor<AgentDecisionPort.CritiqueRequest> request =
+                ArgumentCaptor.forClass(AgentDecisionPort.CritiqueRequest.class);
+        verify(decisions).critique(request.capture());
+        assertThat(request.getValue().answerStatus()).isEqualTo("ANSWERED");
         ArgumentCaptor<AgentStep> critic = ArgumentCaptor.forClass(AgentStep.class);
         verify(store).completeToolCallAndStep(any(), eq(runId), eq(2L), any(), critic.capture(), eq(false));
         assertThat(critic.getValue().resultReference()).isEqualTo("critique:v1:RETRIEVE:String 的使用场景");
@@ -193,6 +215,65 @@ class AgentLoopApplicationServiceTest {
 
         assertThat(service.processNext()).isTrue();
         verify(retrieval).retrieve(any(), eq(jobId), eq("String 的使用场景"), eq(5), eq(runId));
+    }
+
+    @Test
+    void tellsCriticThatTheEvidenceGateRefusedTheFirstAnswer() {
+        UUID segmentId = UUID.randomUUID();
+        AnswerStore.StoredAnswer refused = answer("REFUSED", "CITATION_VALIDATION_FAILED");
+        List<AgentStep> steps = List.of(
+                planStepWithExpected(),
+                new AgentStep(runId, 2, "RETRIEVE", "EVIDENCE:multiple",
+                        "window:1000:9000;segments:" + segmentId, NOW),
+                new AgentStep(runId, 3, "GENERATE_AND_VERIFY", "ANSWER:REFUSED",
+                        "answer:" + refused.answerId(), NOW));
+        AgentTrace trace = trace(run(3, 1, NOW.plusSeconds(180)), steps);
+        claimed(trace);
+        when(policy.next(trace)).thenReturn(AgentPolicy.Decision.action(AgentPolicy.Action.CRITIQUE));
+        when(store.beginToolCall(any(), eq(runId), eq(1L), any())).thenReturn(2L);
+        when(answers.get(any(), eq(jobId), eq(refused.answerId()))).thenReturn(refused);
+        when(answers.evidenceSummaries(any(), eq(jobId), any()))
+                .thenReturn(List.of("ASR 1000-9000: String 是字符串"));
+        when(decisions.critique(any())).thenReturn(new AgentDecisionPort.CritiqueResponse(
+                new AgentDecisionPort.Critique(1, AgentDecisionPort.CritiqueAction.RETRIEVE,
+                        "五种数据类型完整列表", null, null, List.of("引用未通过"), List.of()),
+                new AgentDecisionPort.Usage(60, 15)));
+
+        assertThat(service.processNext()).isTrue();
+
+        ArgumentCaptor<AgentDecisionPort.CritiqueRequest> request =
+                ArgumentCaptor.forClass(AgentDecisionPort.CritiqueRequest.class);
+        verify(decisions).critique(request.capture());
+        assertThat(request.getValue().answerStatus()).isEqualTo("REFUSED");
+        assertThat(request.getValue().answerClaims()).isEmpty();
+    }
+
+    @Test
+    void preservesCriticProviderTimeoutInModelCallAudit() {
+        UUID segmentId = UUID.randomUUID();
+        AnswerStore.StoredAnswer first = answeredWithClaim("String 是字符串类型");
+        List<AgentStep> steps = List.of(
+                planStepWithExpected(),
+                new AgentStep(runId, 2, "RETRIEVE", "EVIDENCE:multiple",
+                        "window:1000:9000;segments:" + segmentId, NOW),
+                new AgentStep(runId, 3, "GENERATE_AND_VERIFY", "ANSWER:ANSWERED",
+                        "answer:" + first.answerId(), NOW));
+        AgentTrace trace = trace(run(3, 1, NOW.plusSeconds(180)), steps);
+        claimed(trace);
+        when(policy.next(trace)).thenReturn(AgentPolicy.Decision.action(AgentPolicy.Action.CRITIQUE));
+        when(store.beginToolCall(any(), eq(runId), eq(1L), any())).thenReturn(2L);
+        when(answers.get(any(), eq(jobId), eq(first.answerId()))).thenReturn(first);
+        when(answers.evidenceSummaries(any(), eq(jobId), any()))
+                .thenReturn(List.of("ASR 1000-9000: String 是字符串"));
+        when(decisions.critique(any())).thenThrow(new LanguageModelException(
+                LanguageModelException.Reason.UNKNOWN_OUTCOME, "TIMEOUT"));
+
+        assertThat(service.processNext()).isTrue();
+
+        verify(store).failDecisionModelCall(any(), eq("AGENT_CRITIQUE"), eq("UNKNOWN_OUTCOME"),
+                eq("UNKNOWN_OUTCOME"), eq("TIMEOUT"), eq(NOW));
+        verify(store).failToolCallAndTerminate(any(), eq(runId), eq(2L), any(),
+                eq(ToolCallStatus.UNKNOWN), eq("UNKNOWN_OUTCOME"), eq(NOW));
     }
 
     @Test

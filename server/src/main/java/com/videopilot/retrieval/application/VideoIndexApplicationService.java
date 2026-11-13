@@ -106,8 +106,15 @@ public final class VideoIndexApplicationService {
     }
 
     public IndexOutcome index(OwnerContext owner, UUID jobId) {
-        VideoIndexStore.IndexPublication publication = publication(owner, jobId);
-        VideoIndexStore.PublishResult chunksPublished = indexes.publishChunks(owner.ownerId(), publication);
+        VideoIndexStore.IndexPublication requested = publication(owner, jobId);
+        VideoIndexStore.PublishResult chunksPublished = indexes.publishChunks(owner.ownerId(), requested);
+        VideoIndexStore.IndexPublication publication = chunksPublished.indexId().equals(requested.indexId())
+                ? requested
+                : new VideoIndexStore.IndexPublication(
+                        chunksPublished.indexId(), requested.sourceJobId(), requested.contextId(),
+                        requested.mediaId(), requested.inputFingerprint(), requested.sourceDigest(),
+                        requested.chunkVersion(), requested.schemaVersion(), requested.chunks(),
+                        requested.createdAt());
         List<com.videopilot.retrieval.domain.VideoChunk> storedChunks =
                 indexes.findChunks(owner.ownerId(), publication.indexId());
         Map<UUID, List<Float>> stored = new LinkedHashMap<>(
@@ -133,7 +140,7 @@ public final class VideoIndexApplicationService {
             return completeDegraded(owner, publication, "VECTOR_STORE_DEGRADED", exception.getMessage(), vectorCollection);
         }
         complete(owner, publication, "READY", null, vectorCollection);
-        return chunksPublished == VideoIndexStore.PublishResult.CREATED ? IndexOutcome.CREATED : IndexOutcome.REUSED;
+        return chunksPublished.created() ? IndexOutcome.CREATED : IndexOutcome.REUSED;
     }
 
     private IndexOutcome embedBatch(

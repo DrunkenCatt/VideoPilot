@@ -157,10 +157,10 @@ Answer；owner 隔离、预算和证据门不变；前端不重复目标 Answer�
 
 ### T10B：固定条件受控重测
 
-- [ ] 固定同一 READY Job、问题、`agent-policy-v3-loop / agent-planner-v3 / agent-critic-v2`、模型、检索版本和预算，新建一组至少三轮 series；保留原 `2/3` series，不用新结果覆盖第三轮失败。
-- [ ] 每轮报告 Step/LLM、Answer 子错误、Token、费用和端到端延迟；若只有单轮异常且随后三轮均成功，只能记录为“供应商结构化输出存在随机波动”，不能宣称已修复。
-- [ ] 若再次出现相同子错误，先建立稳定复现并修 Prompt/Adapter；若错误类型不同，分别记录，禁止笼统归因于“问题偏离”。
-- [ ] 完成重测记录、Roadmap/ACCEPTANCE 回填和独立提交。
+- [x] 固定同一 READY Job、问题、`agent-policy-v3-loop / agent-planner-v3 / agent-critic-v4`、模型、检索版本和预算，新建一组至少三轮 series；保留原 `2/3` series，不用新结果覆盖第三轮失败。
+- [x] 每轮报告 Step/LLM、Answer 子错误、Token、费用和端到端延迟；若只有单轮异常且随后三轮均成功，只能记录为“供应商结构化输出存在随机波动”，不能宣称已修复。
+- [x] 若再次出现相同子错误，先建立稳定复现并修 Prompt/Adapter；若错误类型不同，分别记录，禁止笼统归因于“问题偏离”。
+- [x] 完成重测记录、Roadmap/ACCEPTANCE 回填和独立提交。
 
 **退出门**：形成可复核的稳定性结论；任何未解释失败都阻止进入 T10C。
 

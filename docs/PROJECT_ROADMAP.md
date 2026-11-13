@@ -564,6 +564,13 @@ T10A 诊断门（2026-11-13）：保留上述失败事实，不补跑覆盖。An
 `model_call.error_summary`；不保存模型原文。483 项后端快速测试和隔离 MySQL 持久化测试通过后，
 T10A 可独立退出，下一步只能以固定 Job/问题/版本/预算运行新的 T10B series；原 `2/3` series 不变。
 
+T10B 稳定性门（2026-11-13）：后续失败分别定位为 reasoning token 被误算为可见输出、Critic 合同字段
+约束不完整、一次供应商 Critic 超时、长期测试 Job 的调用预算耗尽，以及 READY Index 复用时没有返回
+数据库实际 Index ID。修复没有提高预算、清零计数或保存模型原文；Critic 前进为 `agent-critic-v4`。
+使用正常 API 创建并恢复的新 READY Job 固定同题三轮，终态为 `REFUSED/COMPLETED/COMPLETED`，共
+11 次生成式调用全部成功、未知成本为 0；其中两轮形成 6 Step/4 LLM 的真实补检路径。490 项快速测试、
+JaCoCo 80% 和 ArchUnit 通过后，T10B 可独立退出并进入 T10C。原失败 Run 与 M5/T4 缺口继续保留。
+
 ### M7：用户反馈采集与复核闭环（1-2 周）
 
 交付：

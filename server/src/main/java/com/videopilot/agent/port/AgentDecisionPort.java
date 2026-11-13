@@ -7,7 +7,7 @@ public interface AgentDecisionPort {
 
     int SCHEMA_VERSION = 1;
     String PLANNER_PROMPT_VERSION = "agent-planner-v3";
-    String CRITIC_PROMPT_VERSION = "agent-critic-v2";
+    String CRITIC_PROMPT_VERSION = "agent-critic-v4";
 
     PlanResponse plan(PlanRequest request);
 
@@ -76,7 +76,7 @@ public interface AgentDecisionPort {
 
     record CritiqueRequest(
             UUID jobId, UUID runId, UUID evaluationRunId, String evaluationCaseId,
-            String goal, List<String> expectedFacts, List<String> answerClaims,
+            String goal, List<String> expectedFacts, String answerStatus, List<String> answerClaims,
             List<String> evidenceSummaries, String modelVersion, String promptVersion,
             String inputFingerprint) {
         public CritiqueRequest {
@@ -85,6 +85,7 @@ public interface AgentDecisionPort {
             evidenceSummaries = List.copyOf(evidenceSummaries);
             if (jobId == null || runId == null || goal == null || goal.isBlank()
                     || expectedFacts.isEmpty() || evidenceSummaries.isEmpty()
+                    || !("ANSWERED".equals(answerStatus) || "REFUSED".equals(answerStatus))
                     || modelVersion == null || modelVersion.isBlank()
                     || promptVersion == null || promptVersion.isBlank()
                     || inputFingerprint == null || !inputFingerprint.matches("[0-9a-f]{64}")) {
@@ -142,8 +143,22 @@ public interface AgentDecisionPort {
     }
 
     final class InvalidDecisionException extends RuntimeException {
+        private final String code;
+
         public InvalidDecisionException(Throwable cause) {
-            super("planner returned an invalid decision", cause);
+            this("INVALID_DECISION", cause);
+        }
+
+        public InvalidDecisionException(String code, Throwable cause) {
+            super("model returned an invalid agent decision", cause);
+            if (code == null || !code.matches("[A-Z_]{3,64}")) {
+                throw new IllegalArgumentException("invalid decision code is invalid");
+            }
+            this.code = code;
+        }
+
+        public String code() {
+            return code;
         }
     }
 }

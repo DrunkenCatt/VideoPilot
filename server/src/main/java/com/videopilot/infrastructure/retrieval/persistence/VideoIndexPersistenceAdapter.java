@@ -31,17 +31,21 @@ public class VideoIndexPersistenceAdapter implements VideoIndexStore {
     @Transactional
     public PublishResult publishChunks(OwnerId ownerId, IndexPublication publication) {
         String owner = ownerId.value().toString();
-        String existingStatus = jdbc.sql("""
-                SELECT status FROM video_index
+        PublishedIndex existing = jdbc.sql("""
+                SELECT index_id, status FROM video_index
                 WHERE owner_id = :owner AND context_id = :contextId AND input_fingerprint = :fingerprint
                 """)
                 .param("owner", owner)
                 .param("contextId", publication.contextId().toString())
                 .param("fingerprint", publication.inputFingerprint())
-                .query(String.class)
+                .query((row, ignored) -> new PublishedIndex(
+                        UUID.fromString(row.getString("index_id")), row.getString("status")))
                 .optional()
                 .orElse(null);
-        if (existingStatus != null && !"BUILDING".equals(existingStatus)) return PublishResult.REUSED;
+        if (existing != null && !"BUILDING".equals(existing.status())) {
+            return PublishResult.reused(existing.indexId());
+        }
+        UUID activeIndexId = existing == null ? publication.indexId() : existing.indexId();
 
         jdbc.sql("""
                 INSERT INTO video_index (
@@ -60,7 +64,7 @@ public class VideoIndexPersistenceAdapter implements VideoIndexStore {
                   AND context.status = 'READY'
                 ON DUPLICATE KEY UPDATE index_id = index_id
                 """)
-                .param("indexId", publication.indexId().toString())
+                .param("indexId", activeIndexId.toString())
                 .param("owner", owner)
                 .param("jobId", publication.sourceJobId().toString())
                 .param("contextId", publication.contextId().toString())
@@ -71,20 +75,21 @@ public class VideoIndexPersistenceAdapter implements VideoIndexStore {
                 .param("createdAt", publication.createdAt())
                 .update();
 
-        for (VideoChunk chunk : publication.chunks()) insertChunk(publication.indexId(), chunk);
+        for (VideoChunk chunk : publication.chunks()) insertChunk(activeIndexId, chunk);
         int published = jdbc.sql("""
                 UPDATE video_index
                 SET status = 'CHUNKED', chunk_count = :chunkCount, version = version + 1
                 WHERE index_id = :indexId AND owner_id = :owner AND status = 'BUILDING'
                 """)
                 .param("chunkCount", publication.chunks().size())
-                .param("indexId", publication.indexId().toString())
+                .param("indexId", activeIndexId.toString())
                 .param("owner", owner)
                 .update();
-        if (published == 1) return PublishResult.CREATED;
+        if (published == 1) return existing == null
+                ? PublishResult.created(activeIndexId) : PublishResult.reused(activeIndexId);
         return !"BUILDING".equals(jdbc.sql("SELECT status FROM video_index WHERE index_id = :indexId")
-                .param("indexId", publication.indexId().toString()).query(String.class).single())
-                ? PublishResult.REUSED
+                .param("indexId", activeIndexId.toString()).query(String.class).single())
+                ? PublishResult.reused(activeIndexId)
                 : fail("chunk publication did not reach CHUNKED");
     }
 
@@ -484,4 +489,6 @@ public class VideoIndexPersistenceAdapter implements VideoIndexStore {
             String embeddingVersion,
             String vectorCollection,
             String chunkVersion) { }
+
+    private record PublishedIndex(UUID indexId, String status) { }
 }

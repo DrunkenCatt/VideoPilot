@@ -51,7 +51,7 @@ class VideoIndexApplicationServiceTest {
         AtomicReference<VideoIndexStore.IndexPublication> publication = new AtomicReference<>();
         when(indexes.publishChunks(any(), any())).thenAnswer(invocation -> {
             publication.set(invocation.getArgument(1));
-            return VideoIndexStore.PublishResult.CREATED;
+            return VideoIndexStore.PublishResult.created(publication.get().indexId());
         });
         when(indexes.findChunks(any(), any())).thenAnswer(ignored -> publication.get().chunks());
         when(indexes.findEmbeddings(any(), any(), any())).thenReturn(Map.of());
@@ -74,6 +74,58 @@ class VideoIndexApplicationServiceTest {
     }
 
     @Test
+    void continuesWithThePersistedIndexIdWhenAReadyContextReusesAnOlderIndexIdentity() {
+        VideoContextStore contexts = mock(VideoContextStore.class);
+        VideoIndexStore indexes = mock(VideoIndexStore.class);
+        UUID ownerId = UUID.randomUUID();
+        UUID jobId = UUID.randomUUID();
+        UUID contextId = UUID.randomUUID();
+        UUID mediaId = UUID.randomUUID();
+        UUID persistedIndexId = UUID.randomUUID();
+        Instant now = Instant.parse("2026-11-05T00:00:00Z");
+        VideoContext context = new VideoContext(contextId, jobId, mediaId, "a".repeat(64),
+                "m3-evidence-qa-v1", "extract-v1", "align-v1", 60_000,
+                VideoContextStatus.READY, ContextChannelState.AVAILABLE, ContextChannelState.DEGRADED,
+                1, 1, now, now);
+        VideoSegment segment = new VideoSegment(UUID.randomUUID(), 0, 0, 60_000,
+                Optional.of("Redis string"), "[]", "[]", "b".repeat(64));
+        when(contexts.findContextByJob(any(), any())).thenReturn(Optional.of(context));
+        when(contexts.findSegments(any(), any(), any(Long.class), any(Long.class), any(Long.class), any(Integer.class)))
+                .thenReturn(List.of(segment), List.of());
+        AtomicReference<VideoIndexStore.IndexPublication> publication = new AtomicReference<>();
+        when(indexes.publishChunks(any(), any())).thenAnswer(invocation -> {
+            publication.set(invocation.getArgument(1));
+            return VideoIndexStore.PublishResult.reused(persistedIndexId);
+        });
+        when(indexes.findChunks(any(), any())).thenAnswer(invocation -> {
+            assertThat(invocation.getArgument(1, UUID.class)).isEqualTo(persistedIndexId);
+            return publication.get().chunks();
+        });
+        when(indexes.findEmbeddings(any(), any(), any())).thenAnswer(invocation -> Map.of(
+                publication.get().chunks().getFirst().chunkId(), List.of(0.1f, 0.2f, 0.3f)));
+        VectorIndexPort vectors = mock(VectorIndexPort.class);
+        VideoIndexApplicationService service = new VideoIndexApplicationService(
+                contexts, indexes, new VideoChunkBuilder(new ObjectMapper()), request -> {
+                    throw new AssertionError("a reused complete embedding must not call the provider");
+                }, vectors, "SiliconFlow", "BAAI/bge-m3", "embedding-v1", "chunks_v1",
+                3, 16, 6_000, 3, () -> now, UUID::randomUUID);
+
+        var result = service.index(new OwnerContext(new OwnerId(ownerId)), jobId);
+
+        assertThat(result).isEqualTo(VideoIndexApplicationService.IndexOutcome.REUSED);
+        ArgumentCaptor<VectorIndexPort.Publication> vectorPublication =
+                ArgumentCaptor.forClass(VectorIndexPort.Publication.class);
+        verify(vectors).publish(vectorPublication.capture());
+        assertThat(vectorPublication.getValue().points()).allMatch(point ->
+                point.indexId().equals(persistedIndexId));
+        ArgumentCaptor<VideoIndexStore.IndexCompletion> completion =
+                ArgumentCaptor.forClass(VideoIndexStore.IndexCompletion.class);
+        verify(indexes).completeIndex(any(), completion.capture());
+        assertThat(completion.getValue().indexId()).isEqualTo(persistedIndexId);
+        assertThat(completion.getValue().jobId()).isEqualTo(jobId);
+    }
+
+    @Test
     void keepsDurableEmbeddingsAndPublishesExplicitDegradationWhenQdrantIsUnavailable() {
         VideoContextStore contexts = mock(VideoContextStore.class);
         VideoIndexStore indexes = mock(VideoIndexStore.class);
@@ -93,7 +145,7 @@ class VideoIndexApplicationServiceTest {
         AtomicReference<VideoIndexStore.IndexPublication> publication = new AtomicReference<>();
         when(indexes.publishChunks(any(), any())).thenAnswer(invocation -> {
             publication.set(invocation.getArgument(1));
-            return VideoIndexStore.PublishResult.CREATED;
+            return VideoIndexStore.PublishResult.created(publication.get().indexId());
         });
         when(indexes.findChunks(any(), any())).thenAnswer(ignored -> publication.get().chunks());
         when(indexes.findEmbeddings(any(), any(), any())).thenReturn(Map.of());

@@ -1,7 +1,12 @@
 package com.videopilot.infrastructure.agent;
 
+import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.exc.InvalidFormatException;
+import com.fasterxml.jackson.databind.exc.MismatchedInputException;
+import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
+import com.fasterxml.jackson.databind.exc.ValueInstantiationException;
 import com.videopilot.agent.port.AgentDecisionPort;
 import com.videopilot.answer.port.LanguageModelPort;
 import java.util.Objects;
@@ -43,40 +48,65 @@ public final class LanguageModelAgentDecisionAdapter implements AgentDecisionPor
             return new PlanResponse(plan, new Usage(
                     response.usage().inputTokens(), response.usage().outputTokens()));
         } catch (RuntimeException | java.io.IOException exception) {
-            throw new InvalidDecisionException(exception);
+            throw invalidDecision(exception);
         }
     }
 
     @Override
     public CritiqueResponse critique(CritiqueRequest request) {
+        String expectedFacts;
+        String answerClaims;
+        String evidenceSummaries;
         try {
-            String prompt = """
-                    Judge whether the verified answer covers the teaching-video goal and is semantically relevant.
-                    Return exactly one JSON object with schemaVersion, action, query, startMs, endMs,
-                    missingRequirements, unsupportedClaims. action must be PASS, RETRIEVE, or EXPAND_WINDOW.
-                    PASS must have empty repair fields. RETRIEVE needs one focused query and missing requirements.
-                    EXPAND_WINDOW needs a non-negative [startMs,endMs] and missing requirements.
-                    PASS template: {"schemaVersion":1,"action":"PASS","query":"","startMs":null,"endMs":null,"missingRequirements":[],"unsupportedClaims":[]}
-                    RETRIEVE template: {"schemaVersion":1,"action":"RETRIEVE","query":"focused query","startMs":null,"endMs":null,"missingRequirements":["missing fact"],"unsupportedClaims":[]}
-                    EXPAND_WINDOW template: {"schemaVersion":1,"action":"EXPAND_WINDOW","query":"","startMs":0,"endMs":1000,"missingRequirements":["missing context"],"unsupportedClaims":[]}
-                    Include every template key, add no other keys, use null exactly as shown, and do not use markdown fences.
-                    Do not judge citation existence or override the deterministic evidence gate.
-                    GOAL: %s
-                    EXPECTED_FACTS: %s
-                    VERIFIED_ANSWER_CLAIMS: %s
-                    EVIDENCE_SUMMARIES: %s
-                    """.formatted(request.goal(), json.writeValueAsString(request.expectedFacts()),
-                    json.writeValueAsString(request.answerClaims()),
-                    json.writeValueAsString(request.evidenceSummaries()));
-            LanguageModelPort.Response response = model.generate(
-                    new LanguageModelPort.Request(prompt, request.inputFingerprint()));
+            expectedFacts = json.writeValueAsString(request.expectedFacts());
+            answerClaims = json.writeValueAsString(request.answerClaims());
+            evidenceSummaries = json.writeValueAsString(request.evidenceSummaries());
+        } catch (java.io.IOException exception) {
+            throw new InvalidDecisionException(exception);
+        }
+        String prompt = """
+                Judge whether the verified answer covers the teaching-video goal and is semantically relevant.
+                Return exactly one JSON object with schemaVersion, action, query, startMs, endMs,
+                missingRequirements, unsupportedClaims. action must be PASS, RETRIEVE, or EXPAND_WINDOW.
+                PASS is allowed only when ANSWER_STATUS is ANSWERED and all expected facts are covered.
+                A REFUSED answer cannot PASS; choose RETRIEVE or EXPAND_WINDOW to repair its missing requirements.
+                PASS must have empty repair fields. RETRIEVE needs one focused query and missing requirements.
+                EXPAND_WINDOW needs a non-negative [startMs,endMs] and missing requirements.
+                missingRequirements and unsupportedClaims each allow at most 3 entries.
+                Each missing requirement is at most 72 characters; each unsupported claim is at most 120 characters.
+                PASS template: {"schemaVersion":1,"action":"PASS","query":"","startMs":null,"endMs":null,"missingRequirements":[],"unsupportedClaims":[]}
+                RETRIEVE template: {"schemaVersion":1,"action":"RETRIEVE","query":"focused query","startMs":null,"endMs":null,"missingRequirements":["missing fact"],"unsupportedClaims":[]}
+                EXPAND_WINDOW template: {"schemaVersion":1,"action":"EXPAND_WINDOW","query":"","startMs":0,"endMs":1000,"missingRequirements":["missing context"],"unsupportedClaims":[]}
+                Include every template key, add no other keys, use null exactly as shown, and do not use markdown fences.
+                Do not judge citation existence or override the deterministic evidence gate.
+                GOAL: %s
+                EXPECTED_FACTS: %s
+                ANSWER_STATUS: %s
+                VERIFIED_ANSWER_CLAIMS: %s
+                EVIDENCE_SUMMARIES: %s
+                """.formatted(request.goal(), expectedFacts, request.answerStatus(), answerClaims, evidenceSummaries);
+        LanguageModelPort.Response response = model.generate(
+                new LanguageModelPort.Request(prompt, request.inputFingerprint()));
+        try {
             Critique critique = json.readerFor(Critique.class)
                     .with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
                     .readValue(response.candidateText());
             return new CritiqueResponse(critique, new Usage(
                     response.usage().inputTokens(), response.usage().outputTokens()));
         } catch (RuntimeException | java.io.IOException exception) {
-            throw new InvalidDecisionException(exception);
+            throw invalidDecision(exception);
         }
+    }
+
+    private InvalidDecisionException invalidDecision(Exception exception) {
+        String code = switch (exception) {
+            case JsonParseException ignored -> "MALFORMED_JSON";
+            case UnrecognizedPropertyException ignored -> "UNKNOWN_FIELD";
+            case InvalidFormatException ignored -> "INVALID_VALUE";
+            case ValueInstantiationException ignored -> "CONSTRAINT_VIOLATION";
+            case MismatchedInputException ignored -> "INVALID_SHAPE";
+            default -> "INVALID_DECISION";
+        };
+        return new InvalidDecisionException(code, exception);
     }
 }

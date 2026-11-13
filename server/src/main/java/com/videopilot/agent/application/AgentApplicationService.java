@@ -401,12 +401,15 @@ public final class AgentApplicationService {
         } catch (RuntimeException exception) {
             Instant failedAt = now.get();
             boolean unknown = hasUnknownOutcome(exception);
+            LanguageModelException modelFailure = languageModelFailure(exception);
             store.failDecisionModelCall(modelCallId, "AGENT_PLAN",
                     unknown ? "UNKNOWN_OUTCOME" : "FAILED",
                     exception instanceof AgentDecisionPort.InvalidDecisionException
-                            ? "INVALID_OUTPUT" : "PROVIDER",
+                            ? "INVALID_OUTPUT" : modelFailure == null
+                                    ? "PROVIDER" : modelFailure.reason().name(),
                     exception instanceof AgentDecisionPort.InvalidDecisionException
-                            ? "INVALID_DECISION" : "MODEL_CALL_FAILED",
+                            ? ((AgentDecisionPort.InvalidDecisionException) exception).code() : modelFailure == null
+                                    ? "MODEL_CALL_FAILED" : modelFailure.code(),
                     failedAt);
             throw exception;
         }
@@ -461,17 +464,20 @@ public final class AgentApplicationService {
         try {
             response = decisions.critique(new AgentDecisionPort.CritiqueRequest(
                     run.jobId(), run.runId(), run.evaluationRunId(), run.evaluationCaseId(),
-                    run.goal(), expectedFacts, claims, evidence, run.versions().modelVersion(),
+                    run.goal(), expectedFacts, answer.status(), claims, evidence, run.versions().modelVersion(),
                     AgentDecisionPort.CRITIC_PROMPT_VERSION, fingerprint));
         } catch (RuntimeException exception) {
             Instant failedAt = now.get();
             boolean unknown = hasUnknownOutcome(exception);
+            LanguageModelException modelFailure = languageModelFailure(exception);
             store.failDecisionModelCall(modelCallId, "AGENT_CRITIQUE",
                     unknown ? "UNKNOWN_OUTCOME" : "FAILED",
                     exception instanceof AgentDecisionPort.InvalidDecisionException
-                            ? "INVALID_OUTPUT" : "PROVIDER",
+                            ? "INVALID_OUTPUT" : modelFailure == null
+                                    ? "PROVIDER" : modelFailure.reason().name(),
                     exception instanceof AgentDecisionPort.InvalidDecisionException
-                            ? "INVALID_DECISION" : "MODEL_CALL_FAILED", failedAt);
+                            ? ((AgentDecisionPort.InvalidDecisionException) exception).code() : modelFailure == null
+                                    ? "MODEL_CALL_FAILED" : modelFailure.code(), failedAt);
             throw exception;
         }
         Instant completedAt = now.get();
@@ -700,6 +706,13 @@ public final class AgentApplicationService {
             }
         }
         return false;
+    }
+
+    private LanguageModelException languageModelFailure(Throwable exception) {
+        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+            if (cause instanceof LanguageModelException model) return model;
+        }
+        return null;
     }
 
     private void requireRuntime() {

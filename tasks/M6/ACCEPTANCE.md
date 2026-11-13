@@ -594,3 +594,36 @@ T10A 不补跑原失败轮，先修复可观测性缺口。SiliconFlow HTTP 200 
 
 T10A 退出门通过，可以进入 T10B。该结论只说明下一次失败可精确归因，不把原 `INVALID_RESPONSE`
 改写为任何一个新子错误，也不表示 T10/M6 已退出；所有 Agent 开关继续默认关闭。
+
+## 18. T10B 固定条件结构化稳定性复测（2026-11-13）
+
+T10B 保留第 16 节原 `2/3` series，并为每次修复创建新 Run，没有覆盖、删除或把失败轮改写为成功。
+连续复测依次暴露并修复了三个确定性缺口：
+
+- 两次 Answer `TOKEN_USAGE_LIMIT` 的响应均为 `finishReason=stop` 且 JSON 可解析。SiliconFlow 官方
+  Chat Completions 文档说明 `max_tokens` 不包含思维链部分，而 `completion_tokens_details.reasoning_tokens`
+  单独报告推理用量；Adapter 原先错误地用总 `completion_tokens` 校验可见输出上限。现在成本/Agent 预算
+  仍记录总 completion，用 `completion - reasoning` 校验 1200 可见输出上限；供应商未给 reasoning 明细时
+  继续失败关闭。来源：`https://docs.siliconflow.cn/docs/api/chat-completions-post`。
+- 下一组分别出现 Critic `TIMEOUT` 与笼统 `INVALID_DECISION`。超时保留为 UNKNOWN；Critic Prompt 补齐
+  数组数量和字段长度合同，并前进为 `agent-critic-v4`。非法决策审计拆分为 `MALFORMED_JSON`、
+  `UNKNOWN_FIELD`、`INVALID_VALUE`、`INVALID_SHAPE` 和 `CONSTRAINT_VIOLATION`，不保存模型原文。
+- 长期复用的原 Job 随后正确触发 `m6-limits-v2:CALL_COUNT`，三轮均在 Answer 模型调用前停止；没有
+  清零计数或提高上限。通过正常 API 为同一媒体创建新 Job 时，又稳定复现 READY Index 复用仍使用
+  本次计算 ID，导致 0 个 Vector Point 的问题。Store 现在返回数据库实际复用的 Index ID，Executor
+  用该 ID 读取既有 Chunk/Embedding 并恢复同一 Job；没有重算向量或改写索引内容。
+
+最终冻结条件为 Job `ef81edef-2c55-41a0-9e99-6fb67c89e8ab`、问题“Redis 里最常见的五种基本数据
+类型分别是什么？”，policy `agent-policy-v3-loop`、Planner `agent-planner-v3`、Critic
+`agent-critic-v4`、Answer `answer-evidence-v2`。三轮结果如下：
+
+| Run | 终态 / 路径 | Step / 生成式 LLM | Token（入/出） | 已知费用 | 端到端 |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `8106c854-ffc7-4e8f-9553-a3b925809985` | `REFUSED / NO_SUFFICIENT_EVIDENCE`，首答拒答后补检并稳定拒答 | 6 / 4 | 9405 / 1511 | CNY 0.041754 | 31.850 s |
+| `115457c8-5040-4241-9549-33f64c79771a` | `COMPLETED`，首答后 Critic PASS | 4 / 3 | 6075 / 823 | CNY 0.025602 | 14.734 s |
+| `b43908fa-b5aa-4794-936b-bdda0ddfcf21` | `COMPLETED`，首答拒答、补检、二次回答 | 6 / 4 | 9409 / 6612 | CNY 0.087669 | 87.839 s |
+
+三轮共 11 次生成式 LLM 调用全部 `SUCCEEDED`，Answer/Planner/Critic 没有结构化子错误、UNKNOWN 或
+未知成本；状态差异来自 Answer Evidence Gate 和 Critic 的合法受限路径，不是未解释失败。定向测试后
+`server\mvnw.cmd clean test` 最终为 490 项通过、0 failure/error、1 项既有 FFmpeg 环境跳过，JaCoCo
+80% 与 ArchUnit 通过。T10B 退出门通过，可以独立提交并进入 T10C；这不表示 T10/M6 已退出。

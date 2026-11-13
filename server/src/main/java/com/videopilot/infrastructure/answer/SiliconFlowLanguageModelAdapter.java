@@ -119,18 +119,25 @@ public final class SiliconFlowLanguageModelAdapter implements LanguageModelPort 
             String content = choice.path("message").path("content").asText();
             JsonNode promptTokens = root.path("usage").path("prompt_tokens");
             JsonNode completionTokens = root.path("usage").path("completion_tokens");
+            JsonNode reasoningTokens = root.path("usage")
+                    .path("completion_tokens_details")
+                    .path("reasoning_tokens");
             boolean promptTokensPresent = present(promptTokens);
             boolean completionTokensPresent = present(completionTokens);
+            boolean reasoningTokensPresent = present(reasoningTokens);
             long input = promptTokens.asLong(-1);
             long output = completionTokens.asLong(-1);
+            long reasoning = reasoningTokens.asLong(-1);
             boolean jsonParseable = parseableJson(content);
             String diagnostics = diagnostics(
                     finishReason, content.length(), promptTokensPresent, completionTokensPresent, jsonParseable);
             if (content.isBlank()) throw invalidResponse("EMPTY_CONTENT", diagnostics);
-            if (!promptTokensPresent || !completionTokensPresent || input < 0 || output < 0) {
+            if (!promptTokensPresent || !completionTokensPresent || input < 0 || output < 0
+                    || (reasoningTokensPresent && (reasoning < 0 || reasoning > output))) {
                 throw invalidResponse("MISSING_USAGE", diagnostics);
             }
-            if (output > maxOutputTokens) throw invalidResponse("TOKEN_USAGE_LIMIT", diagnostics);
+            long visibleOutput = output - (reasoningTokensPresent ? reasoning : 0);
+            if (visibleOutput > maxOutputTokens) throw invalidResponse("TOKEN_USAGE_LIMIT", diagnostics);
             if (!jsonParseable) throw invalidResponse("MALFORMED_JSON", diagnostics);
             return new Response(content, new Usage(input, output));
         } catch (LanguageModelException exception) {

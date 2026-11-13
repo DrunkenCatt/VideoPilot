@@ -110,6 +110,23 @@ class SiliconFlowLanguageModelAdapterTest {
     }
 
     @Test
+    void acceptsCompletionUsageAboveVisibleLimitWhenTheDifferenceIsReasoningTokens() throws Exception {
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/v1/chat/completions", exchange -> respond(exchange, 200, """
+                {"choices":[{"finish_reason":"stop","message":{"content":"{}"}}],
+                 "usage":{"prompt_tokens":1,"completion_tokens":1201,
+                 "completion_tokens_details":{"reasoning_tokens":1100}}}
+                """));
+        server.start();
+
+        LanguageModelPort.Response response = adapter(4096).generate(
+                new LanguageModelPort.Request("prompt", "a".repeat(64)));
+
+        assertThat(response.candidateText()).isEqualTo("{}");
+        assertThat(response.usage()).isEqualTo(new LanguageModelPort.Usage(1, 1201));
+    }
+
+    @Test
     void classifiesHttpTimeoutAsUnknown() throws Exception {
         server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext("/v1/chat/completions", exchange -> {

@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.videopilot.agent.port.AgentDecisionPort;
+import com.videopilot.answer.port.LanguageModelException;
 import com.videopilot.answer.port.LanguageModelPort;
 import java.util.UUID;
 import org.mockito.ArgumentCaptor;
@@ -45,21 +46,21 @@ class LanguageModelAgentDecisionAdapterTest {
 
     @Test
     void rejectsInvalidJsonUnknownActionsExtraAuthorityAndLongQueries() {
-        assertInvalid("not-json");
+        assertInvalid("not-json", "MALFORMED_JSON");
         assertInvalid("""
                 {"schemaVersion":1,"action":"OPEN_URL","query":"x","expectedFacts":["x"]}
-                """);
+                """, "INVALID_VALUE");
         assertInvalid("""
                 {"schemaVersion":1,"action":"RETRIEVE","query":"x","expectedFacts":["x"],
                  "ownerId":"00000000-0000-0000-0000-000000000000"}
-                """);
+                """, "UNKNOWN_FIELD");
         assertInvalid("""
                 {"schemaVersion":1,"action":"RETRIEVE","query":"%s","expectedFacts":["x"]}
-                """.formatted("q".repeat(201)));
+                """.formatted("q".repeat(201)), "CONSTRAINT_VIOLATION");
         assertInvalid("""
                 {"schemaVersion":1,"action":"RETRIEVE","query":"https://example.com/private",
                  "expectedFacts":["x"]}
-                """);
+                """, "CONSTRAINT_VIOLATION");
     }
 
     @Test
@@ -108,7 +109,19 @@ class LanguageModelAgentDecisionAdapterTest {
                         "combine the complete list into one fact", "Never output more than 3 entries");
         assertThat(requests.getAllValues().get(1).prompt())
                 .contains("PASS template", "\"startMs\":null", "RETRIEVE template",
-                        "EXPAND_WINDOW template");
+                        "EXPAND_WINDOW template", "ANSWER_STATUS: REFUSED",
+                        "A REFUSED answer cannot PASS", "at most 3 entries",
+                        "missing requirement is at most 72 characters");
+    }
+
+    @Test
+    void propagatesCriticProviderTimeoutInsteadOfMisclassifyingItAsInvalidOutput() {
+        LanguageModelException timeout = new LanguageModelException(
+                LanguageModelException.Reason.UNKNOWN_OUTCOME, "TIMEOUT");
+        when(model.generate(any())).thenThrow(timeout);
+
+        assertThatThrownBy(() -> adapter.critique(critiqueRequest()))
+                .isSameAs(timeout);
     }
 
     @Test
@@ -127,11 +140,33 @@ class LanguageModelAgentDecisionAdapterTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
-    private void assertInvalid(String candidate) {
+    @Test
+    void classifiesCriticJsonShapeAndConstraintFailuresWithoutPersistingContent() {
+        assertInvalidCritique("not-json", "MALFORMED_JSON");
+        assertInvalidCritique("""
+                {"schemaVersion":1,"action":"RETRIEVE","query":"String", "startMs":null,
+                 "endMs":null,"missingRequirements":["%s"],"unsupportedClaims":[]}
+                """.formatted("x".repeat(73)), "CONSTRAINT_VIOLATION");
+        assertInvalidCritique("""
+                {"schemaVersion":1,"action":"PASS","query":"","startMs":null,"endMs":null,
+                 "missingRequirements":[],"unsupportedClaims":[],"reason":"hidden"}
+                """, "UNKNOWN_FIELD");
+    }
+
+    private void assertInvalid(String candidate, String expectedCode) {
         when(model.generate(any())).thenReturn(new LanguageModelPort.Response(
                 candidate, new LanguageModelPort.Usage(10, 5)));
         assertThatThrownBy(() -> adapter.plan(request("目标")))
-                .isInstanceOf(AgentDecisionPort.InvalidDecisionException.class);
+                .isInstanceOfSatisfying(AgentDecisionPort.InvalidDecisionException.class,
+                        exception -> assertThat(exception.code()).isEqualTo(expectedCode));
+    }
+
+    private void assertInvalidCritique(String candidate, String expectedCode) {
+        when(model.generate(any())).thenReturn(new LanguageModelPort.Response(
+                candidate, new LanguageModelPort.Usage(10, 5)));
+        assertThatThrownBy(() -> adapter.critique(critiqueRequest()))
+                .isInstanceOfSatisfying(AgentDecisionPort.InvalidDecisionException.class,
+                        exception -> assertThat(exception.code()).isEqualTo(expectedCode));
     }
 
     private AgentDecisionPort.PlanRequest request(String goal) {
@@ -143,7 +178,7 @@ class LanguageModelAgentDecisionAdapterTest {
     private AgentDecisionPort.CritiqueRequest critiqueRequest() {
         return new AgentDecisionPort.CritiqueRequest(
                 UUID.randomUUID(), UUID.randomUUID(), null, null, "解释 String",
-                java.util.List.of("定义", "使用场景"), java.util.List.of("String 是字符串"),
+                java.util.List.of("定义", "使用场景"), "REFUSED", java.util.List.of(),
                 java.util.List.of("ASR 0-1000: String 是字符串"), "model-v1", "critic-v1",
                 "b".repeat(64));
     }

@@ -65,9 +65,18 @@ public interface VideoIndexStore {
         }
     }
 
-    enum PublishResult {
-        CREATED,
-        REUSED
+    record PublishResult(UUID indexId, boolean created) {
+        public PublishResult {
+            if (indexId == null) throw new IllegalArgumentException("published index ID is required");
+        }
+
+        public static PublishResult created(UUID indexId) {
+            return new PublishResult(indexId, true);
+        }
+
+        public static PublishResult reused(UUID indexId) {
+            return new PublishResult(indexId, false);
+        }
     }
 
     record ModelCallState(String modelCallId, String status, String errorCategory, int attempt) { }
