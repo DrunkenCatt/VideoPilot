@@ -13,6 +13,7 @@ public interface AgentPolicy {
         RETRIEVE,
         EXPAND_WINDOW,
         GENERATE_AND_VERIFY,
+        CRITIQUE,
         FINISH,
         REFUSE,
         NEEDS_CLARIFICATION

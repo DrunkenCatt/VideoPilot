@@ -57,7 +57,7 @@ public class AgentAutoConfiguration {
             @Value("${videopilot.answer.model:deepseek-ai/DeepSeek-V4-Flash}") String modelVersion,
             @Value("${videopilot.retrieval.embedding.version:siliconflow-bge-m3-1024-v1}")
             String embeddingVersion,
-            @Value("${videopilot.analysis.limits.version:m6-limits-v1}") String limitsVersion,
+            @Value("${videopilot.analysis.limits.version:m6-limits-v2}") String limitsVersion,
             @Value("${videopilot.agent.goal-analysis-enabled:false}") boolean goalAnalysisEnabled) {
         Clock clock = Clock.systemUTC();
         AgentVersions versions = new AgentVersions(

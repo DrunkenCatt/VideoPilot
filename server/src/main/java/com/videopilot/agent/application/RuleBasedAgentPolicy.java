@@ -14,7 +14,8 @@ public final class RuleBasedAgentPolicy implements AgentPolicy {
             case "PLAN" -> afterPlan(last);
             case "RETRIEVE" -> afterRetrieval(trace, last);
             case "EXPAND_WINDOW" -> Decision.action(Action.GENERATE_AND_VERIFY);
-            case "GENERATE_AND_VERIFY" -> afterAnswer(last);
+            case "GENERATE_AND_VERIFY" -> afterAnswer(trace, last);
+            case "CRITIQUE" -> afterCritique(last);
             default -> Decision.terminal(Action.REFUSE, "INVALID_POLICY_STATE");
         };
     }
@@ -38,22 +39,36 @@ public final class RuleBasedAgentPolicy implements AgentPolicy {
                     ? Decision.terminal(Action.NEEDS_CLARIFICATION, "NEEDS_CLARIFICATION")
                     : Decision.terminal(Action.REFUSE, "NO_SUFFICIENT_EVIDENCE");
         }
-        if ("EVIDENCE:single".equals(step.observationSummary())) {
-            return Decision.action(Action.EXPAND_WINDOW);
-        }
-        if ("EVIDENCE:multiple".equals(step.observationSummary())) {
+        if ("EVIDENCE:single".equals(step.observationSummary())
+                || "EVIDENCE:multiple".equals(step.observationSummary())) {
             return Decision.action(Action.GENERATE_AND_VERIFY);
         }
         return Decision.terminal(Action.REFUSE, "INVALID_OBSERVATION");
     }
 
-    private Decision afterAnswer(AgentStep step) {
-        if (step.observationSummary().startsWith("ANSWER:ANSWERED")) {
+    private Decision afterAnswer(AgentTrace trace, AgentStep step) {
+        long attempts = trace.steps().stream()
+                .filter(value -> "GENERATE_AND_VERIFY".equals(value.action())).count();
+        if (attempts == 1) return Decision.action(Action.CRITIQUE);
+        if (attempts == 2 && step.observationSummary().startsWith("ANSWER:ANSWERED")) {
             return Decision.terminal(Action.FINISH, "COMPLETED");
         }
-        if (step.observationSummary().startsWith("ANSWER:REFUSED")) {
+        if (attempts == 2 && step.observationSummary().startsWith("ANSWER:REFUSED")) {
             return Decision.terminal(Action.REFUSE, "NO_SUFFICIENT_EVIDENCE");
         }
         return Decision.terminal(Action.REFUSE, "INVALID_OBSERVATION");
+    }
+
+    private Decision afterCritique(AgentStep step) {
+        if (step.observationSummary().startsWith("CRITIQUE:PASS;")) {
+            return Decision.terminal(Action.FINISH, "COMPLETED");
+        }
+        if (step.observationSummary().startsWith("CRITIQUE:RETRIEVE;")) {
+            return Decision.action(Action.RETRIEVE);
+        }
+        if (step.observationSummary().startsWith("CRITIQUE:EXPAND_WINDOW;")) {
+            return Decision.action(Action.EXPAND_WINDOW);
+        }
+        return Decision.terminal(Action.REFUSE, "INVALID_CRITIQUE");
     }
 }

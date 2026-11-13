@@ -487,3 +487,40 @@ T8 在既有有界动作图最前面加入一个真实 `PLAN` Step。一个窄 `
 T8 退出门通过：两个目标可产生并持久化不同检索参数，模型只能提出受限候选，Java 继续控制权限、
 预算、Schema、状态和终止。Planner 策略版本为 `agent-policy-v2-planner`；Agent 默认关闭，进入 T9 前
 不把该中间策略作为可晋级候选。
+
+## 15. T9 Critic 定向修复闭环（2026-11-13）
+
+T9 复用 T8 的同一个 `AgentDecisionPort/LanguageModelAgentDecisionAdapter` 增加 `CRITIQUE`，最终策略
+冻结为 `agent-policy-v3-loop`：
+
+```text
+PLAN -> RETRIEVE -> GENERATE_AND_VERIFY -> CRITIQUE
+  PASS -------------------------------------------> FINISH
+  RETRIEVE|EXPAND_WINDOW -> GENERATE_AND_VERIFY -> FINISH|REFUSE
+```
+
+- 初检有任意证据即先生成，不再用 `EVIDENCE:single` 固定触发扩窗。Critic 只能返回 `PASS`、带 query
+  的 `RETRIEVE` 或带合法时间范围的 `EXPAND_WINDOW`；未知字段、缺参数、倒置窗口和带缺口的 PASS
+  均由严格 Schema/Java 拒绝。
+- Critic 输入只有目标、PLAN expectedFacts、已持久化且通过证据门的 Claim、最多 12 条各 300 字符的
+  owner/job 范围内证据摘要；没有原始模型响应、Prompt、完整转录或 chain-of-thought。
+- PASS 只允许首答状态为 ANSWERED，不能放行 Evidence Gate 已拒绝的答案。补检使用 Critic query；扩窗
+  先检查视频 duration，再使用 Critic 的精确 `[startMs,endMs]`。原证据与新增 Segment 按 Step 顺序
+  累积、去重并保持 12 条上限。
+- 唯一一次重答通过现有 Answer application service 的 `RepairContext` 携带首个已验证答案、
+  missingRequirements、unsupportedClaims 和累积证据，仍由同一 `AnswerEvidenceGate` 发布或拒答。
+  第二次拒答后直接终止，不创建第三次生成。
+- `AGENT_CRITIQUE/agent-critic-v1` 与 PLAN 一样写入现有 `model_call`；执行限制升级为
+  `m6-limits-v2`。正常路径 4 个 Step/3 次 LLM，修复路径恰好 6 个 Step/4 次 LLM；第 6 Step 后的
+  FINISH/REFUSE 是无调用终止，不会被误判为第 7 Step。
+- 定向测试覆盖 PASS、补检、精确扩窗、重答 Prompt、二次拒答、非法 Critic、预算终止和第 6 Step
+  终止。隔离 MySQL 上 `JdbcAgentStoreIT` 4/4、`AnswerPersistenceAdapterIT` 1/1 通过，PLAN/Critic
+  调用均可按 Run、operation、Prompt 版本、Token、价格状态回放。
+- 第一次干净快速门 477 项功能测试全通过，但新增分支使行覆盖率为 79%，未达到 80% 硬门，因此停止；
+  补齐 Critic 非法 PASS/不完整补检/倒置窗口测试后重新执行 `server\mvnw.cmd clean test`：478 项通过、
+  0 failure/error、1 项既有 FFmpeg 条件跳过，JaCoCo 80% 与 ArchUnit 均通过。没有调整阈值、排除类
+  或增加 suppression。
+
+T9 退出门通过：Critic 缺口确实改变下一 Tool 的名称或参数，新增证据和缺口进入第二次 Prompt；所有
+动作仍由 Java 白名单、owner、预算、CAS 和 Evidence Gate 控制。Agent 仍默认关闭，可以进入 T10
+完整回放与 A/B；这不代表 M5/T4 的效果缺口已消失。

@@ -34,7 +34,7 @@ import java.util.regex.Pattern;
 
 public final class AgentApplicationService {
 
-    public static final String POLICY_VERSION = "agent-policy-v2-planner";
+    public static final String POLICY_VERSION = "agent-policy-v3-loop";
     private static final Pattern IDEMPOTENCY_KEY = Pattern.compile("[A-Za-z0-9._:-]{1,128}");
     private static final Pattern ANSWER_REFERENCE = Pattern.compile(
             "answer:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
@@ -347,19 +347,21 @@ public final class AgentApplicationService {
         AgentRun run = trace.run();
         if (decision.schemaVersion() != AgentPolicy.SCHEMA_VERSION) return "INVALID_ACTION_SCHEMA";
         if (!store.ownsReadyJob(run.ownerId(), run.jobId())) return "OWNER_OR_JOB_REJECTED";
-        if (!now.get().isBefore(run.budget().deadlineAt())) return "DEADLINE_EXCEEDED";
-        if (run.stepCount() >= run.budget().maxSteps()) return "STEP_BUDGET_EXHAUSTED";
-        if (run.inputTokens() >= run.budget().maxInputTokens()) return "INPUT_TOKEN_BUDGET_EXHAUSTED";
-        if (run.outputTokens() >= run.budget().maxOutputTokens()) return "OUTPUT_TOKEN_BUDGET_EXHAUSTED";
-        if (run.knownCost().compareTo(run.budget().maxKnownCost()) >= 0) return "COST_BUDGET_EXHAUSTED";
-        if (run.unknownCostCalls() > 0 && !isTerminal(decision.action())) return "UNKNOWN_COST";
+        if (!isTerminal(decision.action())) {
+            if (!now.get().isBefore(run.budget().deadlineAt())) return "DEADLINE_EXCEEDED";
+            if (run.stepCount() >= run.budget().maxSteps()) return "STEP_BUDGET_EXHAUSTED";
+            if (run.inputTokens() >= run.budget().maxInputTokens()) return "INPUT_TOKEN_BUDGET_EXHAUSTED";
+            if (run.outputTokens() >= run.budget().maxOutputTokens()) return "OUTPUT_TOKEN_BUDGET_EXHAUSTED";
+            if (run.knownCost().compareTo(run.budget().maxKnownCost()) >= 0) return "COST_BUDGET_EXHAUSTED";
+            if (run.unknownCostCalls() > 0) return "UNKNOWN_COST";
+        }
         if (decision.action() == AgentPolicy.Action.GENERATE_AND_VERIFY
                 && run.answerAttemptCount() >= run.budget().maxAnswerAttempts()) {
             return "ANSWER_ATTEMPT_BUDGET_EXHAUSTED";
         }
         if (decision.action() == AgentPolicy.Action.RETRIEVE) {
             try {
-                plannedQuery(trace.steps());
+                retrievalQuery(trace.steps());
             } catch (RuntimeException exception) {
                 return "INVALID_ACTION_PARAMETERS";
             }
@@ -374,6 +376,7 @@ public final class AgentApplicationService {
             case RETRIEVE -> retrieve(owner, run, trace.steps());
             case EXPAND_WINDOW -> expand(owner, run, trace.steps());
             case GENERATE_AND_VERIFY -> answer(owner, run, trace.steps());
+            case CRITIQUE -> critique(owner, run, trace.steps());
             default -> throw new AgentException(AgentException.Reason.INVALID_REQUEST);
         };
     }
@@ -385,7 +388,7 @@ public final class AgentApplicationService {
         Instant startedAt = now.get();
         store.startDecisionModelCall(new AgentStore.DecisionModelCallStart(
                 modelCallId, run.jobId(), run.runId(), run.evaluationRunId(), run.evaluationCaseId(),
-                "agent-plan-" + run.runId() + "-" + (run.stepCount() + 1),
+                "AGENT_PLAN", "agent-plan-" + run.runId() + "-" + (run.stepCount() + 1),
                 "SiliconFlow", run.versions().modelVersion(),
                 AgentDecisionPort.PLANNER_PROMPT_VERSION, fingerprint, startedAt));
         AgentDecisionPort.PlanResponse response;
@@ -397,7 +400,7 @@ public final class AgentApplicationService {
         } catch (RuntimeException exception) {
             Instant failedAt = now.get();
             boolean unknown = hasUnknownOutcome(exception);
-            store.failDecisionModelCall(modelCallId,
+            store.failDecisionModelCall(modelCallId, "AGENT_PLAN",
                     unknown ? "UNKNOWN_OUTCOME" : "FAILED",
                     exception instanceof AgentDecisionPort.InvalidDecisionException
                             ? "INVALID_OUTPUT" : "PROVIDER",
@@ -408,7 +411,7 @@ public final class AgentApplicationService {
         }
         Instant completedAt = now.get();
         store.completeDecisionModelCall(new AgentStore.DecisionModelCallCompletion(
-                modelCallId, run.versions().modelVersion(),
+                modelCallId, "AGENT_PLAN", run.versions().modelVersion(),
                 response.usage().inputTokens(), response.usage().outputTokens(),
                 Math.max(0, Duration.between(startedAt, completedAt).toMillis()),
                 startedAt, completedAt));
@@ -421,7 +424,7 @@ public final class AgentApplicationService {
     }
 
     private ActionResult retrieve(OwnerContext owner, AgentRun run, List<AgentStep> steps) {
-        String query = plannedQuery(steps);
+        String query = retrievalQuery(steps);
         var result = run.evaluationRunId() == null
                 ? retrieval.retrieve(owner, run.jobId(), query, 5, run.runId())
                 : retrieval.retrieve(owner, run.jobId(), query, 5,
@@ -434,6 +437,73 @@ public final class AgentApplicationService {
                         .flatMap(hit -> hit.segmentIds().stream()).toList()));
     }
 
+    private ActionResult critique(OwnerContext owner, AgentRun run, List<AgentStep> steps) {
+        AgentStep answerStep = steps.stream().filter(step -> "GENERATE_AND_VERIFY".equals(step.action()))
+                .reduce((first, second) -> second)
+                .orElseThrow(() -> new AgentException(AgentException.Reason.INVALID_REQUEST));
+        UUID answerId = answerId(answerStep.resultReference());
+        AnswerStore.StoredAnswer answer = answers.get(owner, run.jobId(), answerId);
+        List<UUID> selectedSegments = selectedSegments(steps);
+        List<String> evidence = answers.evidenceSummaries(owner, run.jobId(), selectedSegments);
+        List<String> expectedFacts = expectedFacts(steps);
+        List<String> claims = answer.claims().stream().map(AnswerStore.StoredClaim::text).toList();
+        String fingerprint = sha256(AgentDecisionPort.CRITIC_PROMPT_VERSION + "|" + run.goal()
+                + "|" + answerId + "|" + expectedFacts + "|" + evidence);
+        UUID modelCallId = ids.get();
+        Instant startedAt = now.get();
+        store.startDecisionModelCall(new AgentStore.DecisionModelCallStart(
+                modelCallId, run.jobId(), run.runId(), run.evaluationRunId(), run.evaluationCaseId(),
+                "AGENT_CRITIQUE", "agent-critique-" + run.runId(), "SiliconFlow",
+                run.versions().modelVersion(), AgentDecisionPort.CRITIC_PROMPT_VERSION,
+                fingerprint, startedAt));
+        AgentDecisionPort.CritiqueResponse response;
+        try {
+            response = decisions.critique(new AgentDecisionPort.CritiqueRequest(
+                    run.jobId(), run.runId(), run.evaluationRunId(), run.evaluationCaseId(),
+                    run.goal(), expectedFacts, claims, evidence, run.versions().modelVersion(),
+                    AgentDecisionPort.CRITIC_PROMPT_VERSION, fingerprint));
+        } catch (RuntimeException exception) {
+            Instant failedAt = now.get();
+            boolean unknown = hasUnknownOutcome(exception);
+            store.failDecisionModelCall(modelCallId, "AGENT_CRITIQUE",
+                    unknown ? "UNKNOWN_OUTCOME" : "FAILED",
+                    exception instanceof AgentDecisionPort.InvalidDecisionException
+                            ? "INVALID_OUTPUT" : "PROVIDER",
+                    exception instanceof AgentDecisionPort.InvalidDecisionException
+                            ? "INVALID_DECISION" : "MODEL_CALL_FAILED", failedAt);
+            throw exception;
+        }
+        Instant completedAt = now.get();
+        store.completeDecisionModelCall(new AgentStore.DecisionModelCallCompletion(
+                modelCallId, "AGENT_CRITIQUE", run.versions().modelVersion(),
+                response.usage().inputTokens(), response.usage().outputTokens(),
+                Math.max(0, Duration.between(startedAt, completedAt).toMillis()),
+                startedAt, completedAt));
+        if (response.critique().action() == AgentDecisionPort.CritiqueAction.PASS
+                && !"ANSWERED".equals(answer.status())) {
+            throw new AgentDecisionPort.InvalidDecisionException(
+                    new IllegalArgumentException("critic cannot pass a refused answer"));
+        }
+        return critiqueResult(response.critique());
+    }
+
+    private ActionResult critiqueResult(AgentDecisionPort.Critique critique) {
+        String missing = encodeLines(critique.missingRequirements());
+        String unsupported = encodeLines(critique.unsupportedClaims());
+        String observation = "CRITIQUE:" + critique.action() + ";missing:" + missing
+                + ";unsupported:" + unsupported;
+        String reference = switch (critique.action()) {
+            case PASS -> "critique:v1:PASS";
+            case RETRIEVE -> "critique:v1:RETRIEVE:" + critique.query();
+            case EXPAND_WINDOW -> "critique:v1:EXPAND_WINDOW:" + critique.startMs() + ":" + critique.endMs();
+        };
+        if (observation.length() > 1_000 || reference.length() > 500) {
+            throw new AgentDecisionPort.InvalidDecisionException(
+                    new IllegalArgumentException("critic result exceeds persistence limit"));
+        }
+        return new ActionResult(observation, reference);
+    }
+
     private String planReference(AgentDecisionPort.Plan plan) {
         String reference = "plan:v1:" + plan.action() + ":" + plan.query();
         if (reference.length() > 500) throw new AgentDecisionPort.InvalidDecisionException(
@@ -441,7 +511,20 @@ public final class AgentApplicationService {
         return reference;
     }
 
-    private String plannedQuery(List<AgentStep> steps) {
+    private String retrievalQuery(List<AgentStep> steps) {
+        String repair = steps.stream().filter(step -> "CRITIQUE".equals(step.action()))
+                .map(AgentStep::resultReference)
+                .filter(reference -> reference != null && reference.startsWith("critique:v1:RETRIEVE:"))
+                .reduce((first, second) -> second).orElse(null);
+        if (repair != null) {
+            String query = repair.substring("critique:v1:RETRIEVE:".length());
+            try {
+                return new AgentDecisionPort.Plan(AgentDecisionPort.SCHEMA_VERSION,
+                        AgentDecisionPort.PlanAction.RETRIEVE, query, List.of("critic-repair")).query();
+            } catch (IllegalArgumentException exception) {
+                throw new AgentException(AgentException.Reason.INVALID_REQUEST, exception);
+            }
+        }
         String reference = steps.stream().filter(step -> "PLAN".equals(step.action()))
                 .map(AgentStep::resultReference).reduce((first, second) -> second)
                 .orElseThrow(() -> new AgentException(AgentException.Reason.INVALID_REQUEST));
@@ -460,6 +543,23 @@ public final class AgentApplicationService {
 
     private ActionResult expand(OwnerContext owner, AgentRun run, List<AgentStep> steps) {
         if (steps.isEmpty()) throw new AgentException(AgentException.Reason.INVALID_REQUEST);
+        AgentStep last = steps.getLast();
+        if ("CRITIQUE".equals(last.action())) {
+            String[] repair = last.resultReference().split(":", -1);
+            if (repair.length != 5 || !"critique".equals(repair[0]) || !"v1".equals(repair[1])
+                    || !"EXPAND_WINDOW".equals(repair[2])) {
+                throw new AgentException(AgentException.Reason.INVALID_REQUEST);
+            }
+            long from = Long.parseLong(repair[3]);
+            long to = Long.parseLong(repair[4]);
+            long duration = contexts.get(owner, run.jobId()).durationMs();
+            if (from < 0 || to <= from || to > duration) {
+                throw new AgentException(AgentException.Reason.INVALID_REQUEST);
+            }
+            var result = contexts.segments(owner, run.jobId(), null, 20, from, to);
+            return new ActionResult("WINDOW:" + result.data().size(), evidenceReference(
+                    from, to, result.data().stream().map(segment -> segment.segmentId()).toList()));
+        }
         String[] window = steps.getLast().resultReference().split(";", 2)[0].split(":");
         if (window.length != 3 || !"window".equals(window[0])) {
             throw new AgentException(AgentException.Reason.INVALID_REQUEST);
@@ -474,18 +574,43 @@ public final class AgentApplicationService {
 
     private ActionResult answer(OwnerContext owner, AgentRun run, List<AgentStep> steps) {
         String key = "agent-" + run.runId() + "-answer-" + (run.answerAttemptCount() + 1);
+        List<UUID> segmentIds = selectedSegments(steps);
+        var selection = new AnswerApplicationService.EvidenceSelection(
+                segmentIds, List.of(),
+                run.versions().embeddingVersion(), run.versions().retrievalFormulaVersion(),
+                VideoChunkBuilder.CHUNK_VERSION);
+        AnswerApplicationService.RepairContext repair = run.answerAttemptCount() == 0
+                ? null : repairContext(owner, run, steps);
+        AnswerStore.StoredAnswer answer = run.evaluationRunId() == null
+                ? repair == null
+                        ? answers.askWithEvidence(owner, run.jobId(), run.goal(), key, selection, run.runId())
+                        : answers.askWithEvidence(owner, run.jobId(), run.goal(), key, selection, repair, run.runId())
+                : repair == null
+                        ? answers.askWithEvidence(owner, run.jobId(), run.goal(), key, selection,
+                                run.evaluationRunId(), run.evaluationCaseId(), run.runId())
+                        : answers.askWithEvidence(owner, run.jobId(), run.goal(), key, selection, repair,
+                                run.evaluationRunId(), run.evaluationCaseId(), run.runId());
+        return new ActionResult("ANSWER:" + answer.status(), "answer:" + answer.answerId());
+    }
+
+    private List<UUID> selectedSegments(List<AgentStep> steps) {
         LinkedHashSet<UUID> segmentIds = new LinkedHashSet<>();
         steps.stream().map(AgentStep::resultReference).filter(java.util.Objects::nonNull)
                 .forEach(reference -> segmentIds.addAll(segmentIds(reference)));
-        var selection = new AnswerApplicationService.EvidenceSelection(
-                segmentIds.stream().limit(12).toList(), List.of(),
-                run.versions().embeddingVersion(), run.versions().retrievalFormulaVersion(),
-                VideoChunkBuilder.CHUNK_VERSION);
-        AnswerStore.StoredAnswer answer = run.evaluationRunId() == null
-                ? answers.askWithEvidence(owner, run.jobId(), run.goal(), key, selection, run.runId())
-                : answers.askWithEvidence(owner, run.jobId(), run.goal(), key, selection,
-                        run.evaluationRunId(), run.evaluationCaseId(), run.runId());
-        return new ActionResult("ANSWER:" + answer.status(), "answer:" + answer.answerId());
+        return segmentIds.stream().limit(12).toList();
+    }
+
+    private AnswerApplicationService.RepairContext repairContext(
+            OwnerContext owner, AgentRun run, List<AgentStep> steps) {
+        AgentStep first = steps.stream().filter(step -> "GENERATE_AND_VERIFY".equals(step.action()))
+                .findFirst().orElseThrow(() -> new AgentException(AgentException.Reason.INVALID_REQUEST));
+        AnswerStore.StoredAnswer answer = answers.get(owner, run.jobId(), answerId(first.resultReference()));
+        AgentStep critique = steps.stream().filter(step -> "CRITIQUE".equals(step.action()))
+                .reduce((a, b) -> b).orElseThrow(() -> new AgentException(AgentException.Reason.INVALID_REQUEST));
+        return new AnswerApplicationService.RepairContext(
+                answer.claims().stream().map(AnswerStore.StoredClaim::text).toList(),
+                decodeObservation(critique.observationSummary(), ";missing:", ";unsupported:"),
+                decodeObservation(critique.observationSummary(), ";unsupported:", null));
     }
 
     private String evidenceReference(long from, long to, List<UUID> segmentIds) {
@@ -506,12 +631,47 @@ public final class AgentApplicationService {
         }
     }
 
+    private UUID answerId(String reference) {
+        if (reference == null || !ANSWER_REFERENCE.matcher(reference).matches()) {
+            throw new AgentException(AgentException.Reason.INVALID_REQUEST);
+        }
+        return UUID.fromString(reference.substring("answer:".length()));
+    }
+
+    private List<String> expectedFacts(List<AgentStep> steps) {
+        AgentStep plan = steps.stream().filter(step -> "PLAN".equals(step.action()))
+                .findFirst().orElseThrow(() -> new AgentException(AgentException.Reason.INVALID_REQUEST));
+        return decodeObservation(plan.observationSummary(), ";expected:", null);
+    }
+
+    private String encodeLines(List<String> values) {
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(
+                String.join("\n", values).getBytes(StandardCharsets.UTF_8));
+    }
+
+    private List<String> decodeObservation(String observation, String marker, String endMarker) {
+        int start = observation == null ? -1 : observation.indexOf(marker);
+        if (start < 0) throw new AgentException(AgentException.Reason.INVALID_REQUEST);
+        start += marker.length();
+        int end = endMarker == null ? observation.length() : observation.indexOf(endMarker, start);
+        if (end < start) throw new AgentException(AgentException.Reason.INVALID_REQUEST);
+        try {
+            String decoded = new String(Base64.getUrlDecoder().decode(
+                    observation.substring(start, end)), StandardCharsets.UTF_8);
+            return decoded.isBlank() ? List.of() : List.of(decoded.split("\\n"));
+        } catch (IllegalArgumentException exception) {
+            throw new AgentException(AgentException.Reason.INVALID_REQUEST, exception);
+        }
+    }
+
     private String actionInput(AgentRun run, AgentTrace trace, AgentPolicy.Action action) {
         return switch (action) {
             case PLAN -> run.goal();
-            case RETRIEVE -> plannedQuery(trace.steps());
+            case RETRIEVE -> retrievalQuery(trace.steps());
             case EXPAND_WINDOW -> trace.steps().isEmpty() ? "" : trace.steps().getLast().resultReference();
             case GENERATE_AND_VERIFY -> trace.steps().stream().map(AgentStep::resultReference)
+                    .filter(java.util.Objects::nonNull).collect(java.util.stream.Collectors.joining("|"));
+            case CRITIQUE -> trace.steps().stream().map(AgentStep::resultReference)
                     .filter(java.util.Objects::nonNull).collect(java.util.stream.Collectors.joining("|"));
             default -> action.name();
         };

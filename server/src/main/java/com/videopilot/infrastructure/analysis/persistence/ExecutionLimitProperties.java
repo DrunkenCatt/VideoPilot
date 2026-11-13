@@ -9,7 +9,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties("videopilot.analysis.limits")
 public class ExecutionLimitProperties {
 
-    private String version = "m6-limits-v1";
+    private String version = "m6-limits-v2";
     private Duration jobDeadline = Duration.ofHours(6);
     private Duration providerWait = Duration.ofMillis(250);
     private int maxAsrCalls = 240;
@@ -17,6 +17,7 @@ public class ExecutionLimitProperties {
     private int maxEmbeddingCalls = 1_000;
     private int maxAnswerCalls = 20;
     private int maxAgentPlanCalls = 2;
+    private int maxAgentCritiqueCalls = 2;
     private long maxAsrInputUnits = 5_400_000;
     private long maxAsrOutputUnits = 108_000;
     private long maxOcrInputUnits = 21_600_000_000L;
@@ -27,6 +28,8 @@ public class ExecutionLimitProperties {
     private long maxAnswerOutputUnits = 24_000;
     private long maxAgentPlanInputUnits = 10_000;
     private long maxAgentPlanOutputUnits = 2_000;
+    private long maxAgentCritiqueInputUnits = 20_000;
+    private long maxAgentCritiqueOutputUnits = 2_000;
     private BigDecimal maxKnownCost = new BigDecimal("10.00");
 
     public ExecutionLimits toLimits() {
@@ -38,17 +41,20 @@ public class ExecutionLimitProperties {
                 "OCR", maxOcrCalls,
                 "EMBEDDING", maxEmbeddingCalls,
                 "ANSWER", maxAnswerCalls,
-                "AGENT_PLAN", maxAgentPlanCalls), Map.of(
+                "AGENT_PLAN", maxAgentPlanCalls,
+                "AGENT_CRITIQUE", maxAgentCritiqueCalls), Map.of(
                 "ASR", maxAsrInputUnits,
                 "OCR", maxOcrInputUnits,
                 "EMBEDDING", maxEmbeddingInputUnits,
                 "ANSWER", maxAnswerInputUnits,
-                "AGENT_PLAN", maxAgentPlanInputUnits), Map.of(
+                "AGENT_PLAN", maxAgentPlanInputUnits,
+                "AGENT_CRITIQUE", maxAgentCritiqueInputUnits), Map.of(
                 "ASR", maxAsrOutputUnits,
                 "OCR", maxOcrOutputUnits,
                 "EMBEDDING", maxEmbeddingOutputUnits,
                 "ANSWER", maxAnswerOutputUnits,
-                "AGENT_PLAN", maxAgentPlanOutputUnits), maxKnownCost);
+                "AGENT_PLAN", maxAgentPlanOutputUnits,
+                "AGENT_CRITIQUE", maxAgentCritiqueOutputUnits), maxKnownCost);
     }
 
     public String getVersion() { return version; }
@@ -67,6 +73,8 @@ public class ExecutionLimitProperties {
     public void setMaxAnswerCalls(int maxAnswerCalls) { this.maxAnswerCalls = maxAnswerCalls; }
     public int getMaxAgentPlanCalls() { return maxAgentPlanCalls; }
     public void setMaxAgentPlanCalls(int value) { this.maxAgentPlanCalls = value; }
+    public int getMaxAgentCritiqueCalls() { return maxAgentCritiqueCalls; }
+    public void setMaxAgentCritiqueCalls(int value) { this.maxAgentCritiqueCalls = value; }
     public long getMaxAsrInputUnits() { return maxAsrInputUnits; }
     public void setMaxAsrInputUnits(long value) { this.maxAsrInputUnits = value; }
     public long getMaxAsrOutputUnits() { return maxAsrOutputUnits; }
@@ -87,6 +95,10 @@ public class ExecutionLimitProperties {
     public void setMaxAgentPlanInputUnits(long value) { this.maxAgentPlanInputUnits = value; }
     public long getMaxAgentPlanOutputUnits() { return maxAgentPlanOutputUnits; }
     public void setMaxAgentPlanOutputUnits(long value) { this.maxAgentPlanOutputUnits = value; }
+    public long getMaxAgentCritiqueInputUnits() { return maxAgentCritiqueInputUnits; }
+    public void setMaxAgentCritiqueInputUnits(long value) { this.maxAgentCritiqueInputUnits = value; }
+    public long getMaxAgentCritiqueOutputUnits() { return maxAgentCritiqueOutputUnits; }
+    public void setMaxAgentCritiqueOutputUnits(long value) { this.maxAgentCritiqueOutputUnits = value; }
     public BigDecimal getMaxKnownCost() { return maxKnownCost; }
     public void setMaxKnownCost(BigDecimal maxKnownCost) { this.maxKnownCost = maxKnownCost; }
 }

@@ -56,7 +56,8 @@ public interface AgentStore {
     }
 
     default void failDecisionModelCall(
-            UUID modelCallId, String status, String category, String code, Instant completedAt) {
+            UUID modelCallId, String operation, String status, String category, String code,
+            Instant completedAt) {
         throw new UnsupportedOperationException("decision model audit is not configured");
     }
 
@@ -68,10 +69,10 @@ public interface AgentStore {
 
     record DecisionModelCallStart(
             UUID modelCallId, UUID jobId, UUID runId, UUID evaluationRunId,
-            String evaluationCaseId, String requestId, String provider, String modelVersion,
+            String evaluationCaseId, String operation, String requestId, String provider, String modelVersion,
             String promptVersion, String inputFingerprint, Instant startedAt) { }
 
     record DecisionModelCallCompletion(
-            UUID modelCallId, String modelVersion, long inputTokens, long outputTokens,
+            UUID modelCallId, String operation, String modelVersion, long inputTokens, long outputTokens,
             long latencyMs, Instant startedAt, Instant completedAt) { }
 }

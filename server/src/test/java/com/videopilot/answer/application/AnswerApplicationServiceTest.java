@@ -232,6 +232,32 @@ class AnswerApplicationServiceTest {
     }
 
     @Test
+    void carriesVerifiedFirstAnswerAndCriticGapsIntoTheRepairPrompt() {
+        var selection = new AnswerApplicationService.EvidenceSelection(
+                List.of(segmentId), List.of(), "embedding-v1",
+                RetrievalApplicationService.FORMULA_VERSION, "chunk-5m-v1");
+        var repair = new AnswerApplicationService.RepairContext(
+                List.of("String 是字符串类型"), List.of("补充使用场景"), List.of("用途表述过宽"));
+        when(store.loadEvidence(any(), eq(jobId), eq(Set.of()), eq(Set.of(segmentId))))
+                .thenReturn(List.of(new AnswerEvidenceGate.EvidenceSource(
+                        segmentId + "#ASR", chunkId, segmentId, 1, 10_000, 20_000,
+                        "ASR", "String 可以用于缓存计数器。", true)));
+        when(model.generate(any())).thenReturn(new LanguageModelPort.Response(
+                "{\"answerable\":false,\"claims\":[]}", new LanguageModelPort.Usage(10, 5)));
+
+        service.askWithEvidence(owner, jobId, "String 有什么用途？", "agent-repair",
+                selection, repair, UUID.randomUUID());
+
+        ArgumentCaptor<LanguageModelPort.Request> request = ArgumentCaptor.forClass(LanguageModelPort.Request.class);
+        verify(model).generate(request.capture());
+        assertThat(request.getValue().prompt())
+                .contains("PREVIOUS_VERIFIED_ANSWER", "String 是字符串类型")
+                .contains("MISSING_REQUIREMENTS", "补充使用场景")
+                .contains("UNSUPPORTED_CLAIMS", "用途表述过宽")
+                .contains("String 可以用于缓存计数器");
+    }
+
+    @Test
     void instructsTheModelToCopyEvidenceIdsAndVerbatimQuotesForEveryQuestionPart() {
         when(retrieval.retrieve(owner, jobId, "Hash 和 List 有什么特点？", 5))
                 .thenReturn(result(List.of(hit(.85))));

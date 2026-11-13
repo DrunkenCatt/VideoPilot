@@ -40,4 +40,33 @@ public final class LanguageModelAgentDecisionAdapter implements AgentDecisionPor
             throw new InvalidDecisionException(exception);
         }
     }
+
+    @Override
+    public CritiqueResponse critique(CritiqueRequest request) {
+        try {
+            String prompt = """
+                    Judge whether the verified answer covers the teaching-video goal and is semantically relevant.
+                    Return exactly one JSON object with schemaVersion, action, query, startMs, endMs,
+                    missingRequirements, unsupportedClaims. action must be PASS, RETRIEVE, or EXPAND_WINDOW.
+                    PASS must have empty repair fields. RETRIEVE needs one focused query and missing requirements.
+                    EXPAND_WINDOW needs a non-negative [startMs,endMs] and missing requirements.
+                    Do not judge citation existence or override the deterministic evidence gate.
+                    GOAL: %s
+                    EXPECTED_FACTS: %s
+                    VERIFIED_ANSWER_CLAIMS: %s
+                    EVIDENCE_SUMMARIES: %s
+                    """.formatted(request.goal(), json.writeValueAsString(request.expectedFacts()),
+                    json.writeValueAsString(request.answerClaims()),
+                    json.writeValueAsString(request.evidenceSummaries()));
+            LanguageModelPort.Response response = model.generate(
+                    new LanguageModelPort.Request(prompt, request.inputFingerprint()));
+            Critique critique = json.readerFor(Critique.class)
+                    .with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                    .readValue(response.candidateText());
+            return new CritiqueResponse(critique, new Usage(
+                    response.usage().inputTokens(), response.usage().outputTokens()));
+        } catch (RuntimeException | java.io.IOException exception) {
+            throw new InvalidDecisionException(exception);
+        }
+    }
 }

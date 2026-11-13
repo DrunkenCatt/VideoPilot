@@ -93,34 +93,34 @@ public final class AnswerApplicationService {
 
     public AnswerStore.StoredAnswer ask(
             OwnerContext owner, UUID jobId, String question, String idempotencyKey) {
-        return askInternal(owner, jobId, question, idempotencyKey, null, null, null, null);
+        return askInternal(owner, jobId, question, idempotencyKey, null, null, null, null, null);
     }
 
     public AnswerStore.StoredAnswer ask(
             OwnerContext owner, UUID jobId, String question, String idempotencyKey,
             UUID executionRunId) {
-        return askInternal(owner, jobId, question, idempotencyKey, null, null, executionRunId, null);
+        return askInternal(owner, jobId, question, idempotencyKey, null, null, executionRunId, null, null);
     }
 
     public AnswerStore.StoredAnswer ask(
             OwnerContext owner, UUID jobId, String question, String idempotencyKey,
             UUID evaluationRunId, String evaluationCaseId) {
         return askInternal(owner, jobId, question, idempotencyKey,
-                evaluationRunId, evaluationCaseId, null, null);
+                evaluationRunId, evaluationCaseId, null, null, null);
     }
 
     public AnswerStore.StoredAnswer ask(
             OwnerContext owner, UUID jobId, String question, String idempotencyKey,
             UUID evaluationRunId, String evaluationCaseId, UUID executionRunId) {
         return askInternal(owner, jobId, question, idempotencyKey,
-                evaluationRunId, evaluationCaseId, executionRunId, null);
+                evaluationRunId, evaluationCaseId, executionRunId, null, null);
     }
 
     public AnswerStore.StoredAnswer askWithEvidence(
             OwnerContext owner, UUID jobId, String question, String idempotencyKey,
             EvidenceSelection selection, UUID executionRunId) {
         return askInternal(owner, jobId, question, idempotencyKey,
-                null, null, executionRunId, selection);
+                null, null, executionRunId, selection, null);
     }
 
     public AnswerStore.StoredAnswer askWithEvidence(
@@ -128,13 +128,28 @@ public final class AnswerApplicationService {
             EvidenceSelection selection, UUID evaluationRunId, String evaluationCaseId,
             UUID executionRunId) {
         return askInternal(owner, jobId, question, idempotencyKey,
-                evaluationRunId, evaluationCaseId, executionRunId, selection);
+                evaluationRunId, evaluationCaseId, executionRunId, selection, null);
+    }
+
+    public AnswerStore.StoredAnswer askWithEvidence(
+            OwnerContext owner, UUID jobId, String question, String idempotencyKey,
+            EvidenceSelection selection, RepairContext repair, UUID executionRunId) {
+        return askInternal(owner, jobId, question, idempotencyKey,
+                null, null, executionRunId, selection, repair);
+    }
+
+    public AnswerStore.StoredAnswer askWithEvidence(
+            OwnerContext owner, UUID jobId, String question, String idempotencyKey,
+            EvidenceSelection selection, RepairContext repair, UUID evaluationRunId,
+            String evaluationCaseId, UUID executionRunId) {
+        return askInternal(owner, jobId, question, idempotencyKey,
+                evaluationRunId, evaluationCaseId, executionRunId, selection, repair);
     }
 
     private AnswerStore.StoredAnswer askInternal(
             OwnerContext owner, UUID jobId, String question, String idempotencyKey,
             UUID evaluationRunId, String evaluationCaseId, UUID executionRunId,
-            EvidenceSelection selection) {
+            EvidenceSelection selection, RepairContext repair) {
         String normalizedQuestion = normalizeQuestion(question);
         if (idempotencyKey == null || !IDEMPOTENCY_KEY.matcher(idempotencyKey).matches()) {
             throw new AnswerException(AnswerException.Reason.INVALID_REQUEST);
@@ -143,8 +158,9 @@ public final class AnswerApplicationService {
             throw new AnswerException(AnswerException.Reason.NOT_FOUND);
         }
         String selectionFingerprint = selection == null ? "dynamic-retrieval" : selection.fingerprintValue();
+        String repairFingerprint = repair == null ? "first-answer" : repair.fingerprintValue();
         String fingerprint = sha256(jobId + "|" + normalizedQuestion + "|" + promptVersion + "|"
-                + modelVersion + "|" + selectionFingerprint);
+                + modelVersion + "|" + selectionFingerprint + "|" + repairFingerprint);
         UUID answerId = ids.get();
         AnswerStore.ClaimResult claim = store.claim(owner.ownerId(), new AnswerStore.ClaimRequest(
                 answerId, jobId, idempotencyKey, fingerprint, normalizedQuestion,
@@ -209,7 +225,7 @@ public final class AnswerApplicationService {
                         source.startMs(), source.endMs(), source.channel(), source.text(),
                         exposedIds.contains(source.evidenceId())))
                 .toList();
-        String prompt = prompt(normalizedQuestion, exposed);
+        String prompt = prompt(normalizedQuestion, exposed, repair);
         try {
             if (budget != null) {
                 if (evaluationRunId == null) {
@@ -306,6 +322,19 @@ public final class AnswerApplicationService {
                 .orElseThrow(() -> new AnswerException(AnswerException.Reason.NOT_FOUND));
     }
 
+    public List<String> evidenceSummaries(OwnerContext owner, UUID jobId, List<UUID> segmentIds) {
+        if (segmentIds == null || segmentIds.isEmpty() || segmentIds.size() > MAX_PROMPT_EVIDENCE
+                || !store.ownsJob(owner.ownerId(), jobId)) {
+            throw new AnswerException(AnswerException.Reason.INVALID_REQUEST);
+        }
+        return store.loadEvidence(owner.ownerId(), jobId, Set.of(), new LinkedHashSet<>(segmentIds)).stream()
+                .filter(AnswerEvidenceGate.EvidenceSource::selectable)
+                .limit(MAX_PROMPT_EVIDENCE)
+                .map(source -> source.channel() + " " + source.startMs() + "-" + source.endMs()
+                        + ": " + source.text().substring(0, Math.min(300, source.text().length())))
+                .toList();
+    }
+
     public List<AnswerStore.StoredAnswer> list(OwnerContext owner, UUID jobId, Long cursor, int pageSize) {
         if (pageSize < 1 || pageSize > 100 || cursor != null && cursor < 1) {
             throw new AnswerException(AnswerException.Reason.INVALID_REQUEST);
@@ -345,7 +374,8 @@ public final class AnswerApplicationService {
                 0, 0, 0, List.of(), null, now.get()));
     }
 
-    private String prompt(String question, List<AnswerEvidenceGate.EvidenceSource> evidence) {
+    private String prompt(
+            String question, List<AnswerEvidenceGate.EvidenceSource> evidence, RepairContext repair) {
         List<PromptEvidence> selectable = evidence.stream()
                 .map(source -> new PromptEvidence(source.evidenceId(), source.startMs(), source.endMs(),
                         source.channel(), source.text().substring(
@@ -359,10 +389,19 @@ public final class AnswerApplicationService {
                     + "Every claim must be directly supported by its quotes. Maximum 8 claims and 4 citations per "
                     + "claim. If the evidence cannot support every requested part, return answerable=false and "
                     + "claims=[].\nQUESTION:\n"
-                    + question + "\nEVIDENCE:\n" + json.writeValueAsString(selectable);
+                    + question + repairPrompt(repair)
+                    + "\nEVIDENCE:\n" + json.writeValueAsString(selectable);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("answer prompt could not be encoded", exception);
         }
+    }
+
+    private String repairPrompt(RepairContext repair) throws JsonProcessingException {
+        if (repair == null) return "";
+        return "\nThis is the only repair attempt. Correct the previous verified answer using the new evidence."
+                + "\nPREVIOUS_VERIFIED_ANSWER:\n" + json.writeValueAsString(repair.previousClaims())
+                + "\nMISSING_REQUIREMENTS:\n" + json.writeValueAsString(repair.missingRequirements())
+                + "\nUNSUPPORTED_CLAIMS:\n" + json.writeValueAsString(repair.unsupportedClaims());
     }
 
     private String normalizeQuestion(String question) {
@@ -411,6 +450,25 @@ public final class AnswerApplicationService {
         private String fingerprintValue() {
             return segmentIds + "|" + degradedChannels + "|" + embeddingVersion + "|"
                     + retrievalFormulaVersion + "|" + chunkVersion;
+        }
+    }
+
+    public record RepairContext(
+            List<String> previousClaims,
+            List<String> missingRequirements,
+            List<String> unsupportedClaims) {
+        public RepairContext {
+            previousClaims = List.copyOf(previousClaims);
+            missingRequirements = List.copyOf(missingRequirements);
+            unsupportedClaims = List.copyOf(unsupportedClaims);
+            if (missingRequirements.isEmpty() || missingRequirements.size() > 3
+                    || unsupportedClaims.size() > 3) {
+                throw new IllegalArgumentException("repair context is invalid");
+            }
+        }
+
+        private String fingerprintValue() {
+            return previousClaims + "|" + missingRequirements + "|" + unsupportedClaims;
         }
     }
 

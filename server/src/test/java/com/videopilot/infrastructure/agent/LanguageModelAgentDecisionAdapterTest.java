@@ -59,6 +59,45 @@ class LanguageModelAgentDecisionAdapterTest {
                 """);
     }
 
+    @Test
+    void strictlyParsesPassRetrievalAndWindowCritiques() {
+        when(model.generate(any())).thenReturn(
+                new LanguageModelPort.Response("""
+                        {"schemaVersion":1,"action":"PASS","query":"","startMs":null,"endMs":null,
+                         "missingRequirements":[],"unsupportedClaims":[]}
+                        """, new LanguageModelPort.Usage(30, 5)),
+                new LanguageModelPort.Response("""
+                        {"schemaVersion":1,"action":"RETRIEVE","query":"String 使用场景",
+                         "startMs":null,"endMs":null,"missingRequirements":["使用场景"],
+                         "unsupportedClaims":[]}
+                        """, new LanguageModelPort.Usage(35, 8)),
+                new LanguageModelPort.Response("""
+                        {"schemaVersion":1,"action":"EXPAND_WINDOW","query":"","startMs":1000,
+                         "endMs":9000,"missingRequirements":["上下文"],"unsupportedClaims":["结论过宽"]}
+                        """, new LanguageModelPort.Usage(40, 10)));
+
+        assertThat(adapter.critique(critiqueRequest()).critique().action())
+                .isEqualTo(AgentDecisionPort.CritiqueAction.PASS);
+        assertThat(adapter.critique(critiqueRequest()).critique().query()).isEqualTo("String 使用场景");
+        assertThat(adapter.critique(critiqueRequest()).critique().startMs()).isEqualTo(1000);
+    }
+
+    @Test
+    void rejectsCritiquesThatTryToPassWithGapsOrRequestIncompleteRepairs() {
+        assertThatThrownBy(() -> new AgentDecisionPort.Critique(
+                1, AgentDecisionPort.CritiqueAction.PASS, "", null, null,
+                java.util.List.of("still missing"), java.util.List.of()))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new AgentDecisionPort.Critique(
+                1, AgentDecisionPort.CritiqueAction.RETRIEVE, "", null, null,
+                java.util.List.of("missing"), java.util.List.of()))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new AgentDecisionPort.Critique(
+                1, AgentDecisionPort.CritiqueAction.EXPAND_WINDOW, "", 9000L, 1000L,
+                java.util.List.of("context"), java.util.List.of()))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
     private void assertInvalid(String candidate) {
         when(model.generate(any())).thenReturn(new LanguageModelPort.Response(
                 candidate, new LanguageModelPort.Usage(10, 5)));
@@ -70,5 +109,13 @@ class LanguageModelAgentDecisionAdapterTest {
         return new AgentDecisionPort.PlanRequest(
                 UUID.randomUUID(), UUID.randomUUID(), null, null, goal,
                 "model-v1", "planner-v1", "a".repeat(64));
+    }
+
+    private AgentDecisionPort.CritiqueRequest critiqueRequest() {
+        return new AgentDecisionPort.CritiqueRequest(
+                UUID.randomUUID(), UUID.randomUUID(), null, null, "解释 String",
+                java.util.List.of("定义", "使用场景"), java.util.List.of("String 是字符串"),
+                java.util.List.of("ASR 0-1000: String 是字符串"), "model-v1", "critic-v1",
+                "b".repeat(64));
     }
 }

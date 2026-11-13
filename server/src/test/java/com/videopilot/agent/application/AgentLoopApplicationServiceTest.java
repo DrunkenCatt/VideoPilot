@@ -118,11 +118,109 @@ class AgentLoopApplicationServiceTest {
 
         assertThat(service.processNext()).isTrue();
 
-        verify(store).failDecisionModelCall(any(), eq("FAILED"), eq("INVALID_OUTPUT"),
+        verify(store).failDecisionModelCall(any(), eq("AGENT_PLAN"), eq("FAILED"), eq("INVALID_OUTPUT"),
                 eq("INVALID_DECISION"), eq(NOW));
         verify(store).failToolCallAndTerminate(any(), eq(runId), eq(2L), any(),
                 eq(ToolCallStatus.FAILED), eq("TOOL_EXECUTION_FAILED"), eq(NOW));
         verify(retrieval, never()).retrieve(any(), any(), any(), any(Integer.class));
+    }
+
+    @Test
+    void persistsCriticRepairAndUsesItsQueryForTheNextRetrieval() {
+        UUID segmentId = UUID.randomUUID();
+        AnswerStore.StoredAnswer first = answeredWithClaim("String 是字符串类型");
+        List<AgentStep> initial = List.of(
+                planStepWithExpected(),
+                new AgentStep(runId, 2, "RETRIEVE", "EVIDENCE:multiple",
+                        "window:1000:9000;segments:" + segmentId, NOW),
+                new AgentStep(runId, 3, "GENERATE_AND_VERIFY", "ANSWER:ANSWERED",
+                        "answer:" + first.answerId(), NOW));
+        AgentTrace critiqueTrace = trace(run(3, 1, NOW.plusSeconds(180)), initial);
+        claimed(critiqueTrace);
+        when(policy.next(critiqueTrace)).thenReturn(AgentPolicy.Decision.action(AgentPolicy.Action.CRITIQUE));
+        when(store.beginToolCall(any(), eq(runId), eq(1L), any())).thenReturn(2L);
+        when(answers.get(any(), eq(jobId), eq(first.answerId()))).thenReturn(first);
+        when(answers.evidenceSummaries(any(), eq(jobId), any()))
+                .thenReturn(List.of("ASR 1000-9000: String 是字符串"));
+        when(decisions.critique(any())).thenReturn(new AgentDecisionPort.CritiqueResponse(
+                new AgentDecisionPort.Critique(1, AgentDecisionPort.CritiqueAction.RETRIEVE,
+                        "String 的使用场景", null, null, List.of("使用场景"), List.of()),
+                new AgentDecisionPort.Usage(60, 15)));
+
+        assertThat(service.processNext()).isTrue();
+
+        ArgumentCaptor<AgentStep> critic = ArgumentCaptor.forClass(AgentStep.class);
+        verify(store).completeToolCallAndStep(any(), eq(runId), eq(2L), any(), critic.capture(), eq(false));
+        assertThat(critic.getValue().resultReference()).isEqualTo("critique:v1:RETRIEVE:String 的使用场景");
+
+        AgentStep criticStep = critic.getValue();
+        AgentTrace repairTrace = trace(run(4, 1, NOW.plusSeconds(180)),
+                java.util.stream.Stream.concat(initial.stream(), java.util.stream.Stream.of(criticStep)).toList());
+        org.mockito.Mockito.reset(store, policy, retrieval);
+        claimed(repairTrace);
+        when(policy.next(repairTrace)).thenReturn(AgentPolicy.Decision.action(AgentPolicy.Action.RETRIEVE));
+        when(store.beginToolCall(any(), eq(runId), eq(1L), any())).thenReturn(2L);
+        when(retrieval.retrieve(any(), eq(jobId), eq("String 的使用场景"), eq(5), eq(runId)))
+                .thenReturn(retrievalResult(2));
+
+        assertThat(service.processNext()).isTrue();
+        verify(retrieval).retrieve(any(), eq(jobId), eq("String 的使用场景"), eq(5), eq(runId));
+    }
+
+    @Test
+    void usesTheCriticsExactWindowForExpansion() {
+        AgentStep critic = new AgentStep(runId, 4, "CRITIQUE",
+                "CRITIQUE:EXPAND_WINDOW;missing:eA;unsupported:",
+                "critique:v1:EXPAND_WINDOW:1000:9000", NOW);
+        AgentTrace trace = trace(run(4, 1, NOW.plusSeconds(180)), List.of(critic));
+        claimed(trace);
+        when(policy.next(trace)).thenReturn(AgentPolicy.Decision.action(AgentPolicy.Action.EXPAND_WINDOW));
+        when(store.beginToolCall(any(), eq(runId), eq(1L), any())).thenReturn(2L);
+        VideoContext context = mock(VideoContext.class);
+        when(context.durationMs()).thenReturn(60_000L);
+        when(contexts.get(any(), eq(jobId))).thenReturn(context);
+        when(contexts.segments(any(), eq(jobId), eq(null), eq(20), eq(1000L), eq(9000L)))
+                .thenReturn(new VideoContextQueryApplicationService.SegmentPage(
+                        List.of(segment()), Optional.empty(), false));
+
+        assertThat(service.processNext()).isTrue();
+
+        verify(contexts).segments(any(), eq(jobId), eq(null), eq(20), eq(1000L), eq(9000L));
+    }
+
+    @Test
+    void carriesTheFirstAnswerAndCriticGapsIntoTheOnlyRepairAnswer() {
+        UUID firstId = UUID.randomUUID();
+        UUID segmentId = UUID.randomUUID();
+        String missing = java.util.Base64.getUrlEncoder().withoutPadding()
+                .encodeToString("使用场景".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        List<AgentStep> steps = List.of(
+                planStepWithExpected(),
+                new AgentStep(runId, 2, "RETRIEVE", "EVIDENCE:multiple",
+                        "window:1:2;segments:" + segmentId, NOW),
+                new AgentStep(runId, 3, "GENERATE_AND_VERIFY", "ANSWER:ANSWERED",
+                        "answer:" + firstId, NOW),
+                new AgentStep(runId, 4, "CRITIQUE", "CRITIQUE:RETRIEVE;missing:" + missing
+                        + ";unsupported:", "critique:v1:RETRIEVE:String 使用场景", NOW),
+                new AgentStep(runId, 5, "RETRIEVE", "EVIDENCE:multiple",
+                        "window:3:4;segments:" + UUID.randomUUID(), NOW));
+        AgentTrace trace = trace(run(5, 1, NOW.plusSeconds(180)), steps);
+        claimed(trace);
+        when(policy.next(trace)).thenReturn(
+                AgentPolicy.Decision.action(AgentPolicy.Action.GENERATE_AND_VERIFY));
+        when(store.beginToolCall(any(), eq(runId), eq(1L), any())).thenReturn(2L);
+        when(answers.get(any(), eq(jobId), eq(firstId))).thenReturn(answeredWithClaim(firstId, "String 是字符串"));
+        when(answers.askWithEvidence(any(), eq(jobId), any(), any(), any(),
+                any(AnswerApplicationService.RepairContext.class), eq(runId)))
+                .thenReturn(answer("ANSWERED", null));
+
+        assertThat(service.processNext()).isTrue();
+
+        ArgumentCaptor<AnswerApplicationService.RepairContext> repair =
+                ArgumentCaptor.forClass(AnswerApplicationService.RepairContext.class);
+        verify(answers).askWithEvidence(any(), eq(jobId), any(), any(), any(), repair.capture(), eq(runId));
+        assertThat(repair.getValue().previousClaims()).containsExactly("String 是字符串");
+        assertThat(repair.getValue().missingRequirements()).containsExactly("使用场景");
     }
 
     @Test
@@ -357,6 +455,20 @@ class AgentLoopApplicationServiceTest {
         verify(answers, never()).ask(any(), any(), any(), any(), any());
     }
 
+    @Test
+    void completesAfterTheSixthStepWithoutTreatingTheTerminalDecisionAsASeventhCall() {
+        AgentTrace trace = trace(run(6, 2, 12_000, 6_000, BigDecimal.ONE, 0, NOW), List.of());
+        claimed(trace);
+        when(policy.next(trace)).thenReturn(
+                AgentPolicy.Decision.terminal(AgentPolicy.Action.FINISH, "COMPLETED"));
+
+        assertThat(service.processNext()).isTrue();
+
+        verify(store).terminate(any(), eq(runId), eq(1L), eq(RunStatus.COMPLETED),
+                eq("COMPLETED"), eq(NOW));
+        verify(store, never()).beginToolCall(any(), any(), any(Long.class), any());
+    }
+
     private void claimed(AgentTrace trace) {
         when(store.claimNext(any(), any(), eq(NOW)))
                 .thenReturn(Optional.of(new ClaimedRun(ownerId, trace.run())));
@@ -414,6 +526,13 @@ class AgentLoopApplicationServiceTest {
                 "plan:v1:RETRIEVE:String 命令的定义和用途", NOW);
     }
 
+    private AgentStep planStepWithExpected() {
+        String facts = java.util.Base64.getUrlEncoder().withoutPadding()
+                .encodeToString("定义\n使用场景".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        return new AgentStep(runId, 1, "PLAN", "PLAN:RETRIEVE;facts:2;expected:" + facts,
+                "plan:v1:RETRIEVE:String 命令的定义和用途", NOW);
+    }
+
     private AgentVersions versions() {
         return new AgentVersions("policy-v1", "prompt-v1", "model-v1", "embedding-v1",
                 "formula-v1", "gate-v1", "limits-v1");
@@ -442,5 +561,16 @@ class AgentLoopApplicationServiceTest {
                 1, UUID.randomUUID(), status, "question", reason, List.of(),
                 "prompt-v1", "model-v1", "embedding-v1", "formula-v1", "chunk-v1",
                 List.of(), NOW);
+    }
+
+    private AnswerStore.StoredAnswer answeredWithClaim(String claim) {
+        return answeredWithClaim(UUID.randomUUID(), claim);
+    }
+
+    private AnswerStore.StoredAnswer answeredWithClaim(UUID answerId, String claim) {
+        return new AnswerStore.StoredAnswer(
+                1, answerId, "ANSWERED", "question", null, List.of(),
+                "prompt-v1", "model-v1", "embedding-v1", "formula-v1", "chunk-v1",
+                List.of(new AnswerStore.StoredClaim(UUID.randomUUID(), claim, List.of())), NOW);
     }
 }

@@ -309,13 +309,14 @@ public class JdbcAgentStore implements AgentStore {
                     output_artifact_ref, status, attempt, price_status,
                     evaluation_run_id, evaluation_case_id, started_at
                 ) VALUES (
-                    :callId,:jobId,:runId,:requestId,'AGENT_PLAN',:provider,
+                    :callId,:jobId,:runId,:requestId,:operation,:provider,
                     :model,:model,:promptVersion,:fingerprint,
                     :artifact,'STARTED',1,'UNAVAILABLE',
                     :evaluationRunId,:evaluationCaseId,:startedAt
                 )
                 """).param("callId", call.modelCallId().toString())
                 .param("jobId", call.jobId().toString()).param("runId", call.runId().toString())
+                .param("operation", call.operation())
                 .param("requestId", call.requestId()).param("provider", call.provider())
                 .param("model", call.modelVersion()).param("promptVersion", call.promptVersion())
                 .param("fingerprint", call.inputFingerprint())
@@ -337,24 +338,27 @@ public class JdbcAgentStore implements AgentStore {
                     estimated_cost=:cost, currency=:currency, price_version=:priceVersion,
                     price_status=:priceStatus, latency_ms=:latency,
                     completed_at=:completedAt, updated_at=:completedAt
-                WHERE model_call_id=:callId AND operation_type='AGENT_PLAN' AND status='STARTED'
+                WHERE model_call_id=:callId AND operation_type=:operation AND status='STARTED'
                 """).param("input", completion.inputTokens()).param("output", completion.outputTokens())
                 .param("cost", price.cost()).param("currency", price.currency())
                 .param("priceVersion", price.version())
                 .param("priceStatus", price.available() ? "AVAILABLE" : "UNAVAILABLE")
                 .param("latency", completion.latencyMs()).param("completedAt", completion.completedAt())
+                .param("operation", completion.operation())
                 .param("callId", completion.modelCallId().toString()).update();
         if (updated != 1) throw new AgentException(AgentException.Reason.CONFLICT);
     }
 
     @Override
     public void failDecisionModelCall(
-            UUID modelCallId, String status, String category, String code, Instant completedAt) {
+            UUID modelCallId, String operation, String status, String category, String code,
+            Instant completedAt) {
         int updated = jdbc.sql("""
                 UPDATE model_call SET status=:status, error_category=:category, error_code=:code,
                     completed_at=:completedAt, updated_at=:completedAt
-                WHERE model_call_id=:callId AND operation_type='AGENT_PLAN' AND status='STARTED'
+                WHERE model_call_id=:callId AND operation_type=:operation AND status='STARTED'
                 """).param("status", status).param("category", category).param("code", code)
+                .param("operation", operation)
                 .param("completedAt", completedAt).param("callId", modelCallId.toString()).update();
         if (updated != 1) throw new AgentException(AgentException.Reason.CONFLICT);
     }

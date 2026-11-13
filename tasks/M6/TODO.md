@@ -132,12 +132,12 @@ Answer；owner 隔离、预算和证据门不变；前端不重复目标 Answer�
 
 ## T9：用结构化 Critic 驱动一次定向修复与重答
 
-- [ ] 先写失败测试：首答完整时 `PASS -> FINISH`；缺事实时按 Critic query 补检；缺上下文时按 Critic window 扩窗；第二次仍不合格时稳定拒答且不进入第三次生成。
-- [ ] 复用 T8 的决策模型 Port 增加 `CRITIQUE` 请求；输入仅含目标、expectedFacts、已验证首答、引用摘要和证据摘要，不包含 chain-of-thought 或不必要的完整转录。
-- [ ] Critic 严格返回 `PASS` 或一个白名单修复动作；Java 校验 query/window 必须属于当前 owner/job、在视频时长内且预算允许，再执行一次补检或扩窗。
-- [ ] 第二次 `GENERATE_AND_VERIFY` 携带首答、missingRequirements、unsupportedClaims 和累积证据；最终仍由现有 `AnswerEvidenceGate` 发布或拒答，Critic 无权放行硬门失败。
-- [ ] 更新 RuleBased Policy 为版本化的有界动作图，删除只看 `EVIDENCE:single/multiple` 的伪动态分支；不增加递归、通用工作流引擎或第二个答案实现。
-- [ ] 完成正常/补检/扩窗/拒答、恢复、幂等、预算和 UNKNOWN 测试，更新 Trace 文档，运行后端快速门与相关集成门后独立提交。
+- [x] 先写失败测试：首答完整时 `PASS -> FINISH`；缺事实时按 Critic query 补检；缺上下文时按 Critic window 扩窗；第二次仍不合格时稳定拒答且不进入第三次生成。
+- [x] 复用 T8 的决策模型 Port 增加 `CRITIQUE` 请求；输入仅含目标、expectedFacts、已验证首答、引用摘要和证据摘要，不包含 chain-of-thought 或不必要的完整转录。
+- [x] Critic 严格返回 `PASS` 或一个白名单修复动作；Java 校验 query/window 必须属于当前 owner/job、在视频时长内且预算允许，再执行一次补检或扩窗。
+- [x] 第二次 `GENERATE_AND_VERIFY` 携带首答、missingRequirements、unsupportedClaims 和累积证据；最终仍由现有 `AnswerEvidenceGate` 发布或拒答，Critic 无权放行硬门失败。
+- [x] 更新 RuleBased Policy 为版本化的有界动作图，删除只看 `EVIDENCE:single/multiple` 的伪动态分支；不增加递归、通用工作流引擎或第二个答案实现。
+- [x] 完成正常/补检/扩窗/拒答、恢复、幂等、预算和 UNKNOWN 测试，更新 Trace 文档，运行后端快速门与相关集成门后独立提交。
 
 **依赖**：T8。
 

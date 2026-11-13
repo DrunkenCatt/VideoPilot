@@ -215,10 +215,10 @@ class JdbcAgentStoreIT {
         UUID modelCallId = UUID.randomUUID();
         String model = "deepseek-ai/DeepSeek-V4-Flash";
         store.startDecisionModelCall(new AgentStore.DecisionModelCallStart(
-                modelCallId, jobId, runId, null, null, "agent-plan-" + runId,
+                modelCallId, jobId, runId, null, null, "AGENT_PLAN", "agent-plan-" + runId,
                 "SiliconFlow", model, "agent-planner-v1", "7".repeat(64), now));
         store.completeDecisionModelCall(new AgentStore.DecisionModelCallCompletion(
-                modelCallId, model, 80, 20, 25, now, now.plusMillis(25)));
+                modelCallId, "AGENT_PLAN", model, 80, 20, 25, now, now.plusMillis(25)));
 
         PlannerAudit audit = jdbc.sql("""
                 SELECT operation_type, prompt_version, status, input_units, output_units,
@@ -233,6 +233,16 @@ class JdbcAgentStoreIT {
         assertThat(audit).isEqualTo(new PlannerAudit(
                 "AGENT_PLAN", "agent-planner-v1", "SUCCEEDED", 80, 20, "AVAILABLE",
                 runId.toString()));
+
+        UUID criticCallId = UUID.randomUUID();
+        store.startDecisionModelCall(new AgentStore.DecisionModelCallStart(
+                criticCallId, jobId, runId, null, null, "AGENT_CRITIQUE", "agent-critic-" + runId,
+                "SiliconFlow", model, "agent-critic-v1", "6".repeat(64), now));
+        store.completeDecisionModelCall(new AgentStore.DecisionModelCallCompletion(
+                criticCallId, "AGENT_CRITIQUE", model, 90, 15, 30, now, now.plusMillis(30)));
+        assertThat(jdbc.sql("SELECT operation_type FROM model_call WHERE model_call_id=:callId")
+                .param("callId", criticCallId.toString()).query(String.class).single())
+                .isEqualTo("AGENT_CRITIQUE");
     }
 
     @Test

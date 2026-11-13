@@ -41,13 +41,13 @@ class RuleBasedAgentPolicyTest {
     }
 
     @Test
-    void expandsOneHitBeforeAnswering() {
+    void generatesAfterAnyEvidenceAndAfterARequestedWindowRepair() {
         var afterRetrieval = trace(step("RETRIEVE", "EVIDENCE:single", "window:1000:9000"));
         var afterExpansion = trace(
                 step("RETRIEVE", "EVIDENCE:single", "window:1000:9000"),
                 step("EXPAND_WINDOW", "WINDOW:4", "window:0:39000"));
 
-        assertThat(policy.next(afterRetrieval).action()).isEqualTo(Action.EXPAND_WINDOW);
+        assertThat(policy.next(afterRetrieval).action()).isEqualTo(Action.GENERATE_AND_VERIFY);
         assertThat(policy.next(afterExpansion).action()).isEqualTo(Action.GENERATE_AND_VERIFY);
     }
 
@@ -71,17 +71,36 @@ class RuleBasedAgentPolicyTest {
     }
 
     @Test
-    void finishesOnlyAnAnsweredResultAndRejectsInvalidObservations() {
+    void critiquesTheFirstAnswerAndFinishesOnlyTheSecondAnsweredResult() {
         assertThat(policy.next(trace(step(
                 "GENERATE_AND_VERIFY", "ANSWER:ANSWERED", "answer:1"))).action())
+                .isEqualTo(Action.CRITIQUE);
+        assertThat(policy.next(trace(
+                step("GENERATE_AND_VERIFY", "ANSWER:ANSWERED", "answer:1"),
+                step("CRITIQUE", "CRITIQUE:RETRIEVE;missing:x;unsupported:", "critique:v1:RETRIEVE:q"),
+                step("RETRIEVE", "EVIDENCE:multiple", "window:1:2"),
+                step("GENERATE_AND_VERIFY", "ANSWER:ANSWERED", "answer:2"))).action())
                 .isEqualTo(Action.FINISH);
-        assertThat(policy.next(trace(step(
-                "GENERATE_AND_VERIFY", "ANSWER:REFUSED", "answer:2"))).action())
+        assertThat(policy.next(trace(
+                step("GENERATE_AND_VERIFY", "ANSWER:REFUSED", "answer:1"),
+                step("CRITIQUE", "CRITIQUE:RETRIEVE;missing:x;unsupported:", "critique:v1:RETRIEVE:q"),
+                step("RETRIEVE", "EVIDENCE:multiple", "window:1:2"),
+                step("GENERATE_AND_VERIFY", "ANSWER:REFUSED", "answer:2"))).action())
                 .isEqualTo(Action.REFUSE);
         assertThat(policy.next(trace(step("RETRIEVE", "unexpected", null))).action())
                 .isEqualTo(Action.REFUSE);
         assertThat(policy.next(trace(step("UNKNOWN", "unexpected", null))).action())
                 .isEqualTo(Action.REFUSE);
+    }
+
+    @Test
+    void followsTheCriticsWhitelistedRepairAction() {
+        assertThat(policy.next(trace(step("CRITIQUE", "CRITIQUE:PASS;missing:;unsupported:",
+                "critique:v1:PASS"))).action()).isEqualTo(Action.FINISH);
+        assertThat(policy.next(trace(step("CRITIQUE", "CRITIQUE:RETRIEVE;missing:x;unsupported:",
+                "critique:v1:RETRIEVE:focused"))).action()).isEqualTo(Action.RETRIEVE);
+        assertThat(policy.next(trace(step("CRITIQUE", "CRITIQUE:EXPAND_WINDOW;missing:x;unsupported:",
+                "critique:v1:EXPAND_WINDOW:1000:9000"))).action()).isEqualTo(Action.EXPAND_WINDOW);
     }
 
     private AgentTrace trace(AgentStep... steps) {
