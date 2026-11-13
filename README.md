@@ -1,17 +1,19 @@
 # VideoPilot
 
-面向教学长视频理解与 Agent 持续改进的 Video Agent 项目。
+面向教学长视频的可追溯 Video Agent。用户上传本地视频后，系统通过可靠异步任务完成 ASR、OCR、关键帧、时间对齐和混合检索，并生成每条事实 Claim 都能跳回原视频时间戳的回答；证据不足时明确拒答。
 
-项目从零构建；`C:\Users\zzm\Desktop\com\DoVideoAI` 仅作为只读设计参考。先用 Java 模块化单体和固定云端模型供应商跑通教学视频解析闭环，再建设真正由工具观察驱动的 Agent Loop、用户反馈改进闭环和可复现评测体系。
+V1 MVP 已完成。项目采用 Java 模块化单体和固定云端模型供应商，重点解决长任务恢复、重复投递幂等、模型调用预算、证据硬门和结果可追溯，而不是把模型输出直接当作业务事实。动态 Agent Loop 和自动目标分析已经作为默认关闭的实验能力实现；M7-M8 用户反馈与候选版本晋级闭环暂缓为 V2 Roadmap。
 
 项目总体规划、架构边界、验收指标和逐级里程碑见 [docs/PROJECT_ROADMAP.md](docs/PROJECT_ROADMAP.md)，Redis 与参考项目的对比、当前边界及 M2-M8 演进设计见 [docs/REDIS_ARCHITECTURE.md](docs/REDIS_ARCHITECTURE.md)。
-M1 的上传/Job 基线手册见 [docs/M1_RUNBOOK.md](docs/M1_RUNBOOK.md)；M2 的真实解析、恢复、降级与播放器验收步骤见 [docs/M2_RUNBOOK.md](docs/M2_RUNBOOK.md)；M3 的 Chunk、BGE-M3/Qdrant、混合检索和有证据问答操作见 [docs/M3_RUNBOOK.md](docs/M3_RUNBOOK.md)；M4 的恢复、DLQ、Replay、预算、积压诊断和回滚步骤见 [docs/M4_RUNBOOK.md](docs/M4_RUNBOOK.md)；M5 的数据冻结、DEV/TEST 纪律、正式运行、报告和回滚见 [docs/M5_RUNBOOK.md](docs/M5_RUNBOOK.md)。
+面向招聘者、演示和面试的完整说明见 [项目交付与简历面试手册](docs/PROJECT_PORTFOLIO.md)。各阶段操作细节见 [M1](docs/M1_RUNBOOK.md)、[M2](docs/M2_RUNBOOK.md)、[M3](docs/M3_RUNBOOK.md)、[M4](docs/M4_RUNBOOK.md)、[M5](docs/M5_RUNBOOK.md) 和 [M6](docs/M6_RUNBOOK.md) 运行手册。
 
 ## 当前阶段
 
-- 状态：M4/V1 MVP 已于 2026-11-08 正式退出；M5 最新候选 `d9e1d51` 已完成 DEV 三轮，Recall@3 与引用定位率均为 100%，但严格 Claim-Evidence 支持率三轮均为 0%，未达到 85% 退出门；TEST 被分阶段硬门阻止且未重跑，因此 M5 尚未退出、不得进入 M6。质量与安全检查结论见 `tasks/M5/ACCEPTANCE.md`
-- 当前可验证：M3 全部能力，以及 MySQL 真源自动 Recovery、有限 Retry/DLQ、受控 Manual Replay、版本化预算/资源硬门、只读可靠性仪表和可重复故障矩阵；20/20 恢复样本无任务丢失、重复高成本调用或非法推进
-- 当前不包含：动态 Agent Loop、自动 Query Rewrite/Cross Encoder、多供应商路由、公开的索引修复/Replay UI、完整学习管理系统或公网部署
+- 正式完成：M0-M4；V1 MVP 已于 2026-11-08 退出。上传、异步解析、ASR/OCR 时间轴、混合检索、有证据问答、明确拒答、恢复/重放和可靠性仪表均可运行。
+- 实验完成：M5 可复现评测流水线；M6 动态工具型 Agent、持久化 Trace、预算硬门和 READY 后自动目标分析。Agent/Worker/目标分析/前端入口均默认关闭。
+- 尚未晋级：M6 DEV 三轮的严格 Claim 支撑率均值为 36.69%，引用定位率均值为 74.74%，未达到 85%/95% 原硬门，因此不宣称 Agent 效果达标。
+- V2 暂缓：M7 用户反馈复核和 M8 候选版本晋级/回滚；同时暂缓多供应商路由、在线视频、完整学习管理系统、多 Agent 与公网部署。
+- 验证基线：M4 冻结恢复样本 20/20；T5 最终后端 462 项快速测试、95 项集成测试，前端 125 项测试通过。完整边界见 [项目交付与简历面试手册](docs/PROJECT_PORTFOLIO.md)。
 - 第一目标：可靠的视频解析与有证据问答 MVP
 - 第二目标：可持久化、可预算、可评测的 Agent Loop
 - 第三目标：把经过复核的用户反馈转化为 Agent 候选版本，并通过评测完成晋级或回滚
@@ -23,6 +25,23 @@ M1 的上传/Job 基线手册见 [docs/M1_RUNBOOK.md](docs/M1_RUNBOOK.md)；M2 �
 3. 模型输出是候选结果，状态迁移、权限、预算、引用和证据门控由 Java 确定性代码控制。
 4. 没有冻结数据集和基线，不宣称 Agent、Prompt 或检索公式带来提升。
 5. 先达到当前里程碑的退出门槛，再进入下一阶段。
+
+## 架构概览
+
+```mermaid
+flowchart LR
+    U[Vue 3 工作台] -->|REST / SSE| A[Spring Boot 模块化单体]
+    A --> DB[(MySQL 真源)]
+    A --> MQ[RabbitMQ]
+    MQ --> W[Analysis Consumer]
+    W --> FF[FFmpeg / Tesseract]
+    W --> AI[SiliconFlow ASR / LLM / BGE-M3]
+    W --> O[(MinIO)]
+    W --> V[(Qdrant)]
+    A --> R[(Redis / Redisson)]
+```
+
+MySQL 保存 Job、Checkpoint、Answer 和 Agent Trace；Redis 丢失后可重建。RabbitMQ 只传递标识和追踪字段，消费者通过状态、版本 CAS 和输入指纹实现至少一次投递下的幂等。模型输出必须经过 Java 确定性权限、预算、引用存在性和 Claim-Evidence 验证后才能发布。
 
 ## 本地开发
 
@@ -66,7 +85,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\dev-check.ps1
 
 ```powershell
 cd client
-npm install
+npm ci
 npm run dev
 ```
 
