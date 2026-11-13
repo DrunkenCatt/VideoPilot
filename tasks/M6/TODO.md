@@ -166,10 +166,10 @@ Answer；owner 隔离、预算和证据门不变；前端不重复目标 Answer�
 
 ### T10C：证明真实两轮修复路径
 
-- [ ] 自动测试分别构造 `CRITIQUE -> RETRIEVE` 与 `CRITIQUE -> EXPAND_WINDOW`：第一次 Answer 只覆盖部分 `expectedFacts`，Critic 明确返回缺口，第二次 Answer 使用原证据和新增证据；最终通过或稳定拒答。
-- [ ] 断言修复路径恰好为 `PLAN -> RETRIEVE -> GENERATE_AND_VERIFY -> CRITIQUE -> RETRIEVE|EXPAND_WINDOW -> GENERATE_AND_VERIFY`，即 6 Step/4 次生成式 LLM；Embedding 单独审计，不混入该计数。
-- [ ] 真实浏览器选择一个首轮召回不足、但视频其他片段可补齐的问题，至少跑通一条两轮 Trace；验证 Critic query/window 改变下一 Tool 参数、新增 Segment 进入第二次 Prompt、刷新后仍可从 MySQL 回放。
-- [ ] 完成 Agent/Answer/持久化定向测试、浏览器 Console/Network/引用跳转、桌面与 320px、文档和独立提交。
+- [x] 自动测试分别构造 `CRITIQUE -> RETRIEVE` 与 `CRITIQUE -> EXPAND_WINDOW`：第一次 Answer 只覆盖部分 `expectedFacts`，Critic 明确返回缺口，第二次 Answer 使用原证据和新增证据；最终通过或稳定拒答。
+- [x] 断言修复路径恰好为 `PLAN -> RETRIEVE -> GENERATE_AND_VERIFY -> CRITIQUE -> RETRIEVE|EXPAND_WINDOW -> GENERATE_AND_VERIFY`，即 6 Step/4 次生成式 LLM；Embedding 单独审计，不混入该计数。
+- [x] 真实浏览器选择一个首轮召回不足、但视频其他片段可补齐的问题，至少跑通一条两轮 Trace；验证 Critic query/window 改变下一 Tool 参数、新增 Segment 进入第二次 Prompt、刷新后仍可从 MySQL 回放。
+- [x] 完成 Agent/Answer/持久化定向测试、浏览器 Console/Network/引用跳转、桌面与 320px、文档和独立提交。
 
 **退出门**：不能只靠 Mock 证明两轮，也不能用“重复调用同一 Prompt”冒充修复；真实 Trace 和自动测试必须共同证明 Observation 改变了下一动作及第二次模型输入。
 

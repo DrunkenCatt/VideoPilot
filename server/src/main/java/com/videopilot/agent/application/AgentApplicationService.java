@@ -429,9 +429,10 @@ public final class AgentApplicationService {
 
     private ActionResult retrieve(OwnerContext owner, AgentRun run, List<AgentStep> steps) {
         String query = retrievalQuery(steps);
+        int topK = hasRetrieveRepair(steps) ? 5 : 1;
         var result = run.evaluationRunId() == null
-                ? retrieval.retrieve(owner, run.jobId(), query, 5, run.runId())
-                : retrieval.retrieve(owner, run.jobId(), query, 5,
+                ? retrieval.retrieve(owner, run.jobId(), query, topK, run.runId())
+                : retrieval.retrieve(owner, run.jobId(), query, topK,
                         run.evaluationRunId(), run.evaluationCaseId(), run.runId());
         int hitCount = result.hits().size();
         if (hitCount == 0) return new ActionResult("EVIDENCE:none", null);
@@ -439,6 +440,13 @@ public final class AgentApplicationService {
         return new ActionResult(hitCount == 1 ? "EVIDENCE:single" : "EVIDENCE:multiple",
                 evidenceReference(first.startMs(), first.endMs(), result.hits().stream()
                         .flatMap(hit -> hit.segmentIds().stream()).toList()));
+    }
+
+    private boolean hasRetrieveRepair(List<AgentStep> steps) {
+        return steps.stream().filter(step -> "CRITIQUE".equals(step.action()))
+                .map(AgentStep::resultReference)
+                .anyMatch(reference -> reference != null
+                        && reference.startsWith("critique:v1:RETRIEVE:"));
     }
 
     private ActionResult critique(OwnerContext owner, AgentRun run, List<AgentStep> steps) {

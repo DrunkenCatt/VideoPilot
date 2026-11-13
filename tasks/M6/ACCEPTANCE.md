@@ -627,3 +627,39 @@ T10B 保留第 16 节原 `2/3` series，并为每次修复创建新 Run，没有
 未知成本；状态差异来自 Answer Evidence Gate 和 Critic 的合法受限路径，不是未解释失败。定向测试后
 `server\mvnw.cmd clean test` 最终为 490 项通过、0 failure/error、1 项既有 FFmpeg 环境跳过，JaCoCo
 80% 与 ArchUnit 通过。T10B 退出门通过，可以独立提交并进入 T10C；这不表示 T10/M6 已退出。
+
+## 19. T10C 真实两轮修复路径（2026-11-13）
+
+真实样本只有 2 个 Chunk、8 个 Segment。原 Agent 首轮固定取 Top-5，等价于在第一次 Answer 前把两个
+Chunk 的全部 Segment 都选中，因而即使 Trace 进入第二轮也不可能证明“新增证据”。本任务没有增加新
+检索层或调整排序公式，而是把首次检索限制为最相关的 Top-1；只有 Critic 明确返回 `RETRIEVE(query)`
+后，第二次检索才扩大到 Top-5。Embedding、预算、12 Segment 上限和 Evidence Gate 均保持不变。
+
+- RED/GREEN：首次检索 Top-1 的既有测试先以实际 Top-5 失败；实现按已提交 Critic Step 区分首次与
+  修复检索后通过。新增参数化闭环测试分别执行 `CRITIQUE -> RETRIEVE` 和
+  `CRITIQUE -> EXPAND_WINDOW`，逐项断言 6 个持久化 Step、Planner + 2 Answer + Critic 共 4 次
+  生成式调用、Critic 的精确 query/window，以及第二次 Answer 同时收到原 Segment 和新增 Segment。
+- 真实浏览器在 Job `ef81edef-2c55-41a0-9e99-6fb67c89e8ab` 先保留一条 4 Step 正常 Run
+  `207a8962-413f-4875-b764-d2263fce38d2`；它的首个 Chunk 已覆盖问题，所以 Critic PASS，未冒充修复。
+  随后使用跨 Chunk 问题“Redis 五种基本数据类型分别是什么？命令行 help 的三种具体用法及各自作用
+  又是什么？”得到 Run `9c49c666-584e-4d1e-bd7f-b3fa4473658c`。
+- 该真实 Run 为 `REFUSED / NO_SUFFICIENT_EVIDENCE`，恰好 6 Step、2 次 Answer、4 次生成式 LLM，
+  输入/输出 Token 为 `9111 / 461`，已知费用 CNY `0.031383`，未知费用为 0。稳定拒答是合法终态，
+  没有第三次生成。
+- 首次 Retrieval 参数为 Planner query，Top-1 只保存 0--300000ms 的 5 个 Segment；Critic 明确缺少
+  help 三种用法并把下一参数改为“Redis help 命令的三种用法”。第二次 Top-5 新增 300000--434747ms
+  的 3 个 Segment，同时保留原 5 个 Segment。两次 Answer 的持久化输入指纹和模型调用指纹均不同；
+  自动测试进一步确定第二次 `EvidenceSelection` 的顺序为“原证据 + 新证据”，没有保存完整 Prompt。
+- 页面刷新后仍从 MySQL 回放同一 `6 / 6`、`4 次模型调用` Trace。引用跳转把播放器时间设为 60 秒并
+  标记 01:00--02:00 Segment；桌面 1265px 与 320px 视口均无横向溢出，移动端可完整阅读折叠 Trace，
+  Console 无 error/warning。创建、轮询、刷新回放的同源 API 主路径均返回可展示状态；浏览器工具未
+  读取 Cookie、Local Storage 或凭据。
+- `server\mvnw.cmd clean package`：492 项通过、0 failure/error、1 项既有 FFmpeg 条件跳过，JaCoCo
+  80% 与 ArchUnit 通过。定向 MySQL 第一次错误地复用真实验收库并继承 `.env` 的 ASR/OCR 开关，分别
+  暴露 READY Job 污染和本机工具配置错误；没有删除断言或修库历史，改用新隔离库
+  `videopilot_m6_t10c_gate` 并关闭无关媒体阶段后，21 项迁移、`JdbcAgentStoreIT` 4/4 和
+  `AnswerPersistenceAdapterIT` 2/2 全部通过。`client\npm.cmd run check` 的 19 个测试文件、126 项测试、
+  覆盖率门和生产构建全部通过。
+
+T10C 退出门通过，可以独立提交并进入 T10D。Agent/Worker/目标分析的仓库默认值仍为 false；本结果只
+证明最短真实两轮闭环，不改写 M5/T4 效果缺口，也不代表 M6 已达到晋级门。

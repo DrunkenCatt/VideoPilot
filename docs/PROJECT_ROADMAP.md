@@ -571,6 +571,15 @@ T10B 稳定性门（2026-11-13）：后续失败分别定位为 reasoning token 
 11 次生成式调用全部成功、未知成本为 0；其中两轮形成 6 Step/4 LLM 的真实补检路径。490 项快速测试、
 JaCoCo 80% 和 ArchUnit 通过后，T10B 可独立退出并进入 T10C。原失败 Run 与 M5/T4 缺口继续保留。
 
+T10C 两轮证明门（2026-11-13）：真实样本只有两个 Chunk，原首轮 Top-5 会提前选中全部 8 个 Segment，
+无法证明修复新增证据。Agent 现以 Top-1 执行首次检索，只有 Critic 明确补检时扩大到 Top-5；没有改变
+混合排序、Embedding、预算或 Evidence Gate。自动测试分别跑通补检与扩窗的精确 6 Step/4 LLM，并证明
+第二次 Answer 收到原证据和新增证据。真实浏览器跨 Chunk 问题生成 Run
+`9c49c666-584e-4d1e-bd7f-b3fa4473658c`：Critic 把下一 query 改为 Redis help 三种用法，新增后半段
+3 个 Segment，最终在第二次 Evidence Gate 后稳定拒答；刷新、引用跳转、桌面/320px 和 Console 验收
+通过。492 项快速测试及隔离 MySQL 6 项持久化测试通过后，T10C 可独立退出并进入 T10D；默认开关和
+M5/M6 效果门不变。
+
 ### M7：用户反馈采集与复核闭环（1-2 周）
 
 交付：
