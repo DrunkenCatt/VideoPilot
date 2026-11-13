@@ -77,6 +77,12 @@ public class AnswerPersistenceAdapter implements AnswerStore {
     public List<AnswerEvidenceGate.EvidenceSource> loadEvidence(
             OwnerId ownerId, UUID jobId, Set<UUID> chunkIds, Set<UUID> selectableSegmentIds) {
         Map<String, AnswerEvidenceGate.EvidenceSource> result = new LinkedHashMap<>();
+        if (chunkIds.isEmpty()) {
+            for (UUID declaredId : selectableSegmentIds) {
+                loadEvidenceBySegment(ownerId, jobId, declaredId, result);
+            }
+            return List.copyOf(result.values());
+        }
         for (UUID chunkId : chunkIds) {
             for (UUID declaredId : selectableSegmentIds) {
                 jdbc.sql("""
@@ -112,6 +118,43 @@ public class AnswerPersistenceAdapter implements AnswerStore {
             }
         }
         return List.copyOf(result.values());
+    }
+
+    private void loadEvidenceBySegment(
+            OwnerId ownerId,
+            UUID jobId,
+            UUID declaredId,
+            Map<String, AnswerEvidenceGate.EvidenceSource> result) {
+        List<SelectedSegmentRow> rows = jdbc.sql("""
+                SELECT chunk.chunk_id, neighbor.segment_id, neighbor.ordinal,
+                       neighbor.start_ms, neighbor.end_ms, neighbor.asr_text, neighbor.ocr_observations
+                FROM analysis_job requested
+                INNER JOIN video_index index_version
+                    ON index_version.owner_id = requested.owner_id
+                   AND index_version.media_id = requested.media_id
+                   AND index_version.status IN ('READY', 'VECTOR_STORE_DEGRADED', 'SEMANTIC_DEGRADED')
+                INNER JOIN video_segment declared
+                    ON declared.context_id = index_version.context_id AND declared.segment_id = :declaredId
+                INNER JOIN video_chunk chunk
+                    ON chunk.index_id = index_version.index_id
+                   AND JSON_CONTAINS(chunk.segment_ids, JSON_QUOTE(declared.segment_id))
+                INNER JOIN video_segment neighbor
+                    ON neighbor.context_id = declared.context_id
+                   AND neighbor.ordinal BETWEEN
+                       CASE WHEN declared.ordinal = 0 THEN 0 ELSE declared.ordinal - 1 END
+                       AND declared.ordinal + 1
+                WHERE requested.job_id = :jobId AND requested.owner_id = :owner
+                ORDER BY chunk.start_ms, neighbor.ordinal
+                """)
+                .param("declaredId", declaredId.toString())
+                .param("jobId", jobId.toString()).param("owner", ownerId.value().toString())
+                .query((row, ignored) -> new SelectedSegmentRow(
+                        UUID.fromString(row.getString("chunk_id")),
+                        new SegmentRow(UUID.fromString(row.getString("segment_id")), row.getInt("ordinal"),
+                                row.getLong("start_ms"), row.getLong("end_ms"), row.getString("asr_text"),
+                                row.getString("ocr_observations"))))
+                .list();
+        rows.forEach(row -> addSources(result, row.chunkId(), declaredId, row.segment()));
     }
 
     @Override
@@ -371,4 +414,6 @@ public class AnswerPersistenceAdapter implements AnswerStore {
 
     private record SegmentRow(
             UUID segmentId, int ordinal, long startMs, long endMs, String asrText, String ocrJson) { }
+
+    private record SelectedSegmentRow(UUID chunkId, SegmentRow segment) { }
 }

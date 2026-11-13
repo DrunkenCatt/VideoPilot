@@ -434,3 +434,27 @@ PLAN -> RETRIEVE -> GENERATE_AND_VERIFY -> CRITIQUE
 - 不建设通用 DAG、多 Agent、动态插件、长期记忆或 chain-of-thought 存储。
 
 文档一致性和 `git diff --check` 通过后，T6 可独立提交并进入 T7；这不是 T4/M6 退出或 Agent 晋级。
+
+## 13. T7 已选择证据进入 Executor（2026-11-13）
+
+T7 没有增加模型调用或新表，只修正原 Agent Step 与现有 Answer 管线之间缺失的数据通路。检索和扩窗
+现在把有界的 `window` 与 Segment ID 写入 `agent_step.result_reference`；生成步骤从已提交 Step 按顺序
+恢复、去重并限制最多 12 个 Segment，再调用同一个 Answer application service。该路径不再用
+`run.goal()` 静默执行第二次检索。
+
+- RED：新增测试要求指定证据直接进入 Answer Prompt、Agent 生成不得再次调用 Retrieval、扩窗 Segment
+  必须进入下一次选择；旧接口因不存在 `EvidenceSelection/askWithEvidence` 而编译失败。
+- GREEN：`AnswerApplicationServiceTest` 与 `AgentLoopApplicationServiceTest` 共 31 项通过；测试同时证明
+  原检索与扩窗证据按 Step 顺序累积、去重，且 Answer 仍复用现有 Prompt、模型 Adapter、发布与
+  `AnswerEvidenceGate`。
+- MySQL 边界：在隔离库 `videopilot_m6_t7_gate` 从 V1 迁移到 V21 后，
+  `AnswerPersistenceAdapterIT` 通过；指定 Segment 只在 owner/job/READY index 约束内反查所属 Chunk，
+  并继续加载相邻 ASR/OCR 证据。既有浏览器库因历史 V20 checksum 不一致未被修复或改写。
+- 后端快速门：`server\mvnw.cmd test` 共 464 项通过，0 failure/error；1 项既有 FFmpeg 环境条件测试
+  跳过，JaCoCo 与 ArchUnit 通过。`git diff --check` 通过。
+- 本任务未运行完整 `verify -Pintegration`、前端或真实浏览器；T7 没有修改 API/UI，完整门按 T10
+  统一执行。`.env` 只用于本地隔离 MySQL 连接，运行时覆盖关闭本任务无关且配置不完整的 ASR/OCR，
+  没有输出或提交凭据。
+
+T7 退出门通过：同一 Run 可仅凭 MySQL Step 重建相同的证据选择，扩窗内容确实进入 Answer Prompt，
+既有 CAS/ToolCall 幂等语义未改变。可以进入 T8；这不表示 T4/M6 效果门已经通过。

@@ -104,11 +104,11 @@ Answer；owner 隔离、预算和证据门不变；前端不重复目标 Answer�
 
 ## T7：让检索与扩窗证据真正进入 Executor
 
-- [ ] 先写失败测试：初检 Chunk 引用、扩窗时间范围和修复后的累积证据必须进入 Answer Prompt；禁止 `GENERATE_AND_VERIFY` 忽略 Step 引用后按原问题静默重检。
-- [ ] 使用现有 `agent_step.result_reference` 保存有界 Chunk 列表或 `window:start:end`；不新增通用 Artifact 表，不保存完整 Chunk、Prompt 或模型原文。
-- [ ] 给现有 Answer application service 增加最小的“已选择证据范围”输入，复用当前 evidence 加载、Prompt、模型 Adapter、发布和 Evidence Gate，不复制第二套回答管线。
-- [ ] 第二次生成按 Step 顺序合并原证据与新增证据并去重；owner/job 绑定、最大证据数、Prompt 长度和预算在模型调用前校验。
-- [ ] 完成 Answer/Agent 定向单测、MySQL 引用恢复集成测试、文档、`server\mvnw.cmd test` 和独立提交。
+- [x] 先写失败测试：初检 Chunk 引用、扩窗时间范围和修复后的累积证据必须进入 Answer Prompt；禁止 `GENERATE_AND_VERIFY` 忽略 Step 引用后按原问题静默重检。
+- [x] 使用现有 `agent_step.result_reference` 保存有界 Segment 列表和 `window:start:end`；不新增通用 Artifact 表，不保存完整 Chunk、Prompt 或模型原文。
+- [x] 给现有 Answer application service 增加最小的“已选择证据范围”输入，复用当前 evidence 加载、Prompt、模型 Adapter、发布和 Evidence Gate，不复制第二套回答管线。
+- [x] 第二次生成按 Step 顺序合并原证据与新增证据并去重；owner/job 绑定、最大证据数、Prompt 长度和预算在模型调用前校验。
+- [x] 完成 Answer/Agent 定向单测、MySQL 引用恢复集成测试、文档、`server\mvnw.cmd test` 和独立提交。
 
 **依赖**：T6。
 

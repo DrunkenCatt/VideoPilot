@@ -93,31 +93,48 @@ public final class AnswerApplicationService {
 
     public AnswerStore.StoredAnswer ask(
             OwnerContext owner, UUID jobId, String question, String idempotencyKey) {
-        return askInternal(owner, jobId, question, idempotencyKey, null, null, null);
+        return askInternal(owner, jobId, question, idempotencyKey, null, null, null, null);
     }
 
     public AnswerStore.StoredAnswer ask(
             OwnerContext owner, UUID jobId, String question, String idempotencyKey,
             UUID executionRunId) {
-        return askInternal(owner, jobId, question, idempotencyKey, null, null, executionRunId);
+        return askInternal(owner, jobId, question, idempotencyKey, null, null, executionRunId, null);
     }
 
     public AnswerStore.StoredAnswer ask(
             OwnerContext owner, UUID jobId, String question, String idempotencyKey,
             UUID evaluationRunId, String evaluationCaseId) {
-        return askInternal(owner, jobId, question, idempotencyKey, evaluationRunId, evaluationCaseId, null);
+        return askInternal(owner, jobId, question, idempotencyKey,
+                evaluationRunId, evaluationCaseId, null, null);
     }
 
     public AnswerStore.StoredAnswer ask(
             OwnerContext owner, UUID jobId, String question, String idempotencyKey,
             UUID evaluationRunId, String evaluationCaseId, UUID executionRunId) {
         return askInternal(owner, jobId, question, idempotencyKey,
-                evaluationRunId, evaluationCaseId, executionRunId);
+                evaluationRunId, evaluationCaseId, executionRunId, null);
+    }
+
+    public AnswerStore.StoredAnswer askWithEvidence(
+            OwnerContext owner, UUID jobId, String question, String idempotencyKey,
+            EvidenceSelection selection, UUID executionRunId) {
+        return askInternal(owner, jobId, question, idempotencyKey,
+                null, null, executionRunId, selection);
+    }
+
+    public AnswerStore.StoredAnswer askWithEvidence(
+            OwnerContext owner, UUID jobId, String question, String idempotencyKey,
+            EvidenceSelection selection, UUID evaluationRunId, String evaluationCaseId,
+            UUID executionRunId) {
+        return askInternal(owner, jobId, question, idempotencyKey,
+                evaluationRunId, evaluationCaseId, executionRunId, selection);
     }
 
     private AnswerStore.StoredAnswer askInternal(
             OwnerContext owner, UUID jobId, String question, String idempotencyKey,
-            UUID evaluationRunId, String evaluationCaseId, UUID executionRunId) {
+            UUID evaluationRunId, String evaluationCaseId, UUID executionRunId,
+            EvidenceSelection selection) {
         String normalizedQuestion = normalizeQuestion(question);
         if (idempotencyKey == null || !IDEMPOTENCY_KEY.matcher(idempotencyKey).matches()) {
             throw new AnswerException(AnswerException.Reason.INVALID_REQUEST);
@@ -125,7 +142,9 @@ public final class AnswerApplicationService {
         if (!store.ownsJob(owner.ownerId(), jobId)) {
             throw new AnswerException(AnswerException.Reason.NOT_FOUND);
         }
-        String fingerprint = sha256(jobId + "|" + normalizedQuestion + "|" + promptVersion + "|" + modelVersion);
+        String selectionFingerprint = selection == null ? "dynamic-retrieval" : selection.fingerprintValue();
+        String fingerprint = sha256(jobId + "|" + normalizedQuestion + "|" + promptVersion + "|"
+                + modelVersion + "|" + selectionFingerprint);
         UUID answerId = ids.get();
         AnswerStore.ClaimResult claim = store.claim(owner.ownerId(), new AnswerStore.ClaimRequest(
                 answerId, jobId, idempotencyKey, fingerprint, normalizedQuestion,
@@ -136,47 +155,37 @@ public final class AnswerApplicationService {
             return existing(claim.answer());
         }
 
-        RetrievalApplicationService.RetrievalResult result;
-        try {
-            result = executionRunId != null
-                    ? evaluationRunId == null
-                            ? retrieval.retrieve(owner, jobId, normalizedQuestion, TOP_K, executionRunId)
-                            : retrieval.retrieve(
-                                    owner, jobId, normalizedQuestion, TOP_K,
-                                    evaluationRunId, evaluationCaseId, executionRunId)
-                    : evaluationRunId == null
-                            ? retrieval.retrieve(owner, jobId, normalizedQuestion, TOP_K)
-                            : retrieval.retrieve(
-                                    owner, jobId, normalizedQuestion, TOP_K,
-                                    evaluationRunId, evaluationCaseId);
-        } catch (ExecutionBudgetExceededException exception) {
-            store.fail(answerId, null, "FAILED", "BUDGET_EXHAUSTED",
-                    exception.limitVersion() + ':' + exception.reason().name(), now.get());
-            throw new AnswerException(AnswerException.Reason.BUDGET_EXHAUSTED, exception);
-        } catch (RetrievalException exception) {
-            store.fail(answerId, null, "FAILED", "RETRIEVAL", exception.reason().name(), now.get());
-            throw switch (exception.reason()) {
-                case NOT_FOUND -> new AnswerException(AnswerException.Reason.NOT_FOUND, exception);
-                case NOT_READY -> new AnswerException(AnswerException.Reason.NOT_READY, exception);
-                case INVALID_REQUEST -> new AnswerException(AnswerException.Reason.INVALID_REQUEST, exception);
-            };
+        RetrievalApplicationService.RetrievalResult result = selection == null
+                ? retrieve(owner, jobId, normalizedQuestion, executionRunId, evaluationRunId, evaluationCaseId, answerId)
+                : null;
+        List<String> degraded = selection == null
+                ? result.degradedChannels().stream().map(Enum::name).toList()
+                : selection.degradedChannels();
+        String embeddingVersion = selection == null ? result.embeddingVersion() : selection.embeddingVersion();
+        String formulaVersion = selection == null ? result.formulaVersion() : selection.retrievalFormulaVersion();
+        String chunkVersion = selection == null ? result.chunkVersion() : selection.chunkVersion();
+        if (selection == null && result.hits().isEmpty()) {
+            return refuse(owner, answerId, degraded, embeddingVersion, formulaVersion, chunkVersion,
+                    "NO_SUFFICIENT_EVIDENCE");
         }
-        List<String> degraded = result.degradedChannels().stream().map(Enum::name).toList();
-        if (result.hits().isEmpty()) {
-            return refuse(owner, answerId, result, degraded, "NO_SUFFICIENT_EVIDENCE");
-        }
-        if (result.hits().getFirst().scores().total() < minimumEvidenceScore) {
-            return refuse(owner, answerId, result, degraded, "EVIDENCE_BELOW_THRESHOLD");
+        if (selection == null && result.hits().getFirst().scores().total() < minimumEvidenceScore) {
+            return refuse(owner, answerId, degraded, embeddingVersion, formulaVersion, chunkVersion,
+                    "EVIDENCE_BELOW_THRESHOLD");
         }
 
-        Set<UUID> chunks = result.hits().stream().map(EvidenceHit::chunkId)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-        Set<UUID> segments = result.hits().stream().flatMap(hit -> hit.segmentIds().stream())
-                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Set<UUID> chunks = selection == null
+                ? result.hits().stream().map(EvidenceHit::chunkId)
+                        .collect(Collectors.toCollection(LinkedHashSet::new))
+                : Set.of();
+        Set<UUID> segments = selection == null
+                ? result.hits().stream().flatMap(hit -> hit.segmentIds().stream())
+                        .collect(Collectors.toCollection(LinkedHashSet::new))
+                : new LinkedHashSet<>(selection.segmentIds());
         List<AnswerEvidenceGate.EvidenceSource> evidence = store.loadEvidence(
                 owner.ownerId(), jobId, chunks, segments);
         if (evidence.stream().noneMatch(AnswerEvidenceGate.EvidenceSource::selectable)) {
-            return refuse(owner, answerId, result, degraded, "NO_SUFFICIENT_EVIDENCE");
+            return refuse(owner, answerId, degraded, embeddingVersion, formulaVersion, chunkVersion,
+                    "NO_SUFFICIENT_EVIDENCE");
         }
 
         List<AnswerEvidenceGate.EvidenceSource> selectableEvidence = evidence.stream()
@@ -259,10 +268,37 @@ public final class AnswerApplicationService {
         String status = validation.accepted() ? "ANSWERED" : "REFUSED";
         return store.publish(owner.ownerId(), new AnswerStore.Publication(
                 answerId, callId, modelVersion, status, validation.failure(), degraded,
-                result.embeddingVersion(), result.formulaVersion(), result.chunkVersion(),
+                embeddingVersion, formulaVersion, chunkVersion,
                 response.usage().inputTokens(), response.usage().outputTokens(),
                 Math.max(0, Duration.between(started, completed).toMillis()),
                 validation.claims(), started, completed));
+    }
+
+    private RetrievalApplicationService.RetrievalResult retrieve(
+            OwnerContext owner, UUID jobId, String question, UUID executionRunId,
+            UUID evaluationRunId, String evaluationCaseId, UUID answerId) {
+        try {
+            return executionRunId != null
+                    ? evaluationRunId == null
+                            ? retrieval.retrieve(owner, jobId, question, TOP_K, executionRunId)
+                            : retrieval.retrieve(owner, jobId, question, TOP_K,
+                                    evaluationRunId, evaluationCaseId, executionRunId)
+                    : evaluationRunId == null
+                            ? retrieval.retrieve(owner, jobId, question, TOP_K)
+                            : retrieval.retrieve(owner, jobId, question, TOP_K,
+                                    evaluationRunId, evaluationCaseId);
+        } catch (ExecutionBudgetExceededException exception) {
+            store.fail(answerId, null, "FAILED", "BUDGET_EXHAUSTED",
+                    exception.limitVersion() + ':' + exception.reason().name(), now.get());
+            throw new AnswerException(AnswerException.Reason.BUDGET_EXHAUSTED, exception);
+        } catch (RetrievalException exception) {
+            store.fail(answerId, null, "FAILED", "RETRIEVAL", exception.reason().name(), now.get());
+            throw switch (exception.reason()) {
+                case NOT_FOUND -> new AnswerException(AnswerException.Reason.NOT_FOUND, exception);
+                case NOT_READY -> new AnswerException(AnswerException.Reason.NOT_READY, exception);
+                case INVALID_REQUEST -> new AnswerException(AnswerException.Reason.INVALID_REQUEST, exception);
+            };
+        }
     }
 
     public AnswerStore.StoredAnswer get(OwnerContext owner, UUID jobId, UUID answerId) {
@@ -298,12 +334,14 @@ public final class AnswerApplicationService {
     private AnswerStore.StoredAnswer refuse(
             OwnerContext owner,
             UUID answerId,
-            RetrievalApplicationService.RetrievalResult result,
             List<String> degraded,
+            String embeddingVersion,
+            String formulaVersion,
+            String chunkVersion,
             String reason) {
         return store.publish(owner.ownerId(), new AnswerStore.Publication(
                 answerId, null, modelVersion, "REFUSED", reason, degraded,
-                result.embeddingVersion(), result.formulaVersion(), result.chunkVersion(),
+                embeddingVersion, formulaVersion, chunkVersion,
                 0, 0, 0, List.of(), null, now.get()));
     }
 
@@ -351,6 +389,30 @@ public final class AnswerApplicationService {
     }
 
     private record PromptEvidence(String evidenceId, long startMs, long endMs, String channel, String text) { }
+
+    public record EvidenceSelection(
+            List<UUID> segmentIds,
+            List<String> degradedChannels,
+            String embeddingVersion,
+            String retrievalFormulaVersion,
+            String chunkVersion) {
+
+        public EvidenceSelection {
+            segmentIds = List.copyOf(segmentIds);
+            degradedChannels = List.copyOf(degradedChannels);
+            if (segmentIds.isEmpty() || segmentIds.size() > MAX_PROMPT_EVIDENCE
+                    || embeddingVersion == null || embeddingVersion.isBlank()
+                    || retrievalFormulaVersion == null || retrievalFormulaVersion.isBlank()
+                    || chunkVersion == null || chunkVersion.isBlank()) {
+                throw new IllegalArgumentException("evidence selection is incomplete");
+            }
+        }
+
+        private String fingerprintValue() {
+            return segmentIds + "|" + degradedChannels + "|" + embeddingVersion + "|"
+                    + retrievalFormulaVersion + "|" + chunkVersion;
+        }
+    }
 
     private record CandidateJson(boolean answerable, List<ClaimJson> claims) {
         CandidateJson { claims = claims == null ? List.of() : List.copyOf(claims); }

@@ -40,6 +40,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.mockito.ArgumentCaptor;
 
 class AgentLoopApplicationServiceTest {
 
@@ -76,6 +77,9 @@ class AgentLoopApplicationServiceTest {
         order.verify(store).beginToolCall(any(), eq(runId), eq(1L), any());
         order.verify(retrieval).retrieve(any(), eq(jobId), eq("请解释课程中的 String"), eq(5), eq(runId));
         order.verify(store).completeToolCallAndStep(any(), eq(runId), eq(2L), any(), any(), eq(false));
+        ArgumentCaptor<AgentStep> step = ArgumentCaptor.forClass(AgentStep.class);
+        verify(store).completeToolCallAndStep(any(), eq(runId), eq(2L), any(), step.capture(), eq(false));
+        assertThat(step.getValue().resultReference()).contains(";segments:");
     }
 
     @Test
@@ -89,33 +93,69 @@ class AgentLoopApplicationServiceTest {
         VideoContext context = mock(VideoContext.class);
         when(context.durationMs()).thenReturn(60_000L);
         when(contexts.get(any(), eq(jobId))).thenReturn(context);
+        VideoSegment expanded = segment();
         when(contexts.segments(any(), eq(jobId), eq(null), eq(20), eq(0L), eq(39000L)))
                 .thenReturn(new VideoContextQueryApplicationService.SegmentPage(
-                        List.of(segment()), Optional.empty(), false));
+                        List.of(expanded), Optional.empty(), false));
 
         assertThat(service.processNext()).isTrue();
 
         verify(contexts).segments(any(), eq(jobId), eq(null), eq(20), eq(0L), eq(39000L));
         verify(retrieval, never()).retrieve(any(), any(), any(), any(Integer.class));
         verify(answers, never()).ask(any(), any(), any(), any());
+        ArgumentCaptor<AgentStep> step = ArgumentCaptor.forClass(AgentStep.class);
+        verify(store).completeToolCallAndStep(any(), eq(runId), eq(2L), any(), step.capture(), eq(false));
+        assertThat(step.getValue().resultReference()).contains(expanded.segmentId().toString());
     }
 
     @Test
     void reusesVerifiedAnswerPathAndLinksItsModelCallsToTheAgentRun() {
+        UUID retrievedSegmentId = UUID.randomUUID();
         AgentTrace trace = trace(run(1, 0, NOW.plusSeconds(180)), List.of(new AgentStep(
-                runId, 1, "RETRIEVE", "EVIDENCE:multiple", "window:1000:9000", NOW)));
+                runId, 1, "RETRIEVE", "EVIDENCE:multiple",
+                "window:1000:9000;segments:" + retrievedSegmentId, NOW)));
         claimed(trace);
         when(policy.next(trace)).thenReturn(
                 AgentPolicy.Decision.action(AgentPolicy.Action.GENERATE_AND_VERIFY));
         when(store.beginToolCall(any(), eq(runId), eq(1L), any())).thenReturn(2L);
         AnswerStore.StoredAnswer answer = answer("ANSWERED", null);
-        when(answers.ask(any(), eq(jobId), eq("请解释课程中的 String"), any(), eq(runId)))
+        when(answers.askWithEvidence(any(), eq(jobId), eq("请解释课程中的 String"), any(),
+                any(), eq(runId)))
                 .thenReturn(answer);
 
         assertThat(service.processNext()).isTrue();
 
-        verify(answers).ask(any(), eq(jobId), eq("请解释课程中的 String"), any(), eq(runId));
+        ArgumentCaptor<AnswerApplicationService.EvidenceSelection> selection =
+                ArgumentCaptor.forClass(AnswerApplicationService.EvidenceSelection.class);
+        verify(answers).askWithEvidence(any(), eq(jobId), eq("请解释课程中的 String"), any(),
+                selection.capture(), eq(runId));
+        assertThat(selection.getValue().segmentIds()).containsExactly(retrievedSegmentId);
         verify(store).completeToolCallAndStep(any(), eq(runId), eq(2L), any(), any(), eq(true));
+    }
+
+    @Test
+    void carriesExpandedSegmentsIntoTheAnswerSelection() {
+        UUID retrievedSegmentId = UUID.randomUUID();
+        UUID expandedSegmentId = UUID.randomUUID();
+        AgentTrace trace = trace(run(2, 0, NOW.plusSeconds(180)), List.of(
+                new AgentStep(runId, 1, "RETRIEVE", "EVIDENCE:single",
+                        "window:1000:9000;segments:" + retrievedSegmentId, NOW),
+                new AgentStep(runId, 2, "EXPAND_WINDOW", "WINDOW:1",
+                        "window:0:39000;segments:" + expandedSegmentId, NOW)));
+        claimed(trace);
+        when(policy.next(trace)).thenReturn(
+                AgentPolicy.Decision.action(AgentPolicy.Action.GENERATE_AND_VERIFY));
+        when(store.beginToolCall(any(), eq(runId), eq(1L), any())).thenReturn(2L);
+        when(answers.askWithEvidence(any(), eq(jobId), any(), any(), any(), eq(runId)))
+                .thenReturn(answer("ANSWERED", null));
+
+        assertThat(service.processNext()).isTrue();
+
+        ArgumentCaptor<AnswerApplicationService.EvidenceSelection> selection =
+                ArgumentCaptor.forClass(AnswerApplicationService.EvidenceSelection.class);
+        verify(answers).askWithEvidence(any(), eq(jobId), any(), any(), selection.capture(), eq(runId));
+        assertThat(selection.getValue().segmentIds())
+                .containsExactly(retrievedSegmentId, expandedSegmentId);
     }
 
     @Test

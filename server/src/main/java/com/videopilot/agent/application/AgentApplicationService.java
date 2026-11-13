@@ -16,6 +16,7 @@ import com.videopilot.answer.port.LanguageModelException;
 import com.videopilot.context.application.VideoContextQueryApplicationService;
 import com.videopilot.identity.application.OwnerContext;
 import com.videopilot.retrieval.application.RetrievalApplicationService;
+import com.videopilot.retrieval.application.VideoChunkBuilder;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -23,6 +24,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -326,7 +328,7 @@ public final class AgentApplicationService {
         return switch (action) {
             case RETRIEVE -> retrieve(owner, run);
             case EXPAND_WINDOW -> expand(owner, run, trace.steps());
-            case GENERATE_AND_VERIFY -> answer(owner, run);
+            case GENERATE_AND_VERIFY -> answer(owner, run, trace.steps());
             default -> throw new AgentException(AgentException.Reason.INVALID_REQUEST);
         };
     }
@@ -340,12 +342,13 @@ public final class AgentApplicationService {
         if (hitCount == 0) return new ActionResult("EVIDENCE:none", null);
         var first = result.hits().getFirst();
         return new ActionResult(hitCount == 1 ? "EVIDENCE:single" : "EVIDENCE:multiple",
-                "window:" + first.startMs() + ":" + first.endMs());
+                evidenceReference(first.startMs(), first.endMs(), result.hits().stream()
+                        .flatMap(hit -> hit.segmentIds().stream()).toList()));
     }
 
     private ActionResult expand(OwnerContext owner, AgentRun run, List<AgentStep> steps) {
         if (steps.isEmpty()) throw new AgentException(AgentException.Reason.INVALID_REQUEST);
-        String[] window = steps.getLast().resultReference().split(":");
+        String[] window = steps.getLast().resultReference().split(";", 2)[0].split(":");
         if (window.length != 3 || !"window".equals(window[0])) {
             throw new AgentException(AgentException.Reason.INVALID_REQUEST);
         }
@@ -353,16 +356,42 @@ public final class AgentApplicationService {
         long duration = contexts.get(owner, run.jobId()).durationMs();
         long to = Math.min(duration, Long.parseLong(window[2]) + 30_000);
         var result = contexts.segments(owner, run.jobId(), null, 20, from, to);
-        return new ActionResult("WINDOW:" + result.data().size(), "window:" + from + ":" + to);
+        return new ActionResult("WINDOW:" + result.data().size(), evidenceReference(
+                from, to, result.data().stream().map(segment -> segment.segmentId()).toList()));
     }
 
-    private ActionResult answer(OwnerContext owner, AgentRun run) {
+    private ActionResult answer(OwnerContext owner, AgentRun run, List<AgentStep> steps) {
         String key = "agent-" + run.runId() + "-answer-" + (run.answerAttemptCount() + 1);
+        LinkedHashSet<UUID> segmentIds = new LinkedHashSet<>();
+        steps.stream().map(AgentStep::resultReference).filter(java.util.Objects::nonNull)
+                .forEach(reference -> segmentIds.addAll(segmentIds(reference)));
+        var selection = new AnswerApplicationService.EvidenceSelection(
+                segmentIds.stream().limit(12).toList(), List.of(),
+                run.versions().embeddingVersion(), run.versions().retrievalFormulaVersion(),
+                VideoChunkBuilder.CHUNK_VERSION);
         AnswerStore.StoredAnswer answer = run.evaluationRunId() == null
-                ? answers.ask(owner, run.jobId(), run.goal(), key, run.runId())
-                : answers.ask(owner, run.jobId(), run.goal(), key,
+                ? answers.askWithEvidence(owner, run.jobId(), run.goal(), key, selection, run.runId())
+                : answers.askWithEvidence(owner, run.jobId(), run.goal(), key, selection,
                         run.evaluationRunId(), run.evaluationCaseId(), run.runId());
         return new ActionResult("ANSWER:" + answer.status(), "answer:" + answer.answerId());
+    }
+
+    private String evidenceReference(long from, long to, List<UUID> segmentIds) {
+        String ids = segmentIds.stream().distinct().limit(12).map(UUID::toString)
+                .collect(java.util.stream.Collectors.joining(","));
+        return "window:" + from + ":" + to + ";segments:" + ids;
+    }
+
+    private List<UUID> segmentIds(String reference) {
+        int marker = reference.indexOf(";segments:");
+        if (marker < 0) return List.of();
+        String encoded = reference.substring(marker + ";segments:".length());
+        if (encoded.isBlank()) return List.of();
+        try {
+            return java.util.Arrays.stream(encoded.split(",")).map(UUID::fromString).toList();
+        } catch (IllegalArgumentException exception) {
+            throw new AgentException(AgentException.Reason.INVALID_REQUEST, exception);
+        }
     }
 
     private String parameterSummary(AgentRun run, AgentPolicy.Action action) {

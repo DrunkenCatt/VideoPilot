@@ -3,6 +3,7 @@ package com.videopilot.answer.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -24,6 +25,7 @@ import java.time.Duration;
 import java.math.BigDecimal;
 import java.util.Map;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -204,6 +206,29 @@ class AnswerApplicationServiceTest {
         ArgumentCaptor<LanguageModelPort.Request> request = ArgumentCaptor.forClass(LanguageModelPort.Request.class);
         verify(model).generate(request.capture());
         assertThat(request.getValue().prompt()).contains("asr-segment-6", "asr-segment-7");
+    }
+
+    @Test
+    void usesPersistedAgentEvidenceWithoutRunningRetrievalAgain() {
+        UUID expandedSegmentId = UUID.randomUUID();
+        var selection = new AnswerApplicationService.EvidenceSelection(
+                List.of(segmentId, expandedSegmentId), List.of("OCR"),
+                "embedding-v1", RetrievalApplicationService.FORMULA_VERSION, "chunk-5m-v1");
+        when(store.loadEvidence(any(), eq(jobId), eq(Set.of()),
+                eq(Set.of(segmentId, expandedSegmentId))))
+                .thenReturn(List.of(new AnswerEvidenceGate.EvidenceSource(
+                        expandedSegmentId + "#ASR", chunkId, expandedSegmentId, 1, 10_000, 20_000,
+                        "ASR", "expanded-window-evidence", true)));
+        when(model.generate(any())).thenReturn(new LanguageModelPort.Response(
+                "{\"answerable\":false,\"claims\":[]}", new LanguageModelPort.Usage(10, 5)));
+
+        service.askWithEvidence(owner, jobId, "老师还补充了什么？", "agent-evidence",
+                selection, UUID.randomUUID());
+
+        verify(retrieval, never()).retrieve(any(), any(), any(), any(Integer.class));
+        ArgumentCaptor<LanguageModelPort.Request> request = ArgumentCaptor.forClass(LanguageModelPort.Request.class);
+        verify(model).generate(request.capture());
+        assertThat(request.getValue().prompt()).contains("expanded-window-evidence");
     }
 
     @Test
