@@ -83,6 +83,64 @@ const degradationLabels: Record<DegradedChannel, string> = {
   OCR: 'OCR 证据不完整',
 }
 
+const modelActions = new Set(['PLAN', 'CRITIQUE', 'GENERATE_AND_VERIFY'])
+
+function modelCallCount(run: AgentRun): number {
+  return run.steps.filter((step) => modelActions.has(step.action)).length
+}
+
+function decodeTraceLines(encoded: string | undefined): string[] {
+  if (!encoded) return []
+  try {
+    const normalized = encoded.replaceAll('-', '+').replaceAll('_', '/')
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=')
+    const bytes = Uint8Array.from(globalThis.atob(padded), (character) => character.charCodeAt(0))
+    return new globalThis.TextDecoder().decode(bytes).split('\n').filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
+function traceFields(observation: string): Map<string, string> {
+  return new Map(observation.split(';').slice(1).map((field) => {
+    const separator = field.indexOf(':')
+    return separator < 0 ? [field, ''] : [field.slice(0, separator), field.slice(separator + 1)]
+  }))
+}
+
+function traceSummary(step: AgentRun['steps'][number], index: number): string {
+  const fields = traceFields(step.observationSummary)
+  if (step.action === 'PLAN') {
+    const action = step.observationSummary.split(';')[0]?.replace('PLAN:', '')
+    const label = action === 'RETRIEVE' ? '计划检索' : action === 'NEEDS_CLARIFICATION' ? '需要澄清' : '计划拒答'
+    return `${label} · 预期事实 ${Number(fields.get('facts') ?? 0)} 项`
+  }
+  if (step.action === 'CRITIQUE') {
+    const action = step.observationSummary.split(';')[0]?.replace('CRITIQUE:', '')
+    const label = action === 'PASS' ? '审查通过' : action === 'EXPAND_WINDOW' ? '扩展上下文' : '定向补检'
+    const missing = decodeTraceLines(fields.get('missing'))
+    const unsupported = decodeTraceLines(fields.get('unsupported'))
+    const reasons = [
+      missing.length ? `缺失：${missing.join('、')}` : '',
+      unsupported.length ? `无支持：${unsupported.join('、')}` : '',
+    ].filter(Boolean)
+    return reasons.length ? `${label} · ${reasons.join(' · ')}` : label
+  }
+  if (step.action === 'RETRIEVE') {
+    const evidence = step.observationSummary.replace('EVIDENCE:', '')
+    const amount = evidence === 'multiple' ? '多条' : evidence === 'single' ? '1 条' : '0 条'
+    const repaired = agentRun.value?.steps.slice(0, index).some((candidate) => candidate.action === 'CRITIQUE')
+    return repaired ? `补充检索新增证据：${amount}` : `首次检索证据：${amount}`
+  }
+  if (step.action === 'EXPAND_WINDOW') {
+    return `扩窗新增证据：${Number(step.observationSummary.replace('WINDOW:', '')) || 0} 条`
+  }
+  if (step.action === 'GENERATE_AND_VERIFY') {
+    return step.observationSummary === 'ANSWER:ANSWERED' ? '生成回答并通过证据门' : '生成结果未通过证据门'
+  }
+  return '已完成受限动作'
+}
+
 function formatTime(milliseconds: number): string {
   const totalSeconds = Math.max(0, Math.floor(milliseconds / 1_000))
   const hours = Math.floor(totalSeconds / 3_600)
@@ -452,6 +510,7 @@ onBeforeUnmount(() => {
           <div><dt>步骤</dt><dd>{{ agentRun.usage.steps }} / {{ agentRun.budget.maxSteps }}</dd></div>
           <div><dt>答案尝试</dt><dd>{{ agentRun.usage.answerAttempts }} / {{ agentRun.budget.maxAnswerAttempts }}</dd></div>
           <div><dt>Token</dt><dd>{{ agentRun.usage.inputTokens + agentRun.usage.outputTokens }}</dd></div>
+          <div><dt>模型调用</dt><dd>{{ modelCallCount(agentRun) }} 次</dd></div>
           <div><dt>已知费用</dt><dd>¥{{ Number(agentRun.usage.knownCost).toFixed(4) }}</dd></div>
           <div><dt>费用完整性</dt><dd>{{ agentRun.usage.unknownCostCalls > 0 ? `未知费用调用 ${agentRun.usage.unknownCostCalls} 次` : '无未知费用' }}</dd></div>
         </dl>
@@ -462,11 +521,11 @@ onBeforeUnmount(() => {
           <summary>查看去敏执行轨迹</summary>
           <ol>
             <li
-              v-for="step in agentRun.steps"
+              v-for="(step, index) in agentRun.steps"
               :key="step.stepNumber"
             >
               <strong>{{ String(step.stepNumber).padStart(2, '0') }} · {{ step.action }}</strong>
-              <span>{{ step.observationSummary }}</span>
+              <span>{{ traceSummary(step, index) }}</span>
             </li>
           </ol>
           <p

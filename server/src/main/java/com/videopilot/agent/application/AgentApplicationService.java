@@ -383,7 +383,8 @@ public final class AgentApplicationService {
 
     private ActionResult plan(AgentRun run) {
         if (decisions == null) throw new IllegalStateException("agent decision model is not configured");
-        String fingerprint = sha256(AgentDecisionPort.PLANNER_PROMPT_VERSION + "|" + run.goal());
+        String fingerprint = sha256(AgentDecisionPort.PLANNER_PROMPT_VERSION + "|"
+                + run.runId() + "|" + run.goal());
         UUID modelCallId = ids.get();
         Instant startedAt = now.get();
         store.startDecisionModelCall(new AgentStore.DecisionModelCallStart(

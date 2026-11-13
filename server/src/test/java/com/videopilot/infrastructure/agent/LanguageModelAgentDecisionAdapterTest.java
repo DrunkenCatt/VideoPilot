@@ -4,12 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.videopilot.agent.port.AgentDecisionPort;
 import com.videopilot.answer.port.LanguageModelPort;
 import java.util.UUID;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.Test;
 
 class LanguageModelAgentDecisionAdapterTest {
@@ -80,6 +83,32 @@ class LanguageModelAgentDecisionAdapterTest {
                 .isEqualTo(AgentDecisionPort.CritiqueAction.PASS);
         assertThat(adapter.critique(critiqueRequest()).critique().query()).isEqualTo("String 使用场景");
         assertThat(adapter.critique(critiqueRequest()).critique().startMs()).isEqualTo(1000);
+    }
+
+    @Test
+    void promptsSpecifyExactNullAndEmptyFieldsForEveryDecisionShape() {
+        when(model.generate(any())).thenReturn(
+                new LanguageModelPort.Response("""
+                        {"schemaVersion":1,"action":"RETRIEVE","query":"String",
+                         "expectedFacts":["定义"]}
+                        """, new LanguageModelPort.Usage(10, 5)),
+                new LanguageModelPort.Response("""
+                        {"schemaVersion":1,"action":"PASS","query":"","startMs":null,
+                         "endMs":null,"missingRequirements":[],"unsupportedClaims":[]}
+                        """, new LanguageModelPort.Usage(10, 5)));
+
+        adapter.plan(request("解释 String"));
+        adapter.critique(critiqueRequest());
+
+        ArgumentCaptor<LanguageModelPort.Request> requests =
+                ArgumentCaptor.forClass(LanguageModelPort.Request.class);
+        verify(model, times(2)).generate(requests.capture());
+        assertThat(requests.getAllValues().get(0).prompt())
+                .contains("RETRIEVE template", "NEEDS_CLARIFICATION template", "REFUSE template",
+                        "combine the complete list into one fact", "Never output more than 3 entries");
+        assertThat(requests.getAllValues().get(1).prompt())
+                .contains("PASS template", "\"startMs\":null", "RETRIEVE template",
+                        "EXPAND_WINDOW template");
     }
 
     @Test

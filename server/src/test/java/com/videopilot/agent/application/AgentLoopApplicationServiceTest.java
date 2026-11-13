@@ -91,6 +91,34 @@ class AgentLoopApplicationServiceTest {
     }
 
     @Test
+    void scopesPlannerModelCallFingerprintToEachRunForRepeatedQuestions() {
+        UUID secondRunId = UUID.randomUUID();
+        AgentTrace first = trace(run(0, 0, NOW.plusSeconds(180)), List.of());
+        AgentTrace second = trace(run(secondRunId, 0, 0, NOW.plusSeconds(180)), List.of());
+        when(store.claimNext(any(), any(), eq(NOW))).thenReturn(
+                Optional.of(new ClaimedRun(ownerId, first.run())),
+                Optional.of(new ClaimedRun(ownerId, second.run())));
+        when(store.findTrace(ownerId, runId)).thenReturn(Optional.of(first));
+        when(store.findTrace(ownerId, secondRunId)).thenReturn(Optional.of(second));
+        when(store.ownsReadyJob(ownerId, jobId)).thenReturn(true);
+        when(policy.next(any())).thenReturn(AgentPolicy.Decision.action(AgentPolicy.Action.PLAN));
+        when(store.beginToolCall(any(), any(), eq(1L), any())).thenReturn(2L);
+        when(decisions.plan(any())).thenReturn(new AgentDecisionPort.PlanResponse(
+                new AgentDecisionPort.Plan(1, AgentDecisionPort.PlanAction.RETRIEVE,
+                        "String 命令的定义和用途", List.of("定义")),
+                new AgentDecisionPort.Usage(80, 20)));
+
+        assertThat(service.processNext()).isTrue();
+        assertThat(service.processNext()).isTrue();
+
+        ArgumentCaptor<AgentStore.DecisionModelCallStart> calls =
+                ArgumentCaptor.forClass(AgentStore.DecisionModelCallStart.class);
+        verify(store, org.mockito.Mockito.times(2)).startDecisionModelCall(calls.capture());
+        assertThat(calls.getAllValues()).extracting(AgentStore.DecisionModelCallStart::inputFingerprint)
+                .doesNotHaveDuplicates();
+    }
+
+    @Test
     void retrievalUsesThePersistedPlannerQueryInsteadOfTheOriginalGoal() {
         AgentStep plan = new AgentStep(runId, 1, "PLAN", "PLAN:RETRIEVE;facts:2",
                 "plan:v1:RETRIEVE:String 命令的定义和用途", NOW);
@@ -478,6 +506,15 @@ class AgentLoopApplicationServiceTest {
 
     private AgentRun run(int steps, int answers, Instant deadline) {
         return run(steps, answers, 0, 0, BigDecimal.ZERO, 0, deadline);
+    }
+
+    private AgentRun run(UUID id, int steps, int answers, Instant deadline) {
+        return new AgentRun(
+                id, ownerId, jobId, "intent-" + id, "a".repeat(64), "请解释课程中的 String",
+                RunStatus.RUNNING, versions(), new AgentBudget(
+                        6, 2, 12_000, 6_000, BigDecimal.ONE, deadline),
+                steps, answers, 0, 0, BigDecimal.ZERO, 0,
+                null, 1, NOW.minusSeconds(5), null);
     }
 
     private AgentRun run(

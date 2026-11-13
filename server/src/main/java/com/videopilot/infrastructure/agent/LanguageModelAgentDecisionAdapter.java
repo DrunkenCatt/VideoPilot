@@ -24,7 +24,13 @@ public final class LanguageModelAgentDecisionAdapter implements AgentDecisionPor
                 action must be RETRIEVE, NEEDS_CLARIFICATION, or REFUSE.
                 For RETRIEVE, write one focused search query (max 200 characters) and 1-3 short facts
                 that the final answer must cover (each max 72 characters).
+                expectedFacts is a checklist of answer requirements, not one entry per requested item.
+                If the goal asks for a list, combine the complete list into one fact. Never output more than 3 entries.
                 For terminal actions, query must be empty and expectedFacts must be empty.
+                RETRIEVE template: {"schemaVersion":1,"action":"RETRIEVE","query":"focused query","expectedFacts":["fact"]}
+                NEEDS_CLARIFICATION template: {"schemaVersion":1,"action":"NEEDS_CLARIFICATION","query":"","expectedFacts":[]}
+                REFUSE template: {"schemaVersion":1,"action":"REFUSE","query":"","expectedFacts":[]}
+                Include every template key, add no other keys, and do not use markdown fences.
                 Never return owner IDs, budgets, SQL, URLs, file paths, tool names, or explanations.
                 Goal: %s
                 """.formatted(request.goal());
@@ -50,6 +56,10 @@ public final class LanguageModelAgentDecisionAdapter implements AgentDecisionPor
                     missingRequirements, unsupportedClaims. action must be PASS, RETRIEVE, or EXPAND_WINDOW.
                     PASS must have empty repair fields. RETRIEVE needs one focused query and missing requirements.
                     EXPAND_WINDOW needs a non-negative [startMs,endMs] and missing requirements.
+                    PASS template: {"schemaVersion":1,"action":"PASS","query":"","startMs":null,"endMs":null,"missingRequirements":[],"unsupportedClaims":[]}
+                    RETRIEVE template: {"schemaVersion":1,"action":"RETRIEVE","query":"focused query","startMs":null,"endMs":null,"missingRequirements":["missing fact"],"unsupportedClaims":[]}
+                    EXPAND_WINDOW template: {"schemaVersion":1,"action":"EXPAND_WINDOW","query":"","startMs":0,"endMs":1000,"missingRequirements":["missing context"],"unsupportedClaims":[]}
+                    Include every template key, add no other keys, use null exactly as shown, and do not use markdown fences.
                     Do not judge citation existence or override the deterministic evidence gate.
                     GOAL: %s
                     EXPECTED_FACTS: %s

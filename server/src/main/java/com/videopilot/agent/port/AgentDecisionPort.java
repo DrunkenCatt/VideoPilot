@@ -6,8 +6,8 @@ import java.util.UUID;
 public interface AgentDecisionPort {
 
     int SCHEMA_VERSION = 1;
-    String PLANNER_PROMPT_VERSION = "agent-planner-v1";
-    String CRITIC_PROMPT_VERSION = "agent-critic-v1";
+    String PLANNER_PROMPT_VERSION = "agent-planner-v3";
+    String CRITIC_PROMPT_VERSION = "agent-critic-v2";
 
     PlanResponse plan(PlanRequest request);
 

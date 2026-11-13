@@ -196,6 +196,41 @@ describe('AnswerWorkspace', () => {
     expect(wrapper.get('[data-test="answer-claim"]').text()).toContain('String 可以保存')
   })
 
+  it('renders a redacted planner and critic repair trace with the model call count', async () => {
+    const repaired = run({
+      status: 'COMPLETED',
+      terminationReason: 'COMPLETED',
+      usage: { steps: 6, answerAttempts: 2, inputTokens: 120, outputTokens: 40, knownCost: 0.01, unknownCostCalls: 0 },
+      steps: [
+        { stepNumber: 1, action: 'PLAN', observationSummary: 'PLAN:RETRIEVE;facts:2;expected:5L2_55So5Zy65pmv', resultReference: null, completedAt: '2026-11-11T09:00:01Z' },
+        { stepNumber: 2, action: 'RETRIEVE', observationSummary: 'EVIDENCE:single', resultReference: null, completedAt: '2026-11-11T09:00:02Z' },
+        { stepNumber: 3, action: 'GENERATE_AND_VERIFY', observationSummary: 'ANSWER:REFUSED', resultReference: null, completedAt: '2026-11-11T09:00:03Z' },
+        { stepNumber: 4, action: 'CRITIQUE', observationSummary: 'CRITIQUE:RETRIEVE;missing:5L2_55So5Zy65pmv;unsupported:', resultReference: null, completedAt: '2026-11-11T09:00:04Z' },
+        { stepNumber: 5, action: 'RETRIEVE', observationSummary: 'EVIDENCE:multiple', resultReference: null, completedAt: '2026-11-11T09:00:05Z' },
+        { stepNumber: 6, action: 'GENERATE_AND_VERIFY', observationSummary: 'ANSWER:ANSWERED', resultReference: null, completedAt: '2026-11-11T09:00:06Z' },
+      ],
+    })
+    const wrapper = mount(AnswerWorkspace, {
+      props: {
+        job, csrfToken: session.csrfToken, api: answersApi(),
+        agentApi: agentsApi({ create: vi.fn().mockResolvedValue(repaired) }), agentAvailable: true,
+      },
+    })
+    await flushPromises()
+    await wrapper.get('[data-test="agent-toggle"]').setValue(true)
+    await wrapper.get('[data-test="answer-question"]').setValue(answered.question)
+    await wrapper.get('[data-test="ask-form"]').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="agent-budget"]').text()).toContain('模型调用4 次')
+    const trace = wrapper.get('[data-test="agent-trace"]').text()
+    expect(trace).toContain('计划检索 · 预期事实 2 项')
+    expect(trace).toContain('定向补检 · 缺失：使用场景')
+    expect(trace).toContain('补充检索新增证据：多条')
+    expect(trace).not.toContain('5L2_55So5Zy65pmv')
+    expect(wrapper.text()).not.toContain('prompt')
+  })
+
   it('shows unknown cost and clarification without exposing parameters or raw responses', async () => {
     const clarified = run({
       status: 'REFUSED',
