@@ -458,3 +458,32 @@ T7 没有增加模型调用或新表，只修正原 Agent Step 与现有 Answer 
 
 T7 退出门通过：同一 Run 可仅凭 MySQL Step 重建相同的证据选择，扩窗内容确实进入 Answer Prompt，
 既有 CAS/ToolCall 幂等语义未改变。可以进入 T8；这不表示 T4/M6 效果门已经通过。
+
+## 14. T8 结构化 Planner 驱动首次检索（2026-11-13）
+
+T8 在既有有界动作图最前面加入一个真实 `PLAN` Step。一个窄 `AgentDecisionPort` 复用已有
+`LanguageModelPort` 和 SiliconFlow 配置，只返回版本化 `action/query/expectedFacts`；没有 Planner
+类层级、通用计划树或第二套 HTTP Client。
+
+- Planner 只接受 `RETRIEVE/NEEDS_CLARIFICATION/REFUSE`。Jackson 对未知字段失败；Java 再限制
+  query 200 字符、1-3 个 expected fact、单项 72 字符，并拒绝 URL/文件位置。owner、预算、SQL、
+  任意工具名等字段不能进入 Schema。
+- `PLAN` 的 action、fact 数量和编码后的 expected facts 写入不超过 1000 字符的去敏 Observation；
+  query 写入不超过 500 字符的有界结果引用。Prompt、原始模型输出和思维链均不落入 Agent Trace。
+- 后续 Retrieval 只解析已提交 PLAN Step 的 query；缺失、损坏或非 RETRIEVE 计划以
+  `INVALID_ACTION_PARAMETERS` 在 Retrieval/Embedding 前停止。ToolCall 指纹也改为绑定实际 action
+  参数，而不是只绑定原 goal。
+- Planner 调用以 `AGENT_PLAN`、`agent-planner-v1`、run/evaluation 关联、Token、延迟和价格状态写入
+  现有 `model_call`。执行限制升级为 `m6-limits-v1`，显式加入 PLAN 的调用、输入和输出上限；Run 的
+  step/token/cost/deadline/UNKNOWN 调用前硬门保持不变。
+- RED/GREEN：旧代码因没有 `AgentDecisionPort`、`PLAN` 和 Adapter 而编译失败；随后 Planner/Policy/
+  Adapter/Agent 定向测试证明不同 query 被采用，非法 JSON、未知动作、额外 owner 字段、超长 query
+  和 URL 在检索前失败。隔离 MySQL `videopilot_m6_t7_gate` 上 `JdbcAgentStoreIT` 4/4 通过，确认
+  `AGENT_PLAN` 审计与价格可用状态。
+- 后端快速门最终为 470 项通过、0 failure/error、1 项既有 FFmpeg 条件跳过，JaCoCo 与 ArchUnit
+  通过。第一次快速门只暴露执行限制合同测试仍期望旧四种 operation；增加 PLAN 限额并升级限制版本后
+  重跑通过，没有删除断言或降低阈值。
+
+T8 退出门通过：两个目标可产生并持久化不同检索参数，模型只能提出受限候选，Java 继续控制权限、
+预算、Schema、状态和终止。Planner 策略版本为 `agent-policy-v2-planner`；Agent 默认关闭，进入 T9 前
+不把该中间策略作为可晋级候选。

@@ -19,6 +19,7 @@ import com.videopilot.agent.domain.AgentModels.RunStatus;
 import com.videopilot.agent.domain.AgentModels.ToolCall;
 import com.videopilot.agent.domain.AgentModels.ToolCallStatus;
 import com.videopilot.agent.port.AgentPolicy;
+import com.videopilot.agent.port.AgentDecisionPort;
 import com.videopilot.agent.port.AgentStore;
 import com.videopilot.answer.application.AnswerApplicationService;
 import com.videopilot.answer.port.AnswerStore;
@@ -47,6 +48,7 @@ class AgentLoopApplicationServiceTest {
     private static final Instant NOW = Instant.parse("2026-11-11T01:00:00Z");
     private final AgentStore store = mock(AgentStore.class);
     private final AgentPolicy policy = mock(AgentPolicy.class);
+    private final AgentDecisionPort decisions = mock(AgentDecisionPort.class);
     private final RetrievalApplicationService retrieval = mock(RetrievalApplicationService.class);
     private final VideoContextQueryApplicationService contexts = mock(VideoContextQueryApplicationService.class);
     private final AnswerApplicationService answers = mock(AnswerApplicationService.class);
@@ -59,23 +61,84 @@ class AgentLoopApplicationServiceTest {
     void setUp() {
         service = new AgentApplicationService(
                 store, versions(), this::budget, () -> NOW, UUID::randomUUID,
-                policy, retrieval, contexts, answers);
+                policy, decisions, retrieval, contexts, answers);
+    }
+
+    @Test
+    void persistsAStructuredPlanBeforeRetrieval() {
+        AgentTrace trace = trace(run(0, 0, NOW.plusSeconds(180)), List.of());
+        claimed(trace);
+        when(policy.next(trace)).thenReturn(AgentPolicy.Decision.action(AgentPolicy.Action.PLAN));
+        when(store.beginToolCall(any(), eq(runId), eq(1L), any())).thenReturn(2L);
+        when(decisions.plan(any())).thenReturn(new AgentDecisionPort.PlanResponse(
+                new AgentDecisionPort.Plan(1, AgentDecisionPort.PlanAction.RETRIEVE,
+                        "String 命令的定义和用途", List.of("定义", "使用场景")),
+                new AgentDecisionPort.Usage(80, 20)));
+
+        assertThat(service.processNext()).isTrue();
+
+        var order = inOrder(store, decisions);
+        order.verify(store).beginToolCall(any(), eq(runId), eq(1L), any());
+        order.verify(store).startDecisionModelCall(any());
+        order.verify(decisions).plan(any());
+        order.verify(store).completeDecisionModelCall(any());
+        ArgumentCaptor<AgentStep> step = ArgumentCaptor.forClass(AgentStep.class);
+        verify(store).completeToolCallAndStep(any(), eq(runId), eq(2L), any(), step.capture(), eq(false));
+        assertThat(step.getValue().action()).isEqualTo("PLAN");
+        assertThat(step.getValue().observationSummary()).startsWith("PLAN:RETRIEVE;facts:2;expected:");
+        assertThat(step.getValue().resultReference()).startsWith("plan:v1:RETRIEVE:");
+        verify(retrieval, never()).retrieve(any(), any(), any(), any(Integer.class));
+    }
+
+    @Test
+    void retrievalUsesThePersistedPlannerQueryInsteadOfTheOriginalGoal() {
+        AgentStep plan = new AgentStep(runId, 1, "PLAN", "PLAN:RETRIEVE;facts:2",
+                "plan:v1:RETRIEVE:String 命令的定义和用途", NOW);
+        AgentTrace trace = trace(run(1, 0, NOW.plusSeconds(180)), List.of(plan));
+        claimed(trace);
+        when(policy.next(trace)).thenReturn(AgentPolicy.Decision.action(AgentPolicy.Action.RETRIEVE));
+        when(store.beginToolCall(any(), eq(runId), eq(1L), any())).thenReturn(2L);
+        when(retrieval.retrieve(any(), eq(jobId), eq("String 命令的定义和用途"), eq(5), eq(runId)))
+                .thenReturn(retrievalResult(2));
+
+        assertThat(service.processNext()).isTrue();
+
+        verify(retrieval).retrieve(any(), eq(jobId), eq("String 命令的定义和用途"), eq(5), eq(runId));
+        verify(retrieval, never()).retrieve(any(), eq(jobId), eq("请解释课程中的 String"), eq(5), eq(runId));
+    }
+
+    @Test
+    void invalidPlannerOutputStopsBeforeRetrieval() {
+        AgentTrace trace = trace(run(0, 0, NOW.plusSeconds(180)), List.of());
+        claimed(trace);
+        when(policy.next(trace)).thenReturn(AgentPolicy.Decision.action(AgentPolicy.Action.PLAN));
+        when(store.beginToolCall(any(), eq(runId), eq(1L), any())).thenReturn(2L);
+        when(decisions.plan(any())).thenThrow(new AgentDecisionPort.InvalidDecisionException(
+                new IllegalArgumentException("invalid json")));
+
+        assertThat(service.processNext()).isTrue();
+
+        verify(store).failDecisionModelCall(any(), eq("FAILED"), eq("INVALID_OUTPUT"),
+                eq("INVALID_DECISION"), eq(NOW));
+        verify(store).failToolCallAndTerminate(any(), eq(runId), eq(2L), any(),
+                eq(ToolCallStatus.FAILED), eq("TOOL_EXECUTION_FAILED"), eq(NOW));
+        verify(retrieval, never()).retrieve(any(), any(), any(), any(Integer.class));
     }
 
     @Test
     void persistsIntentBeforeRetrievalAndStoresOnlyRedactedFacts() {
-        AgentTrace trace = trace(run(0, 0, NOW.plusSeconds(180)), List.of());
+        AgentTrace trace = trace(run(1, 0, NOW.plusSeconds(180)), List.of(planStep()));
         claimed(trace);
         when(policy.next(trace)).thenReturn(AgentPolicy.Decision.action(AgentPolicy.Action.RETRIEVE));
         when(store.beginToolCall(any(), eq(runId), eq(1L), any())).thenReturn(2L);
-        when(retrieval.retrieve(any(), eq(jobId), eq("请解释课程中的 String"), eq(5), eq(runId)))
+        when(retrieval.retrieve(any(), eq(jobId), eq("String 命令的定义和用途"), eq(5), eq(runId)))
                 .thenReturn(retrievalResult(2));
 
         assertThat(service.processNext()).isTrue();
 
         var order = inOrder(store, retrieval);
         order.verify(store).beginToolCall(any(), eq(runId), eq(1L), any());
-        order.verify(retrieval).retrieve(any(), eq(jobId), eq("请解释课程中的 String"), eq(5), eq(runId));
+        order.verify(retrieval).retrieve(any(), eq(jobId), eq("String 命令的定义和用途"), eq(5), eq(runId));
         order.verify(store).completeToolCallAndStep(any(), eq(runId), eq(2L), any(), any(), eq(false));
         ArgumentCaptor<AgentStep> step = ArgumentCaptor.forClass(AgentStep.class);
         verify(store).completeToolCallAndStep(any(), eq(runId), eq(2L), any(), step.capture(), eq(false));
@@ -167,6 +230,7 @@ class AgentLoopApplicationServiceTest {
         assertThat(service.processNext()).isTrue();
 
         verify(store, never()).beginToolCall(any(), any(), any(Long.class), any());
+        verify(decisions, never()).plan(any());
         verify(retrieval, never()).retrieve(any(), any(), any(), any(Integer.class));
         verify(store).terminate(any(), eq(runId), eq(1L), eq(RunStatus.FAILED),
                 eq("DEADLINE_EXCEEDED"), eq(NOW));
@@ -246,7 +310,7 @@ class AgentLoopApplicationServiceTest {
 
     @Test
     void recordsAStableFailureWhenAToolThrowsAfterItsIntentWasPersisted() {
-        AgentTrace trace = trace(run(0, 0, NOW.plusSeconds(180)), List.of());
+        AgentTrace trace = trace(run(1, 0, NOW.plusSeconds(180)), List.of(planStep()));
         claimed(trace);
         when(policy.next(trace)).thenReturn(AgentPolicy.Decision.action(AgentPolicy.Action.RETRIEVE));
         when(store.beginToolCall(any(), eq(runId), eq(1L), any())).thenReturn(2L);
@@ -343,6 +407,11 @@ class AgentLoopApplicationServiceTest {
 
     private AgentTrace trace(AgentRun run, List<AgentStep> steps) {
         return new AgentTrace(run, steps, List.of());
+    }
+
+    private AgentStep planStep() {
+        return new AgentStep(runId, 1, "PLAN", "PLAN:RETRIEVE;facts:2",
+                "plan:v1:RETRIEVE:String 命令的定义和用途", NOW);
     }
 
     private AgentVersions versions() {

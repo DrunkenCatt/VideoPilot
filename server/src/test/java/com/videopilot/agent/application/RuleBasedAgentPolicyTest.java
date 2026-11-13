@@ -21,6 +21,20 @@ class RuleBasedAgentPolicyTest {
     private final RuleBasedAgentPolicy policy = new RuleBasedAgentPolicy();
 
     @Test
+    void startsWithAPlanAndUsesItsWhitelistedAction() {
+        assertThat(policy.next(trace()).action()).isEqualTo(Action.PLAN);
+        assertThat(policy.next(trace(step(
+                "PLAN", "PLAN:RETRIEVE;facts:2", "plan:v1:RETRIEVE:query:facts"))).action())
+                .isEqualTo(Action.RETRIEVE);
+        assertThat(policy.next(trace(step(
+                "PLAN", "PLAN:NEEDS_CLARIFICATION;facts:0", "plan:v1:NEEDS_CLARIFICATION::"))).action())
+                .isEqualTo(Action.NEEDS_CLARIFICATION);
+        assertThat(policy.next(trace(step(
+                "PLAN", "PLAN:REFUSE;facts:0", "plan:v1:REFUSE::"))).action())
+                .isEqualTo(Action.REFUSE);
+    }
+
+    @Test
     void choosesDirectAnswerAfterMultipleEvidenceHits() {
         assertThat(policy.next(trace(step("RETRIEVE", "EVIDENCE:multiple", "window:1000:9000"))).action())
                 .isEqualTo(Action.GENERATE_AND_VERIFY);

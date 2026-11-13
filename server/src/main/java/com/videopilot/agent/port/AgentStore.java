@@ -47,9 +47,31 @@ public interface AgentStore {
             String leaseId, UUID runId, long expectedVersion,
             RunStatus status, String terminationReason, Instant completedAt);
 
+    default void startDecisionModelCall(DecisionModelCallStart call) {
+        throw new UnsupportedOperationException("decision model audit is not configured");
+    }
+
+    default void completeDecisionModelCall(DecisionModelCallCompletion completion) {
+        throw new UnsupportedOperationException("decision model audit is not configured");
+    }
+
+    default void failDecisionModelCall(
+            UUID modelCallId, String status, String category, String code, Instant completedAt) {
+        throw new UnsupportedOperationException("decision model audit is not configured");
+    }
+
     record CreateResult(AgentRun run, boolean fingerprintConflict) {
     }
 
     record GoalAnalysisJob(OwnerId ownerId, UUID jobId, String goal, boolean ready) {
     }
+
+    record DecisionModelCallStart(
+            UUID modelCallId, UUID jobId, UUID runId, UUID evaluationRunId,
+            String evaluationCaseId, String requestId, String provider, String modelVersion,
+            String promptVersion, String inputFingerprint, Instant startedAt) { }
+
+    record DecisionModelCallCompletion(
+            UUID modelCallId, String modelVersion, long inputTokens, long outputTokens,
+            long latencyMs, Instant startedAt, Instant completedAt) { }
 }

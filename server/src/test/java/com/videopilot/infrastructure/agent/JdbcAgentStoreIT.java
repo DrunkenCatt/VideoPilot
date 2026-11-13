@@ -12,6 +12,7 @@ import com.videopilot.agent.domain.AgentModels.AgentVersions;
 import com.videopilot.agent.domain.AgentModels.RunStatus;
 import com.videopilot.agent.domain.AgentModels.ToolCall;
 import com.videopilot.agent.domain.AgentModels.ToolCallStatus;
+import com.videopilot.agent.port.AgentStore;
 import com.videopilot.identity.domain.OwnerId;
 import com.videopilot.infrastructure.web.AgentController;
 import java.math.BigDecimal;
@@ -209,6 +210,32 @@ class JdbcAgentStoreIT {
     }
 
     @Test
+    void auditsPlannerModelCallsAgainstTheAgentRun() {
+        store.create(owner, run("intent-plan-audit", "c".repeat(64)));
+        UUID modelCallId = UUID.randomUUID();
+        String model = "deepseek-ai/DeepSeek-V4-Flash";
+        store.startDecisionModelCall(new AgentStore.DecisionModelCallStart(
+                modelCallId, jobId, runId, null, null, "agent-plan-" + runId,
+                "SiliconFlow", model, "agent-planner-v1", "7".repeat(64), now));
+        store.completeDecisionModelCall(new AgentStore.DecisionModelCallCompletion(
+                modelCallId, model, 80, 20, 25, now, now.plusMillis(25)));
+
+        PlannerAudit audit = jdbc.sql("""
+                SELECT operation_type, prompt_version, status, input_units, output_units,
+                       price_status, run_id
+                FROM model_call WHERE model_call_id=:callId
+                """).param("callId", modelCallId.toString())
+                .query((row, ignored) -> new PlannerAudit(
+                        row.getString("operation_type"), row.getString("prompt_version"),
+                        row.getString("status"), row.getLong("input_units"),
+                        row.getLong("output_units"), row.getString("price_status"),
+                        row.getString("run_id"))).single();
+        assertThat(audit).isEqualTo(new PlannerAudit(
+                "AGENT_PLAN", "agent-planner-v1", "SUCCEEDED", 80, 20, "AVAILABLE",
+                runId.toString()));
+    }
+
+    @Test
     void discoversOldReadyJobsAndStopsOfferingThemAfterTheGoalRunExists() {
         var candidate = store.findNextGoalAnalysisJob().orElseThrow();
         assertThat(candidate.ownerId()).isEqualTo(owner);
@@ -237,4 +264,8 @@ class JdbcAgentStoreIT {
                 new AgentBudget(6, 2, 12_000, 6_000, new BigDecimal("1.00"), now.plusSeconds(180)),
                 0, 0, 0, 0, BigDecimal.ZERO, 0, null, 0, now, null);
     }
+
+    private record PlannerAudit(
+            String operation, String promptVersion, String status,
+            long inputTokens, long outputTokens, String priceStatus, String runId) { }
 }

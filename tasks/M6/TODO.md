@@ -118,11 +118,11 @@ Answer；owner 隔离、预算和证据门不变；前端不重复目标 Answer�
 
 ## T8：用结构化 Planner 驱动首次检索
 
-- [ ] 先写失败测试：不同 Planner JSON 产生不同 query/expectedFacts；非法 JSON、未知 Action、超长 query、越权参数和超预算均在 Retrieval 前终止且外部调用为 0。
-- [ ] 增加一个窄 Agent 决策模型 Port/Adapter，复用既有 SiliconFlow 配置、调用审计和预算，不让 Agent application 依赖供应商 DTO，不创建 Planner 类层级。
-- [ ] 新增 `PLAN` 动作；模型只可选择 `RETRIEVE`、`NEEDS_CLARIFICATION` 或 `REFUSE`，Java 解析严格 Schema 后持久化去敏计划摘要。
-- [ ] Retrieval 必须使用 Planner query，而不是固定使用 `run.goal()`；expectedFacts 随 Trace 进入后续 Critic，但不得作为未经验证的事实发布。
-- [ ] 完成 Planner/Policy/Adapter 定向测试、模型调用审计集成测试、文档、后端快速门和独立提交。
+- [x] 先写失败测试：不同 Planner JSON 产生不同 query/expectedFacts；非法 JSON、未知 Action、超长 query、越权参数和超预算均在 Retrieval 前终止且外部调用为 0。
+- [x] 增加一个窄 Agent 决策模型 Port/Adapter，复用既有 SiliconFlow 配置、调用审计和预算，不让 Agent application 依赖供应商 DTO，不创建 Planner 类层级。
+- [x] 新增 `PLAN` 动作；模型只可选择 `RETRIEVE`、`NEEDS_CLARIFICATION` 或 `REFUSE`，Java 解析严格 Schema 后持久化去敏计划摘要。
+- [x] Retrieval 必须使用 Planner query，而不是固定使用 `run.goal()`；expectedFacts 随 Trace 进入后续 Critic，但不得作为未经验证的事实发布。
+- [x] 完成 Planner/Policy/Adapter 定向测试、模型调用审计集成测试、文档、后端快速门和独立提交。
 
 **依赖**：T7。
 

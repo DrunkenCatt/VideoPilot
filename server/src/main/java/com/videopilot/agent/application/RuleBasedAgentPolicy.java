@@ -8,14 +8,28 @@ public final class RuleBasedAgentPolicy implements AgentPolicy {
 
     @Override
     public Decision next(AgentTrace trace) {
-        if (trace.steps().isEmpty()) return Decision.action(Action.RETRIEVE);
+        if (trace.steps().isEmpty()) return Decision.action(Action.PLAN);
         AgentStep last = trace.steps().getLast();
         return switch (last.action()) {
+            case "PLAN" -> afterPlan(last);
             case "RETRIEVE" -> afterRetrieval(trace, last);
             case "EXPAND_WINDOW" -> Decision.action(Action.GENERATE_AND_VERIFY);
             case "GENERATE_AND_VERIFY" -> afterAnswer(last);
             default -> Decision.terminal(Action.REFUSE, "INVALID_POLICY_STATE");
         };
+    }
+
+    private Decision afterPlan(AgentStep step) {
+        if (step.observationSummary().startsWith("PLAN:RETRIEVE;facts:")) {
+            return Decision.action(Action.RETRIEVE);
+        }
+        if ("PLAN:NEEDS_CLARIFICATION;facts:0".equals(step.observationSummary())) {
+            return Decision.terminal(Action.NEEDS_CLARIFICATION, "NEEDS_CLARIFICATION");
+        }
+        if ("PLAN:REFUSE;facts:0".equals(step.observationSummary())) {
+            return Decision.terminal(Action.REFUSE, "PLANNER_REFUSED");
+        }
+        return Decision.terminal(Action.REFUSE, "INVALID_PLAN");
     }
 
     private Decision afterRetrieval(AgentTrace trace, AgentStep step) {

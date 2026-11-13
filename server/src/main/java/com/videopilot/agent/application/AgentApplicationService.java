@@ -9,6 +9,7 @@ import com.videopilot.agent.domain.AgentModels.RunStatus;
 import com.videopilot.agent.domain.AgentModels.ToolCall;
 import com.videopilot.agent.domain.AgentModels.ToolCallStatus;
 import com.videopilot.agent.port.AgentPolicy;
+import com.videopilot.agent.port.AgentDecisionPort;
 import com.videopilot.agent.port.AgentStore;
 import com.videopilot.answer.application.AnswerApplicationService;
 import com.videopilot.answer.port.AnswerStore;
@@ -27,12 +28,13 @@ import java.util.HexFormat;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.UUID;
+import java.util.Base64;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 public final class AgentApplicationService {
 
-    public static final String POLICY_VERSION = "agent-policy-v1";
+    public static final String POLICY_VERSION = "agent-policy-v2-planner";
     private static final Pattern IDEMPOTENCY_KEY = Pattern.compile("[A-Za-z0-9._:-]{1,128}");
     private static final Pattern ANSWER_REFERENCE = Pattern.compile(
             "answer:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
@@ -45,6 +47,7 @@ public final class AgentApplicationService {
     private final Supplier<Instant> now;
     private final Supplier<UUID> ids;
     private final AgentPolicy policy;
+    private final AgentDecisionPort decisions;
     private final RetrievalApplicationService retrieval;
     private final VideoContextQueryApplicationService contexts;
     private final AnswerApplicationService answers;
@@ -62,6 +65,7 @@ public final class AgentApplicationService {
         this.now = now;
         this.ids = ids;
         this.policy = null;
+        this.decisions = null;
         this.retrieval = null;
         this.contexts = null;
         this.answers = null;
@@ -81,6 +85,7 @@ public final class AgentApplicationService {
         this.now = now;
         this.ids = ids;
         this.policy = null;
+        this.decisions = null;
         this.retrieval = null;
         this.contexts = null;
         this.answers = null;
@@ -97,7 +102,7 @@ public final class AgentApplicationService {
             RetrievalApplicationService retrieval,
             VideoContextQueryApplicationService contexts,
             AnswerApplicationService answers) {
-        this(store, versions, budgets, now, ids, policy, retrieval, contexts, answers, false);
+        this(store, versions, budgets, now, ids, policy, null, retrieval, contexts, answers, false);
     }
 
     public AgentApplicationService(
@@ -111,12 +116,43 @@ public final class AgentApplicationService {
             VideoContextQueryApplicationService contexts,
             AnswerApplicationService answers,
             boolean goalAnalysisEnabled) {
+        this(store, versions, budgets, now, ids, policy, null, retrieval, contexts, answers,
+                goalAnalysisEnabled);
+    }
+
+    public AgentApplicationService(
+            AgentStore store,
+            AgentVersions versions,
+            Supplier<AgentBudget> budgets,
+            Supplier<Instant> now,
+            Supplier<UUID> ids,
+            AgentPolicy policy,
+            AgentDecisionPort decisions,
+            RetrievalApplicationService retrieval,
+            VideoContextQueryApplicationService contexts,
+            AnswerApplicationService answers) {
+        this(store, versions, budgets, now, ids, policy, decisions, retrieval, contexts, answers, false);
+    }
+
+    public AgentApplicationService(
+            AgentStore store,
+            AgentVersions versions,
+            Supplier<AgentBudget> budgets,
+            Supplier<Instant> now,
+            Supplier<UUID> ids,
+            AgentPolicy policy,
+            AgentDecisionPort decisions,
+            RetrievalApplicationService retrieval,
+            VideoContextQueryApplicationService contexts,
+            AnswerApplicationService answers,
+            boolean goalAnalysisEnabled) {
         this.store = store;
         this.versions = versions;
         this.budgets = budgets;
         this.now = now;
         this.ids = ids;
         this.policy = policy;
+        this.decisions = decisions;
         this.retrieval = retrieval;
         this.contexts = contexts;
         this.answers = answers;
@@ -273,12 +309,13 @@ public final class AgentApplicationService {
         int stepNumber = run.stepCount() + 1;
         UUID toolCallId = ids.get();
         String action = decision.action().name();
+        String actionInput = actionInput(run, trace, decision.action());
         Instant startedAt = now.get();
         ToolCall intent = new ToolCall(
                 toolCallId, run.runId(), stepNumber, action,
                 run.runId() + ":" + stepNumber + ":" + action,
-                sha256(run.goal() + "|" + action + "|" + stepNumber),
-                ToolCallStatus.RUNNING, parameterSummary(run, decision.action()),
+                sha256(action + "|" + actionInput + "|" + stepNumber),
+                ToolCallStatus.RUNNING, parameterSummary(decision.action(), actionInput),
                 null, null, 0, startedAt, null);
         long callVersion = store.beginToolCall(leaseId, run.runId(), version, intent);
         ActionResult result;
@@ -320,23 +357,74 @@ public final class AgentApplicationService {
                 && run.answerAttemptCount() >= run.budget().maxAnswerAttempts()) {
             return "ANSWER_ATTEMPT_BUDGET_EXHAUSTED";
         }
+        if (decision.action() == AgentPolicy.Action.RETRIEVE) {
+            try {
+                plannedQuery(trace.steps());
+            } catch (RuntimeException exception) {
+                return "INVALID_ACTION_PARAMETERS";
+            }
+        }
         return null;
     }
 
     private ActionResult execute(AgentRun run, AgentTrace trace, AgentPolicy.Action action) {
         OwnerContext owner = new OwnerContext(run.ownerId());
         return switch (action) {
-            case RETRIEVE -> retrieve(owner, run);
+            case PLAN -> plan(run);
+            case RETRIEVE -> retrieve(owner, run, trace.steps());
             case EXPAND_WINDOW -> expand(owner, run, trace.steps());
             case GENERATE_AND_VERIFY -> answer(owner, run, trace.steps());
             default -> throw new AgentException(AgentException.Reason.INVALID_REQUEST);
         };
     }
 
-    private ActionResult retrieve(OwnerContext owner, AgentRun run) {
+    private ActionResult plan(AgentRun run) {
+        if (decisions == null) throw new IllegalStateException("agent decision model is not configured");
+        String fingerprint = sha256(AgentDecisionPort.PLANNER_PROMPT_VERSION + "|" + run.goal());
+        UUID modelCallId = ids.get();
+        Instant startedAt = now.get();
+        store.startDecisionModelCall(new AgentStore.DecisionModelCallStart(
+                modelCallId, run.jobId(), run.runId(), run.evaluationRunId(), run.evaluationCaseId(),
+                "agent-plan-" + run.runId() + "-" + (run.stepCount() + 1),
+                "SiliconFlow", run.versions().modelVersion(),
+                AgentDecisionPort.PLANNER_PROMPT_VERSION, fingerprint, startedAt));
+        AgentDecisionPort.PlanResponse response;
+        try {
+            response = decisions.plan(new AgentDecisionPort.PlanRequest(
+                    run.jobId(), run.runId(), run.evaluationRunId(), run.evaluationCaseId(),
+                    run.goal(), run.versions().modelVersion(),
+                    AgentDecisionPort.PLANNER_PROMPT_VERSION, fingerprint));
+        } catch (RuntimeException exception) {
+            Instant failedAt = now.get();
+            boolean unknown = hasUnknownOutcome(exception);
+            store.failDecisionModelCall(modelCallId,
+                    unknown ? "UNKNOWN_OUTCOME" : "FAILED",
+                    exception instanceof AgentDecisionPort.InvalidDecisionException
+                            ? "INVALID_OUTPUT" : "PROVIDER",
+                    exception instanceof AgentDecisionPort.InvalidDecisionException
+                            ? "INVALID_DECISION" : "MODEL_CALL_FAILED",
+                    failedAt);
+            throw exception;
+        }
+        Instant completedAt = now.get();
+        store.completeDecisionModelCall(new AgentStore.DecisionModelCallCompletion(
+                modelCallId, run.versions().modelVersion(),
+                response.usage().inputTokens(), response.usage().outputTokens(),
+                Math.max(0, Duration.between(startedAt, completedAt).toMillis()),
+                startedAt, completedAt));
+        AgentDecisionPort.Plan plan = response.plan();
+        String facts = Base64.getUrlEncoder().withoutPadding().encodeToString(
+                String.join("\n", plan.expectedFacts()).getBytes(StandardCharsets.UTF_8));
+        return new ActionResult("PLAN:" + plan.action() + ";facts:" + plan.expectedFacts().size()
+                + ";expected:" + facts,
+                planReference(plan));
+    }
+
+    private ActionResult retrieve(OwnerContext owner, AgentRun run, List<AgentStep> steps) {
+        String query = plannedQuery(steps);
         var result = run.evaluationRunId() == null
-                ? retrieval.retrieve(owner, run.jobId(), run.goal(), 5, run.runId())
-                : retrieval.retrieve(owner, run.jobId(), run.goal(), 5,
+                ? retrieval.retrieve(owner, run.jobId(), query, 5, run.runId())
+                : retrieval.retrieve(owner, run.jobId(), query, 5,
                         run.evaluationRunId(), run.evaluationCaseId(), run.runId());
         int hitCount = result.hits().size();
         if (hitCount == 0) return new ActionResult("EVIDENCE:none", null);
@@ -344,6 +432,30 @@ public final class AgentApplicationService {
         return new ActionResult(hitCount == 1 ? "EVIDENCE:single" : "EVIDENCE:multiple",
                 evidenceReference(first.startMs(), first.endMs(), result.hits().stream()
                         .flatMap(hit -> hit.segmentIds().stream()).toList()));
+    }
+
+    private String planReference(AgentDecisionPort.Plan plan) {
+        String reference = "plan:v1:" + plan.action() + ":" + plan.query();
+        if (reference.length() > 500) throw new AgentDecisionPort.InvalidDecisionException(
+                new IllegalArgumentException("planner reference exceeds persistence limit"));
+        return reference;
+    }
+
+    private String plannedQuery(List<AgentStep> steps) {
+        String reference = steps.stream().filter(step -> "PLAN".equals(step.action()))
+                .map(AgentStep::resultReference).reduce((first, second) -> second)
+                .orElseThrow(() -> new AgentException(AgentException.Reason.INVALID_REQUEST));
+        String prefix = "plan:v1:" + AgentDecisionPort.PlanAction.RETRIEVE + ":";
+        if (reference == null || !reference.startsWith(prefix)) {
+            throw new AgentException(AgentException.Reason.INVALID_REQUEST);
+        }
+        String query = reference.substring(prefix.length());
+        try {
+            return new AgentDecisionPort.Plan(AgentDecisionPort.SCHEMA_VERSION,
+                    AgentDecisionPort.PlanAction.RETRIEVE, query, List.of("persisted-plan")).query();
+        } catch (IllegalArgumentException exception) {
+            throw new AgentException(AgentException.Reason.INVALID_REQUEST, exception);
+        }
     }
 
     private ActionResult expand(OwnerContext owner, AgentRun run, List<AgentStep> steps) {
@@ -394,9 +506,20 @@ public final class AgentApplicationService {
         }
     }
 
-    private String parameterSummary(AgentRun run, AgentPolicy.Action action) {
+    private String actionInput(AgentRun run, AgentTrace trace, AgentPolicy.Action action) {
+        return switch (action) {
+            case PLAN -> run.goal();
+            case RETRIEVE -> plannedQuery(trace.steps());
+            case EXPAND_WINDOW -> trace.steps().isEmpty() ? "" : trace.steps().getLast().resultReference();
+            case GENERATE_AND_VERIFY -> trace.steps().stream().map(AgentStep::resultReference)
+                    .filter(java.util.Objects::nonNull).collect(java.util.stream.Collectors.joining("|"));
+            default -> action.name();
+        };
+    }
+
+    private String parameterSummary(AgentPolicy.Action action, String actionInput) {
         return "{\"action\":\"" + action.name() + "\",\"inputFingerprint\":\""
-                + sha256(run.goal()) + "\"}";
+                + sha256(actionInput) + "\"}";
     }
 
     private boolean isTerminal(AgentPolicy.Action action) {

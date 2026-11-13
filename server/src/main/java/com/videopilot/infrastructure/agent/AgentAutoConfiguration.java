@@ -6,7 +6,9 @@ import com.videopilot.agent.application.RuleBasedAgentPolicy;
 import com.videopilot.agent.domain.AgentModels.AgentBudget;
 import com.videopilot.agent.domain.AgentModels.AgentVersions;
 import com.videopilot.agent.port.AgentPolicy;
+import com.videopilot.agent.port.AgentDecisionPort;
 import com.videopilot.answer.application.AnswerApplicationService;
+import com.videopilot.answer.port.LanguageModelPort;
 import com.videopilot.context.application.VideoContextQueryApplicationService;
 import com.videopilot.retrieval.application.RetrievalApplicationService;
 import com.videopilot.infrastructure.web.AgentController;
@@ -40,16 +42,22 @@ public class AgentAutoConfiguration {
     }
 
     @Bean
+    AgentDecisionPort agentDecisionPort(LanguageModelPort model, ObjectMapper json) {
+        return new LanguageModelAgentDecisionAdapter(model, json);
+    }
+
+    @Bean
     AgentApplicationService agentApplicationService(
             JdbcAgentStore store,
             AgentPolicy policy,
+            AgentDecisionPort decisions,
             RetrievalApplicationService retrieval,
             VideoContextQueryApplicationService contexts,
             AnswerApplicationService answers,
             @Value("${videopilot.answer.model:deepseek-ai/DeepSeek-V4-Flash}") String modelVersion,
             @Value("${videopilot.retrieval.embedding.version:siliconflow-bge-m3-1024-v1}")
             String embeddingVersion,
-            @Value("${videopilot.analysis.limits.version:m4-limits-v3}") String limitsVersion,
+            @Value("${videopilot.analysis.limits.version:m6-limits-v1}") String limitsVersion,
             @Value("${videopilot.agent.goal-analysis-enabled:false}") boolean goalAnalysisEnabled) {
         Clock clock = Clock.systemUTC();
         AgentVersions versions = new AgentVersions(
@@ -61,7 +69,7 @@ public class AgentAutoConfiguration {
                 () -> new AgentBudget(
                         6, 2, 12_000, 6_000, new BigDecimal("1.00"),
                         clock.instant().plus(Duration.ofMinutes(3))),
-                clock::instant, UUID::randomUUID, policy, retrieval, contexts, answers,
+                clock::instant, UUID::randomUUID, policy, decisions, retrieval, contexts, answers,
                 goalAnalysisEnabled);
     }
 

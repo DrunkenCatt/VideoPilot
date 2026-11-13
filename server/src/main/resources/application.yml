@@ -167,13 +167,14 @@ videopilot:
   analysis:
     pipeline-version: ${ANALYSIS_PIPELINE_VERSION:m3-evidence-qa-v1}
     limits:
-      version: ${EXECUTION_LIMIT_VERSION:m4-limits-v3}
+      version: ${EXECUTION_LIMIT_VERSION:m6-limits-v1}
       job-deadline: ${ANALYSIS_JOB_DEADLINE:6h}
       provider-wait: ${PROVIDER_CAPACITY_WAIT:250ms}
       max-asr-calls: ${BUDGET_MAX_ASR_CALLS:240}
       max-ocr-calls: ${BUDGET_MAX_OCR_CALLS:2000}
       max-embedding-calls: ${BUDGET_MAX_EMBEDDING_CALLS:1000}
       max-answer-calls: ${BUDGET_MAX_ANSWER_CALLS:20}
+      max-agent-plan-calls: ${BUDGET_MAX_AGENT_PLAN_CALLS:2}
       max-asr-input-units: ${BUDGET_MAX_ASR_INPUT_UNITS:5400000}
       max-asr-output-units: ${BUDGET_MAX_ASR_OUTPUT_UNITS:108000}
       max-ocr-input-units: ${BUDGET_MAX_OCR_INPUT_UNITS:21600000000}
@@ -182,6 +183,8 @@ videopilot:
       max-embedding-output-units: ${BUDGET_MAX_EMBEDDING_OUTPUT_UNITS:1}
       max-answer-input-units: ${BUDGET_MAX_ANSWER_INPUT_UNITS:100000}
       max-answer-output-units: ${BUDGET_MAX_ANSWER_OUTPUT_UNITS:24000}
+      max-agent-plan-input-units: ${BUDGET_MAX_AGENT_PLAN_INPUT_UNITS:10000}
+      max-agent-plan-output-units: ${BUDGET_MAX_AGENT_PLAN_OUTPUT_UNITS:2000}
       max-known-cost: ${BUDGET_MAX_KNOWN_COST:10.00}
     recovery:
       max-retries: ${ANALYSIS_RECOVERY_MAX_RETRIES:3}

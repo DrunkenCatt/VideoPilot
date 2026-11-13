@@ -9,6 +9,7 @@ public interface AgentPolicy {
     Decision next(AgentTrace trace);
 
     enum Action {
+        PLAN,
         RETRIEVE,
         EXPAND_WINDOW,
         GENERATE_AND_VERIFY,

@@ -14,6 +14,7 @@ import com.videopilot.agent.domain.AgentModels.ToolCall;
 import com.videopilot.agent.domain.AgentModels.ToolCallStatus;
 import com.videopilot.agent.port.AgentStore;
 import com.videopilot.identity.domain.OwnerId;
+import com.videopilot.infrastructure.model.SiliconFlowPricing;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
@@ -296,6 +297,65 @@ public class JdbcAgentStore implements AgentStore {
                 """).param("status", status.name()).param("reason", terminationReason)
                 .param("completedAt", completedAt).param("runId", runId.toString())
                 .param("leaseId", leaseId).param("version", expectedVersion).update();
+        if (updated != 1) throw new AgentException(AgentException.Reason.CONFLICT);
+    }
+
+    @Override
+    public void startDecisionModelCall(DecisionModelCallStart call) {
+        int inserted = jdbc.sql("""
+                INSERT INTO model_call (
+                    model_call_id, job_id, run_id, request_id, operation_type, provider,
+                    model_name, model_version, prompt_version, input_fingerprint,
+                    output_artifact_ref, status, attempt, price_status,
+                    evaluation_run_id, evaluation_case_id, started_at
+                ) VALUES (
+                    :callId,:jobId,:runId,:requestId,'AGENT_PLAN',:provider,
+                    :model,:model,:promptVersion,:fingerprint,
+                    :artifact,'STARTED',1,'UNAVAILABLE',
+                    :evaluationRunId,:evaluationCaseId,:startedAt
+                )
+                """).param("callId", call.modelCallId().toString())
+                .param("jobId", call.jobId().toString()).param("runId", call.runId().toString())
+                .param("requestId", call.requestId()).param("provider", call.provider())
+                .param("model", call.modelVersion()).param("promptVersion", call.promptVersion())
+                .param("fingerprint", call.inputFingerprint())
+                .param("artifact", "mysql:agent-step/" + call.runId())
+                .param("evaluationRunId", call.evaluationRunId() == null
+                        ? null : call.evaluationRunId().toString())
+                .param("evaluationCaseId", call.evaluationCaseId())
+                .param("startedAt", call.startedAt()).update();
+        if (inserted != 1) throw new AgentException(AgentException.Reason.CONFLICT);
+    }
+
+    @Override
+    public void completeDecisionModelCall(DecisionModelCallCompletion completion) {
+        var price = SiliconFlowPricing.estimate(
+                completion.modelVersion(), completion.startedAt(),
+                completion.inputTokens(), completion.outputTokens());
+        int updated = jdbc.sql("""
+                UPDATE model_call SET status='SUCCEEDED', input_units=:input, output_units=:output,
+                    estimated_cost=:cost, currency=:currency, price_version=:priceVersion,
+                    price_status=:priceStatus, latency_ms=:latency,
+                    completed_at=:completedAt, updated_at=:completedAt
+                WHERE model_call_id=:callId AND operation_type='AGENT_PLAN' AND status='STARTED'
+                """).param("input", completion.inputTokens()).param("output", completion.outputTokens())
+                .param("cost", price.cost()).param("currency", price.currency())
+                .param("priceVersion", price.version())
+                .param("priceStatus", price.available() ? "AVAILABLE" : "UNAVAILABLE")
+                .param("latency", completion.latencyMs()).param("completedAt", completion.completedAt())
+                .param("callId", completion.modelCallId().toString()).update();
+        if (updated != 1) throw new AgentException(AgentException.Reason.CONFLICT);
+    }
+
+    @Override
+    public void failDecisionModelCall(
+            UUID modelCallId, String status, String category, String code, Instant completedAt) {
+        int updated = jdbc.sql("""
+                UPDATE model_call SET status=:status, error_category=:category, error_code=:code,
+                    completed_at=:completedAt, updated_at=:completedAt
+                WHERE model_call_id=:callId AND operation_type='AGENT_PLAN' AND status='STARTED'
+                """).param("status", status).param("category", category).param("code", code)
+                .param("completedAt", completedAt).param("callId", modelCallId.toString()).update();
         if (updated != 1) throw new AgentException(AgentException.Reason.CONFLICT);
     }
 
