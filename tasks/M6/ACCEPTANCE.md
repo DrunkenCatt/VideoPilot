@@ -409,3 +409,28 @@ T4 已以 `8f47e9d` 独立保存不可晋级事实；负责人随后用 `EX-2026
   仍可访问。刷新、轮询、结果和引用交互均成功渲染，浏览器 warning/error 日志为空。
 
 T5 自身退出门通过，可以独立提交。T4 的效果缺口继续阻止 M6 晋级；本结论不启用任何默认开关。
+
+## 12. T6 模型驱动闭环合同冻结（2026-11-13）
+
+负责人明确决定冻结 T4 的不可晋级效果事实，并优先按 `T6 -> T7 -> T8 -> T9 -> T10` 推进；上一任务
+退出门不通过时停止。`EX-2026-11-13-M6-T6-T10` 只改变 M6 内部实施顺序，不豁免 M5/M6 质量门，
+Agent、Worker、目标分析和前端入口继续默认关闭。
+
+ADR-0017 将最短闭环冻结为：
+
+```text
+PLAN -> RETRIEVE -> GENERATE_AND_VERIFY -> CRITIQUE
+                                            | PASS -> FINISH
+                                            ` REPAIR -> RETRIEVE|EXPAND_WINDOW
+                                                         -> GENERATE_AND_VERIFY
+                                                         -> FINISH|REFUSE
+```
+
+- 正常路径最多 3 次 LLM 调用，修复路径最多 4 次；Embedding 另行审计。
+- 最多 6 Step、2 次答案生成、1 次 Critic 修复；恢复不能重置任何预算。
+- Planner/Critic 输出经过版本化 Schema、白名单、参数、owner、预算和视频边界校验后才可执行。
+- Critic 只判断覆盖与相关性，不能覆盖 `AnswerEvidenceGate`、权限、状态或预算裁决。
+- T7 必须先证明检索/扩窗证据进入 Answer Prompt；T8/T9 才允许增加 Planner/Critic 模型调用。
+- 不建设通用 DAG、多 Agent、动态插件、长期记忆或 chain-of-thought 存储。
+
+文档一致性和 `git diff --check` 通过后，T6 可独立提交并进入 T7；这不是 T4/M6 退出或 Agent 晋级。

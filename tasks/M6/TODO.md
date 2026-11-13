@@ -84,17 +84,17 @@
 Answer；owner 隔离、预算和证据门不变；前端不重复目标 Answer；T5 自身质量门全部通过。T4 的既有效果
 缺口继续单独阻止 M6 晋级。
 
-## T6：冻结模型驱动最短闭环合同（待批准）
+## T6：冻结模型驱动最短闭环合同
 
-> 本节是规划结果，不代表已获准绕过 T4 阻断。实施前必须由负责人明确批准继续实验，并更新
-> `EX-2026-11-10-M6`/相关 ADR 的范围；不得把本次规划本身解释为 M6 已退出。
+> 负责人已于 2026-11-13 批准冻结 T4 效果缺口并继续受限实验；`EX-2026-11-13-M6-T6-T10`
+> 不豁免任何质量门，也不得把本次推进解释为 M6 已退出。
 
-- [ ] 新增 ADR，冻结正常路径和一次修复路径：`PLAN -> RETRIEVE -> GENERATE_AND_VERIFY -> CRITIQUE -> [RETRIEVE|EXPAND_WINDOW] -> GENERATE_AND_VERIFY -> terminal`。
-- [ ] 冻结 Planner 输出 `action/query/expectedFacts`，Critic 输出 `PASS` 或 `action/query|window/missingRequirements/unsupportedClaims`；禁止任意工具名、SQL、URL、文件路径和预算字段。
-- [ ] 明确 Critic 只判断问题覆盖和语义相关性，`AnswerEvidenceGate` 继续独占引用存在性与 Claim-Evidence 发布硬门；模型不得覆盖 Java 裁决。
-- [ ] 保持最多 6 Step、2 次答案生成和 1 次 Critic 修复；定义非法 Schema、无效参数、预算耗尽、UNKNOWN 和修复后仍失败的稳定终止原因。
-- [ ] 写出正常、补检、扩窗、拒答四条验收 Trace，以及模型调用数上限：正常最多 3 次（Planner、Executor、Critic），修复最多 4 次（再执行一次 Executor）。
-- [ ] 运行文档术语/引用检查和 `git diff --check`，更新 PLAN/TODO/ACCEPTANCE 后独立提交。
+- [x] 新增 ADR，冻结正常路径和一次修复路径：`PLAN -> RETRIEVE -> GENERATE_AND_VERIFY -> CRITIQUE -> [RETRIEVE|EXPAND_WINDOW] -> GENERATE_AND_VERIFY -> terminal`。
+- [x] 冻结 Planner 输出 `action/query/expectedFacts`，Critic 输出 `PASS` 或 `action/query|window/missingRequirements/unsupportedClaims`；禁止任意工具名、SQL、URL、文件路径和预算字段。
+- [x] 明确 Critic 只判断问题覆盖和语义相关性，`AnswerEvidenceGate` 继续独占引用存在性与 Claim-Evidence 发布硬门；模型不得覆盖 Java 裁决。
+- [x] 保持最多 6 Step、2 次答案生成和 1 次 Critic 修复；定义非法 Schema、无效参数、预算耗尽、UNKNOWN 和修复后仍失败的稳定终止原因。
+- [x] 写出正常、补检、扩窗、拒答四条验收 Trace，以及模型调用数上限：正常最多 3 次（Planner、Executor、Critic），修复最多 4 次（再执行一次 Executor）。
+- [x] 运行文档术语/引用检查和 `git diff --check`，更新 PLAN/TODO/ACCEPTANCE 后独立提交。
 
 **依赖**：T5；负责人明确批准在 T4 未退出时继续受限实验。
 
