@@ -84,7 +84,10 @@ class AnswerPersistenceAdapterTest {
         adapter.startModelCall(new AnswerStore.ModelCallStart(
                 callId, answerId, jobId, "request", "SiliconFlow", "model-v1",
                 "prompt-v1", "b".repeat(64), now));
-        adapter.fail(answerId, callId, "FAILED", "NON_RETRYABLE", "HTTP_400", now);
+        adapter.fail(answerId, callId, "FAILED", "NON_RETRYABLE", "MALFORMED_JSON",
+                "finishReason=stop;contentChars=8;promptTokensPresent=true;"
+                        + "completionTokensPresent=true;jsonParseable=false",
+                now);
         assertThat(adapter.find(owner, jobId, answerId)).isEmpty();
         assertThat(adapter.list(owner, jobId, null, 20)).isEmpty();
         assertThat(adapter.list(owner, jobId, 9L, 20)).isEmpty();

@@ -524,3 +524,73 @@ PLAN -> RETRIEVE -> GENERATE_AND_VERIFY -> CRITIQUE
 T9 退出门通过：Critic 缺口确实改变下一 Tool 的名称或参数，新增证据和缺口进入第二次 Prompt；所有
 动作仍由 Java 白名单、owner、预算、CAS 和 Evidence Gate 控制。Agent 仍默认关闭，可以进入 T10
 完整回放与 A/B；这不代表 M5/T4 的效果缺口已消失。
+
+## 16. T10 隔离完整门、回放与同题阻断（2026-11-13）
+
+### 隔离库和完整集成门
+
+- 为 `videopilot` 授予一次性库 `videopilot_m6_t10_gate` 的 schema 权限并核对 18 项授权；主业务库和
+  账号口令未写入仓库。Windows 主机门因缺少 FFmpeg/ffprobe 不能代表标准运行环境，因此没有跳过检查，
+  改在项目 server 镜像的 Linux 工具链中执行同一 Maven profile。
+- 容器化 `server/mvnw verify -Pintegration` 通过：478/478 单元测试、JaCoCo 80% 与 ArchUnit 通过；
+  96 项集成测试 0 failure/error，2 项显式付费发布开关按设计未启用；真实检索基线通过。总耗时
+  10 分 19 秒。该结果发生在后述 Prompt/指纹修复之前，不能冒充最终候选完整门。
+- 前端改动后的 `npm run check` 已通过 19 个文件、126/126 测试、覆盖率和生产构建；故障矩阵定向
+  37/37 通过。后述后端修复后只重跑了 32 项 Planner/Critic/Loop 定向测试，全部通过。
+
+### 浏览器发现与修复
+
+- 真实 5173 登录、READY Job 恢复和刷新 URL 回放通过。首次 Run 因隔离数据只迁移 Job/Media owner、
+  未迁移 `video_index.owner_id` 而在 Embedding 前被 owner 硬门拒绝；修正隔离验收数据后创建新 Run，
+  原失败记录保留。
+- 同一 Job、同一问题创建第二个 Run 时，`AGENT_PLAN` 指纹只包含 Prompt 版本和问题，触发
+  `model_call(job, operation, fingerprint, attempt)` 唯一约束。新增失败测试证明重复指纹，再把 `runId`
+  纳入指纹；不同 Run 现在具有不同审计身份，没有删除唯一约束或重放历史调用。
+- Critic 的“空修复字段”没有明确 `null`，真实模型把 PASS 的 `startMs/endMs` 返回为 `0`；Planner
+  也会把五项列表拆成 5 个 `expectedFacts`，超过冻结的最多 3 项。没有放宽 Java Schema，而是前进到
+  `agent-planner-v3/agent-critic-v2`，为每种动作给出完整 JSON 模板，并要求列表题合并成一个回答要求。
+  直接供应商探针连续三次均返回 1 个 expectedFacts；32 项相关自动测试通过。
+- 修复后正常路径在浏览器中显示 `PLAN -> RETRIEVE -> GENERATE_AND_VERIFY -> CRITIQUE(PASS)`，4 Step、
+  3 次 LLM，折叠 Trace 只显示“计划检索/首次证据/证据门通过/审查通过”，没有 Prompt、模型原文或
+  chain-of-thought；答案引用可点击并定位到 ASR 时间窗。
+
+### 冻结同题三轮
+
+问题统一为“Redis 里最常见的五种基本数据类型分别是什么？”，版本统一为
+`agent-policy-v3-loop / agent-planner-v3 / agent-critic-v2`：
+
+| Run | 结果 | Step / LLM | Token | 已知费用 | 端到端 |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `9b56a775-7f2c-4e98-b8af-e7959deef454` | `COMPLETED`，Critic PASS | 4 / 3 | 6342 | CNY 0.021438 | 12.107 s |
+| `6c51f6f4-4744-4b3a-a7ee-a6b5bac949c1` | `COMPLETED`，Critic PASS | 4 / 3 | 6495 | CNY 0.022809 | 13.203 s |
+| `fbac1024-9dd8-478a-97ce-7a17d26f9934` | `FAILED / TOOL_EXECUTION_FAILED`，Answer `INVALID_RESPONSE` | 2 / 1 | 340 | CNY 0.001218 | 41.036 s |
+
+该小样本的首答发布为 `2/3`，完成轮模型调用均为 3 次；没有进入修复路径，因此补检恢复率为无分母，
+不能记成 0% 或 100%。两条已发布答案都通过确定性 Evidence Gate 并具有可点击引用，但这不是正式
+Runner 的 Claim 支持率/引用定位率，不能替代冻结 DEV 数据集指标。第三轮失败必须计入，不能用第四轮
+替换；因此正式 Runner、补检/扩窗/拒答与 320px/Console/Network、修复后的快速/完整门、安全扫描均按
+“上一退出门不通过即停止”未继续。
+
+T10 结论：**未退出、不提交、不晋级**。前端和两项修复保留在未提交工作区供后续处理；
+`AGENT_ENABLED/AGENT_WORKER_ENABLED/AGENT_GOAL_ANALYSIS_ENABLED/VITE_AGENT_ENABLED` 的仓库默认值
+仍为 false，M5 85% Claim 支持与 95% 引用定位硬门没有变化。
+
+## 17. T10A Answer 结构化失败诊断（2026-11-13）
+
+T10A 不补跑原失败轮，先修复可观测性缺口。SiliconFlow HTTP 200 后的候选响应现在分为四个稳定错误：
+`EMPTY_CONTENT`、`MISSING_USAGE`、`TOKEN_USAGE_LIMIT` 和 `MALFORMED_JSON`。既有 `HTTP_*`、
+`TIMEOUT`、`CONNECTION`、`TRUNCATED` 与 `RESPONSE_LIMIT` 语义不变。
+
+- Adapter 只生成固定字段的脱敏摘要：`finishReason`、content 字符数、prompt/completion usage 字段
+  是否存在和 content 是否可解析为 JSON；摘要不含 content、Prompt、完整转录、凭据或思维链。
+- `LanguageModelException` 将该摘要交给 Answer application service；既有 `model_call.error_summary`
+  持久化摘要，不新增表或供应商 DTO 泄漏到业务层。无诊断信息的既有失败继续写 `NULL`。
+- RED：新增测试最初因缺少 `diagnosticSummary()` 以及七参数 `AnswerStore.fail` 无法编译；GREEN 后
+  Adapter/Answer/Persistence 21 项定向测试通过。
+- `server\mvnw.cmd clean test`：483 项通过、0 failure/error、1 项既有 FFmpeg 环境条件跳过，
+  JaCoCo 80% 与 ArchUnit 通过，总耗时 1 分 07 秒。
+- 隔离库 `videopilot_m6_t10_gate` 上 `AnswerPersistenceAdapterIT` 2/2 通过，实际证明错误码和脱敏摘要
+  写入 `model_call`，测试断言摘要不含候选内容；Flyway 21 项校验通过，总耗时 38.433 秒。
+
+T10A 退出门通过，可以进入 T10B。该结论只说明下一次失败可精确归因，不把原 `INVALID_RESPONSE`
+改写为任何一个新子错误，也不表示 T10/M6 已退出；所有 Agent 开关继续默认关闭。

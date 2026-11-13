@@ -117,6 +117,32 @@ class AnswerPersistenceAdapterIT {
                 .isEqualTo("AVAILABLE|CNY|siliconflow-pricing-2026-11-11");
     }
 
+    @Test
+    void persistsSafeModelFailureDiagnosticsWithoutCandidateContent() {
+        seed();
+        OwnerId owner = new OwnerId(OWNER);
+        UUID answerId = UUID.randomUUID();
+        UUID callId = UUID.randomUUID();
+        Instant now = Instant.parse("2026-11-13T12:00:00Z");
+        answers.claim(owner, new AnswerStore.ClaimRequest(
+                answerId, JOB, "diagnostic-intent", "1".repeat(64), "question",
+                "answer-evidence-v2", "deepseek-ai/DeepSeek-V4-Flash", now));
+        answers.startModelCall(new AnswerStore.ModelCallStart(
+                callId, answerId, JOB, "diagnostic-request", "SiliconFlow",
+                "deepseek-ai/DeepSeek-V4-Flash", "answer-evidence-v2", "2".repeat(64), now));
+        String diagnostics = "finishReason=stop;contentChars=8;promptTokensPresent=true;"
+                + "completionTokensPresent=true;jsonParseable=false";
+
+        answers.fail(answerId, callId, "FAILED", "NON_RETRYABLE", "MALFORMED_JSON", diagnostics, now);
+
+        assertThat(jdbc.sql("""
+                SELECT CONCAT(error_code, '|', error_summary)
+                FROM model_call WHERE model_call_id = :id
+                """).param("id", callId.toString()).query(String.class).single())
+                .isEqualTo("MALFORMED_JSON|" + diagnostics)
+                .doesNotContain("candidate", "not-json");
+    }
+
     private void seed() {
         jdbc.sql("""
                 INSERT INTO media_asset (

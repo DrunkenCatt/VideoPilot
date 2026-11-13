@@ -145,7 +145,28 @@ class AnswerApplicationServiceTest {
                         exception -> assertThat(exception.reason())
                                 .isEqualTo(AnswerException.Reason.DEPENDENCY_UNAVAILABLE));
         verify(store).fail(any(), any(), org.mockito.ArgumentMatchers.eq("UNKNOWN_OUTCOME"),
-                org.mockito.ArgumentMatchers.eq("UNKNOWN_OUTCOME"), org.mockito.ArgumentMatchers.eq("TIMEOUT"), any());
+                org.mockito.ArgumentMatchers.eq("UNKNOWN_OUTCOME"), org.mockito.ArgumentMatchers.eq("TIMEOUT"),
+                org.mockito.ArgumentMatchers.isNull(), any());
+    }
+
+    @Test
+    void persistsOnlySafeModelFailureDiagnostics() {
+        when(retrieval.retrieve(owner, jobId, "String 是什么？", 5)).thenReturn(result(List.of(hit(.85))));
+        when(store.loadEvidence(any(), any(), any(), any())).thenReturn(List.of(new AnswerEvidenceGate.EvidenceSource(
+                segmentId + "#ASR", chunkId, segmentId, 0, 0, 10_000,
+                "ASR", "Redis String 可以存储文本。", true)));
+        String diagnostics = "finishReason=stop;contentChars=8;promptTokensPresent=true;"
+                + "completionTokensPresent=true;jsonParseable=false";
+        when(model.generate(any())).thenThrow(new LanguageModelException(
+                LanguageModelException.Reason.NON_RETRYABLE, "MALFORMED_JSON", diagnostics, null));
+
+        assertThatThrownBy(() -> service.ask(owner, jobId, "String 是什么？", "intent-diagnostics"))
+                .isInstanceOfSatisfying(AnswerException.class,
+                        exception -> assertThat(exception.reason())
+                                .isEqualTo(AnswerException.Reason.DEPENDENCY_UNAVAILABLE));
+
+        verify(store).fail(any(), any(), eq("FAILED"), eq("NON_RETRYABLE"),
+                eq("MALFORMED_JSON"), eq(diagnostics), any());
     }
 
     @Test
@@ -304,7 +325,8 @@ class AnswerApplicationServiceTest {
         verify(store).fail(any(), org.mockito.ArgumentMatchers.isNull(),
                 org.mockito.ArgumentMatchers.eq("FAILED"),
                 org.mockito.ArgumentMatchers.eq("BUDGET_EXHAUSTED"),
-                org.mockito.ArgumentMatchers.eq("m4-limits-v1:CALL_COUNT"), any());
+                org.mockito.ArgumentMatchers.eq("m4-limits-v1:CALL_COUNT"),
+                org.mockito.ArgumentMatchers.isNull(), any());
     }
 
     @Test

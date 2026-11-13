@@ -236,7 +236,7 @@ public final class AnswerApplicationService {
             }
         } catch (ExecutionBudgetExceededException exception) {
             store.fail(answerId, null, "FAILED", "BUDGET_EXHAUSTED",
-                    exception.limitVersion() + ':' + exception.reason().name(), now.get());
+                    exception.limitVersion() + ':' + exception.reason().name(), null, now.get());
             throw new AnswerException(AnswerException.Reason.BUDGET_EXHAUSTED, exception);
         }
         UUID callId = ids.get();
@@ -253,7 +253,8 @@ public final class AnswerApplicationService {
             Instant completed = now.get();
             String status = exception.reason() == LanguageModelException.Reason.UNKNOWN_OUTCOME
                     ? "UNKNOWN_OUTCOME" : "FAILED";
-            store.fail(answerId, callId, status, exception.reason().name(), exception.code(), completed);
+            store.fail(answerId, callId, status, exception.reason().name(), exception.code(),
+                    exception.diagnosticSummary(), completed);
             throw new AnswerException(AnswerException.Reason.DEPENDENCY_UNAVAILABLE, exception);
         }
 
@@ -269,7 +270,7 @@ public final class AnswerApplicationService {
             }
         } catch (ExecutionBudgetExceededException exception) {
             store.fail(answerId, callId, "FAILED", "BUDGET_EXHAUSTED",
-                    exception.limitVersion() + ':' + exception.reason().name(), now.get());
+                    exception.limitVersion() + ':' + exception.reason().name(), null, now.get());
             throw new AnswerException(AnswerException.Reason.BUDGET_EXHAUSTED, exception);
         }
 
@@ -305,10 +306,10 @@ public final class AnswerApplicationService {
                                     evaluationRunId, evaluationCaseId);
         } catch (ExecutionBudgetExceededException exception) {
             store.fail(answerId, null, "FAILED", "BUDGET_EXHAUSTED",
-                    exception.limitVersion() + ':' + exception.reason().name(), now.get());
+                    exception.limitVersion() + ':' + exception.reason().name(), null, now.get());
             throw new AnswerException(AnswerException.Reason.BUDGET_EXHAUSTED, exception);
         } catch (RetrievalException exception) {
-            store.fail(answerId, null, "FAILED", "RETRIEVAL", exception.reason().name(), now.get());
+            store.fail(answerId, null, "FAILED", "RETRIEVAL", exception.reason().name(), null, now.get());
             throw switch (exception.reason()) {
                 case NOT_FOUND -> new AnswerException(AnswerException.Reason.NOT_FOUND, exception);
                 case NOT_READY -> new AnswerException(AnswerException.Reason.NOT_READY, exception);

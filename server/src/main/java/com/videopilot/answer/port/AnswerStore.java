@@ -21,7 +21,9 @@ public interface AnswerStore {
 
     StoredAnswer publish(OwnerId ownerId, Publication publication);
 
-    void fail(UUID answerId, UUID modelCallId, String callStatus, String category, String code, Instant completedAt);
+    void fail(
+            UUID answerId, UUID modelCallId, String callStatus, String category,
+            String code, String diagnosticSummary, Instant completedAt);
 
     Optional<StoredAnswer> find(OwnerId ownerId, UUID jobId, UUID answerId);
 

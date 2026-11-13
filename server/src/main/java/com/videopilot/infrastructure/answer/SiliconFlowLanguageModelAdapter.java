@@ -104,24 +104,63 @@ public final class SiliconFlowLanguageModelAdapter implements LanguageModelPort 
     }
 
     private Response parse(byte[] body) {
+        JsonNode root;
         try {
-            JsonNode root = json.readTree(body);
+            root = json.readTree(body);
+        } catch (IOException | RuntimeException exception) {
+            throw invalidResponse("MALFORMED_JSON", diagnostics("missing", 0, false, false, false), exception);
+        }
+        try {
             JsonNode choice = root.path("choices").path(0);
-            if (!"stop".equals(choice.path("finish_reason").asText())) {
+            String finishReason = choice.path("finish_reason").asText();
+            if (!"stop".equals(finishReason)) {
                 throw failure(LanguageModelException.Reason.NON_RETRYABLE, "TRUNCATED");
             }
             String content = choice.path("message").path("content").asText();
-            long input = root.path("usage").path("prompt_tokens").asLong(-1);
-            long output = root.path("usage").path("completion_tokens").asLong(-1);
-            if (content.isBlank() || input < 0 || output < 0 || output > maxOutputTokens) throw invalidResponse();
-            json.readTree(content);
+            JsonNode promptTokens = root.path("usage").path("prompt_tokens");
+            JsonNode completionTokens = root.path("usage").path("completion_tokens");
+            boolean promptTokensPresent = present(promptTokens);
+            boolean completionTokensPresent = present(completionTokens);
+            long input = promptTokens.asLong(-1);
+            long output = completionTokens.asLong(-1);
+            boolean jsonParseable = parseableJson(content);
+            String diagnostics = diagnostics(
+                    finishReason, content.length(), promptTokensPresent, completionTokensPresent, jsonParseable);
+            if (content.isBlank()) throw invalidResponse("EMPTY_CONTENT", diagnostics);
+            if (!promptTokensPresent || !completionTokensPresent || input < 0 || output < 0) {
+                throw invalidResponse("MISSING_USAGE", diagnostics);
+            }
+            if (output > maxOutputTokens) throw invalidResponse("TOKEN_USAGE_LIMIT", diagnostics);
+            if (!jsonParseable) throw invalidResponse("MALFORMED_JSON", diagnostics);
             return new Response(content, new Usage(input, output));
         } catch (LanguageModelException exception) {
             throw exception;
-        } catch (IOException | RuntimeException exception) {
-            throw new LanguageModelException(
-                    LanguageModelException.Reason.NON_RETRYABLE, "INVALID_RESPONSE", exception);
+        } catch (RuntimeException exception) {
+            throw invalidResponse("MALFORMED_JSON", diagnostics("missing", 0, false, false, false), exception);
         }
+    }
+
+    private boolean parseableJson(String content) {
+        if (content.isBlank()) return false;
+        try {
+            return json.readTree(content) != null;
+        } catch (IOException | RuntimeException exception) {
+            return false;
+        }
+    }
+
+    private boolean present(JsonNode value) {
+        return !value.isMissingNode() && !value.isNull();
+    }
+
+    private String diagnostics(
+            String finishReason, int contentChars, boolean promptTokensPresent,
+            boolean completionTokensPresent, boolean jsonParseable) {
+        return "finishReason=" + finishReason
+                + ";contentChars=" + contentChars
+                + ";promptTokensPresent=" + promptTokensPresent
+                + ";completionTokensPresent=" + completionTokensPresent
+                + ";jsonParseable=" + jsonParseable;
     }
 
     private void validate(Request request) {
@@ -138,8 +177,12 @@ public final class SiliconFlowLanguageModelAdapter implements LanguageModelPort 
         return failure(reason, "HTTP_" + status);
     }
 
-    private LanguageModelException invalidResponse() {
-        return failure(LanguageModelException.Reason.NON_RETRYABLE, "INVALID_RESPONSE");
+    private LanguageModelException invalidResponse(String code, String diagnostics) {
+        return new LanguageModelException(LanguageModelException.Reason.NON_RETRYABLE, code, diagnostics, null);
+    }
+
+    private LanguageModelException invalidResponse(String code, String diagnostics, Throwable cause) {
+        return new LanguageModelException(LanguageModelException.Reason.NON_RETRYABLE, code, diagnostics, cause);
     }
 
     private LanguageModelException failure(LanguageModelException.Reason reason, String code) {

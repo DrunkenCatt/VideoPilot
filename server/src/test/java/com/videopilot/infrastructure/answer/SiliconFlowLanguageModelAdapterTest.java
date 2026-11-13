@@ -69,7 +69,7 @@ class SiliconFlowLanguageModelAdapterTest {
     }
 
     @Test
-    void rejectsMalformedCandidateJsonAndClassifiesHttpTimeoutAsUnknown() throws Exception {
+    void rejectsMalformedCandidateJsonWithSafeDiagnostics() throws Exception {
         server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext("/v1/chat/completions", exchange -> respond(exchange, 200, """
                 {"choices":[{"finish_reason":"stop","message":{"content":"not-json"}}],
@@ -79,10 +79,38 @@ class SiliconFlowLanguageModelAdapterTest {
         assertThatThrownBy(() -> adapter(4096).generate(new LanguageModelPort.Request("prompt", "a".repeat(64))))
                 .isInstanceOfSatisfying(LanguageModelException.class, exception -> {
                     assertThat(exception.reason()).isEqualTo(LanguageModelException.Reason.NON_RETRYABLE);
-                    assertThat(exception.code()).isEqualTo("INVALID_RESPONSE");
+                    assertThat(exception.code()).isEqualTo("MALFORMED_JSON");
+                    assertThat(exception.diagnosticSummary()).isEqualTo(
+                            "finishReason=stop;contentChars=8;promptTokensPresent=true;"
+                                    + "completionTokensPresent=true;jsonParseable=false");
+                    assertThat(exception.diagnosticSummary()).doesNotContain("not-json");
                 });
+    }
 
-        server.stop(0);
+    @Test
+    void distinguishesEmptyContentMissingUsageAndOutputTokenLimit() throws Exception {
+        assertResponseFailure("""
+                {"choices":[{"finish_reason":"stop","message":{"content":""}}],
+                 "usage":{"prompt_tokens":1,"completion_tokens":0}}
+                """, "EMPTY_CONTENT",
+                "finishReason=stop;contentChars=0;promptTokensPresent=true;"
+                        + "completionTokensPresent=true;jsonParseable=false");
+        assertResponseFailure("""
+                {"choices":[{"finish_reason":"stop","message":{"content":"{}"}}],
+                 "usage":{"completion_tokens":1}}
+                """, "MISSING_USAGE",
+                "finishReason=stop;contentChars=2;promptTokensPresent=false;"
+                        + "completionTokensPresent=true;jsonParseable=true");
+        assertResponseFailure("""
+                {"choices":[{"finish_reason":"stop","message":{"content":"{}"}}],
+                 "usage":{"prompt_tokens":1,"completion_tokens":1201}}
+                """, "TOKEN_USAGE_LIMIT",
+                "finishReason=stop;contentChars=2;promptTokensPresent=true;"
+                        + "completionTokensPresent=true;jsonParseable=true");
+    }
+
+    @Test
+    void classifiesHttpTimeoutAsUnknown() throws Exception {
         server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext("/v1/chat/completions", exchange -> {
             try {
@@ -93,11 +121,27 @@ class SiliconFlowLanguageModelAdapterTest {
             }
         });
         server.start();
+
         assertThatThrownBy(() -> adapter(4096, Duration.ofMillis(50))
                 .generate(new LanguageModelPort.Request("prompt", "a".repeat(64))))
                 .isInstanceOfSatisfying(LanguageModelException.class, exception -> {
                     assertThat(exception.reason()).isEqualTo(LanguageModelException.Reason.UNKNOWN_OUTCOME);
                     assertThat(exception.code()).isEqualTo("TIMEOUT");
+                });
+    }
+
+    private void assertResponseFailure(String body, String code, String diagnostics) throws Exception {
+        if (server != null) server.stop(0);
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/v1/chat/completions", exchange -> respond(exchange, 200, body));
+        server.start();
+
+        assertThatThrownBy(() -> adapter(4096).generate(
+                new LanguageModelPort.Request("prompt", "a".repeat(64))))
+                .isInstanceOfSatisfying(LanguageModelException.class, exception -> {
+                    assertThat(exception.reason()).isEqualTo(LanguageModelException.Reason.NON_RETRYABLE);
+                    assertThat(exception.code()).isEqualTo(code);
+                    assertThat(exception.diagnosticSummary()).isEqualTo(diagnostics);
                 });
     }
 

@@ -551,6 +551,19 @@ benchmark/
 Planner/Critic 只能提出白名单候选动作，Java 继续控制预算、权限、状态和 Evidence Gate。每个任务必须
 独立测试、文档和提交，上一退出门不通过时停止。
 
+T10 阻断记录（2026-11-13）：隔离库授权后，Linux 容器中的 `verify -Pintegration` 以 478 项单元测试、
+96 项集成测试和真实检索基线通过；浏览器随后发现相同 Job/问题的新 Run 会复用 Planner 模型调用指纹，
+以及 Planner/Critic Prompt 对数组上限和空时间窗表达不明确。实现保留数据库唯一约束与严格 Schema，
+改为按 Run 生成指纹，并前进到 `agent-planner-v3/agent-critic-v2` 明确模板。修复后的同题三轮为两轮
+`COMPLETED`、一轮 `ANSWER/INVALID_RESPONSE`，因此 T10/M6 仍未退出；不得用第四轮替换失败轮，剩余
+浏览器四路径、正式 Runner 与后修复完整门停止，所有 Agent 开关继续默认关闭。
+
+T10A 诊断门（2026-11-13）：保留上述失败事实，不补跑覆盖。Answer Adapter 将 HTTP 200 后原本合并的
+`INVALID_RESPONSE` 拆为 `EMPTY_CONTENT`、`MISSING_USAGE`、`TOKEN_USAGE_LIMIT` 和
+`MALFORMED_JSON`，并只把 finish reason、content 长度、usage 字段存在性和 JSON 可解析性写入既有
+`model_call.error_summary`；不保存模型原文。483 项后端快速测试和隔离 MySQL 持久化测试通过后，
+T10A 可独立退出，下一步只能以固定 Job/问题/版本/预算运行新的 T10B series；原 `2/3` series 不变。
+
 ### M7：用户反馈采集与复核闭环（1-2 周）
 
 交付：

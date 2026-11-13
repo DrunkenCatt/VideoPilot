@@ -145,17 +145,51 @@ Answer；owner 隔离、预算和证据门不变；前端不重复目标 Answer�
 
 **退出门**：测试能证明 Critic 缺口改变下一 Tool 的名称或参数，新增证据进入第二次 Prompt；正常路径至少 3 次模型调用、修复路径最多 4 次，且所有调用可审计、可限额、可安全停止。
 
-## T10：回放、A/B 与完整质量门
+## T10：回放、两轮闭环、A/B 与完整质量门
 
-- [ ] 前端在现有折叠 Trace 中显示 `PLAN/CRITIQUE` 的去敏摘要、修复原因、新增证据和模型调用数；不展示思维链、Prompt 或原始模型响应。
-- [ ] 真实浏览器验证正常、补检、扩窗、拒答四条路径，以及刷新恢复、引用跳转、桌面和 320px、Console/Network。
-- [ ] 故障矩阵覆盖 Planner/Critic 非法输出、超预算、重启、重复 Worker、Redis 清空和 UNKNOWN；恢复成功率、重复高成本调用和终止原因按现有门统计。
+### T10A：让 Answer 结构化失败可诊断
+
+- [x] 先写失败测试，把 HTTP 200 后的空 `content`、usage 缺失、completion Token 越界和 `content` 非 JSON 分成稳定子错误；HTTP、超时、连接、截断的既有分类保持不变。
+- [x] 只审计 `finishReason`、content 字符数、usage 字段存在性和 JSON 可解析性等脱敏元数据；不保存 Prompt、模型原文、完整转录或思维链。
+- [x] 完成 Adapter/Answer 定向测试、后端快速门、文档和独立提交。
+
+**退出门**：下一次 HTTP 200 结构化失败可以唯一归入一个子错误，且日志和数据库不含模型原文或凭据；未通过即停止，不做重测。
+
+### T10B：固定条件受控重测
+
+- [ ] 固定同一 READY Job、问题、`agent-policy-v3-loop / agent-planner-v3 / agent-critic-v2`、模型、检索版本和预算，新建一组至少三轮 series；保留原 `2/3` series，不用新结果覆盖第三轮失败。
+- [ ] 每轮报告 Step/LLM、Answer 子错误、Token、费用和端到端延迟；若只有单轮异常且随后三轮均成功，只能记录为“供应商结构化输出存在随机波动”，不能宣称已修复。
+- [ ] 若再次出现相同子错误，先建立稳定复现并修 Prompt/Adapter；若错误类型不同，分别记录，禁止笼统归因于“问题偏离”。
+- [ ] 完成重测记录、Roadmap/ACCEPTANCE 回填和独立提交。
+
+**退出门**：形成可复核的稳定性结论；任何未解释失败都阻止进入 T10C。
+
+### T10C：证明真实两轮修复路径
+
+- [ ] 自动测试分别构造 `CRITIQUE -> RETRIEVE` 与 `CRITIQUE -> EXPAND_WINDOW`：第一次 Answer 只覆盖部分 `expectedFacts`，Critic 明确返回缺口，第二次 Answer 使用原证据和新增证据；最终通过或稳定拒答。
+- [ ] 断言修复路径恰好为 `PLAN -> RETRIEVE -> GENERATE_AND_VERIFY -> CRITIQUE -> RETRIEVE|EXPAND_WINDOW -> GENERATE_AND_VERIFY`，即 6 Step/4 次生成式 LLM；Embedding 单独审计，不混入该计数。
+- [ ] 真实浏览器选择一个首轮召回不足、但视频其他片段可补齐的问题，至少跑通一条两轮 Trace；验证 Critic query/window 改变下一 Tool 参数、新增 Segment 进入第二次 Prompt、刷新后仍可从 MySQL 回放。
+- [ ] 完成 Agent/Answer/持久化定向测试、浏览器 Console/Network/引用跳转、桌面与 320px、文档和独立提交。
+
+**退出门**：不能只靠 Mock 证明两轮，也不能用“重复调用同一 Prompt”冒充修复；真实 Trace 和自动测试必须共同证明 Observation 改变了下一动作及第二次模型输入。
+
+### T10D：完成四路径、Runner 与完整质量门
+
+- [x] 前端在现有折叠 Trace 中显示 `PLAN/CRITIQUE` 的去敏摘要、修复原因、新增证据和模型调用数；不展示思维链、Prompt 或原始模型响应。
+- [ ] 真实浏览器补齐正常、补检、扩窗、拒答四条路径，以及刷新恢复、引用跳转、桌面和 320px、Console/Network。
+- [x] 故障矩阵覆盖 Planner/Critic 非法输出、超预算、重启、重复 Worker、Redis 清空和 UNKNOWN；恢复成功率、重复高成本调用和终止原因按现有门统计。
 - [ ] 冻结新 `agentPolicyVersion`，复用现有 Runner 在 DEV 同题至少运行三轮，报告首答通过率、补检恢复率、无效 Tool 比例、模型调用数、P95、成本、Claim 支持和引用定位。
 - [ ] 依次执行相关测试、`server\mvnw.cmd test`、`server\mvnw.cmd verify -Pintegration`、`client\npm.cmd run check`、变更覆盖率、npm audit、Gitleaks；OWASP 只有得到有效数据才可记作通过。
 - [ ] 回填 Roadmap/M6 ACCEPTANCE；只有 M5 原硬门和 M6 晋级门同时通过且负责人批准，才默认启用，否则保留实验关闭；独立提交。
 
-**依赖**：T9。
+> 2026-11-13 阻断：隔离库权限补齐后的容器化完整集成门曾通过，但浏览器验收暴露同题跨 Run
+> Planner 指纹冲突与结构化 Prompt 歧义。两项均已按红绿测试修复；冻结的
+> `agent-planner-v3/agent-critic-v2` 同题三轮仍只有 `2/3` 完成，第三轮 Answer 返回
+> `INVALID_RESPONSE`。按退出门停止，未用补跑替代失败轮，未执行剩余四路径、Runner、后修复完整门，
+> T10 不提交且 Agent 保持默认关闭。详见 `tasks/M6/ACCEPTANCE.md` 第 16 节。
+
+**依赖**：T9；按 T10A -> T10B -> T10C -> T10D 串行，上一退出门不通过即停止。
 
 **预计文件**：现有 Agent Trace UI/测试、Evaluation Runner/报告和 M6/Roadmap 文档；不创建第二套评测或 Agent 页面。
 
-**退出门**：闭环行为、可靠性、成本和质量都有可复现证据；任何失败不得通过降低阈值、删除断言、跳过测试或 suppression 继续。
+**退出门**：闭环行为、两轮修复、可靠性、成本和质量都有可复现证据；任何失败不得通过补跑覆盖、降低阈值、删除断言、跳过测试或 suppression 继续。

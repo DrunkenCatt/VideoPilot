@@ -251,13 +251,16 @@ public class AnswerPersistenceAdapter implements AnswerStore {
     @Override
     @Transactional
     public void fail(
-            UUID answerId, UUID modelCallId, String callStatus, String category, String code, Instant completedAt) {
+            UUID answerId, UUID modelCallId, String callStatus, String category,
+            String code, String diagnosticSummary, Instant completedAt) {
         if (modelCallId != null) {
             jdbc.sql("""
                     UPDATE model_call SET status = :status, error_category = :category, error_code = :code,
+                        error_summary = :diagnosticSummary,
                         completed_at = :completedAt, updated_at = :completedAt
                     WHERE model_call_id = :callId AND status = 'STARTED'
                     """).param("status", callStatus).param("category", category).param("code", code)
+                    .param("diagnosticSummary", diagnosticSummary)
                     .param("completedAt", completedAt).param("callId", modelCallId.toString()).update();
         }
         jdbc.sql("""
