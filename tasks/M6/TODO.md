@@ -83,3 +83,79 @@
 **退出门**：默认关闭时零新增调用；启用后新旧 READY Job 只生成一个目标 Run；MySQL 可恢复同一 Trace 与
 Answer；owner 隔离、预算和证据门不变；前端不重复目标 Answer；T5 自身质量门全部通过。T4 的既有效果
 缺口继续单独阻止 M6 晋级。
+
+## T6：冻结模型驱动最短闭环合同（待批准）
+
+> 本节是规划结果，不代表已获准绕过 T4 阻断。实施前必须由负责人明确批准继续实验，并更新
+> `EX-2026-11-10-M6`/相关 ADR 的范围；不得把本次规划本身解释为 M6 已退出。
+
+- [ ] 新增 ADR，冻结正常路径和一次修复路径：`PLAN -> RETRIEVE -> GENERATE_AND_VERIFY -> CRITIQUE -> [RETRIEVE|EXPAND_WINDOW] -> GENERATE_AND_VERIFY -> terminal`。
+- [ ] 冻结 Planner 输出 `action/query/expectedFacts`，Critic 输出 `PASS` 或 `action/query|window/missingRequirements/unsupportedClaims`；禁止任意工具名、SQL、URL、文件路径和预算字段。
+- [ ] 明确 Critic 只判断问题覆盖和语义相关性，`AnswerEvidenceGate` 继续独占引用存在性与 Claim-Evidence 发布硬门；模型不得覆盖 Java 裁决。
+- [ ] 保持最多 6 Step、2 次答案生成和 1 次 Critic 修复；定义非法 Schema、无效参数、预算耗尽、UNKNOWN 和修复后仍失败的稳定终止原因。
+- [ ] 写出正常、补检、扩窗、拒答四条验收 Trace，以及模型调用数上限：正常最多 3 次（Planner、Executor、Critic），修复最多 4 次（再执行一次 Executor）。
+- [ ] 运行文档术语/引用检查和 `git diff --check`，更新 PLAN/TODO/ACCEPTANCE 后独立提交。
+
+**依赖**：T5；负责人明确批准在 T4 未退出时继续受限实验。
+
+**预计文件**：`docs/adr/0017-*.md`、`tasks/M6/PLAN.md`、`tasks/M6/TODO.md`、`tasks/M6/ACCEPTANCE.md`。
+
+**退出门**：合同能解释每个模型调用、Tool 参数来源、持久化边界和终止条件；没有通用 DAG、多 Agent、动态插件或 chain-of-thought 存储。
+
+## T7：让检索与扩窗证据真正进入 Executor
+
+- [ ] 先写失败测试：初检 Chunk 引用、扩窗时间范围和修复后的累积证据必须进入 Answer Prompt；禁止 `GENERATE_AND_VERIFY` 忽略 Step 引用后按原问题静默重检。
+- [ ] 使用现有 `agent_step.result_reference` 保存有界 Chunk 列表或 `window:start:end`；不新增通用 Artifact 表，不保存完整 Chunk、Prompt 或模型原文。
+- [ ] 给现有 Answer application service 增加最小的“已选择证据范围”输入，复用当前 evidence 加载、Prompt、模型 Adapter、发布和 Evidence Gate，不复制第二套回答管线。
+- [ ] 第二次生成按 Step 顺序合并原证据与新增证据并去重；owner/job 绑定、最大证据数、Prompt 长度和预算在模型调用前校验。
+- [ ] 完成 Answer/Agent 定向单测、MySQL 引用恢复集成测试、文档、`server\mvnw.cmd test` 和独立提交。
+
+**依赖**：T6。
+
+**预计文件**：`AgentApplicationService`、`AnswerApplicationService`、二者测试及 M6 验收文档；如现有字段容量经测试不足，再单独评审前进迁移，不预建新表。
+
+**退出门**：同一 Run 重启后能仅凭 MySQL Step 重建相同证据选择；扩窗内容确实出现在模型 Prompt；重复 Worker 不重复外部调用。
+
+## T8：用结构化 Planner 驱动首次检索
+
+- [ ] 先写失败测试：不同 Planner JSON 产生不同 query/expectedFacts；非法 JSON、未知 Action、超长 query、越权参数和超预算均在 Retrieval 前终止且外部调用为 0。
+- [ ] 增加一个窄 Agent 决策模型 Port/Adapter，复用既有 SiliconFlow 配置、调用审计和预算，不让 Agent application 依赖供应商 DTO，不创建 Planner 类层级。
+- [ ] 新增 `PLAN` 动作；模型只可选择 `RETRIEVE`、`NEEDS_CLARIFICATION` 或 `REFUSE`，Java 解析严格 Schema 后持久化去敏计划摘要。
+- [ ] Retrieval 必须使用 Planner query，而不是固定使用 `run.goal()`；expectedFacts 随 Trace 进入后续 Critic，但不得作为未经验证的事实发布。
+- [ ] 完成 Planner/Policy/Adapter 定向测试、模型调用审计集成测试、文档、后端快速门和独立提交。
+
+**依赖**：T7。
+
+**预计文件**：一个 Agent 决策 Port、一个基础设施 Adapter、`AgentPolicy/AgentApplicationService`、相关测试和配置；优先复用现有 JSON/HTTP 基础设施。
+
+**退出门**：至少两种目标得到不同检索参数；Planner 输出只决定受限动作和参数，Java 仍控制权限、预算、状态与终止。
+
+## T9：用结构化 Critic 驱动一次定向修复与重答
+
+- [ ] 先写失败测试：首答完整时 `PASS -> FINISH`；缺事实时按 Critic query 补检；缺上下文时按 Critic window 扩窗；第二次仍不合格时稳定拒答且不进入第三次生成。
+- [ ] 复用 T8 的决策模型 Port 增加 `CRITIQUE` 请求；输入仅含目标、expectedFacts、已验证首答、引用摘要和证据摘要，不包含 chain-of-thought 或不必要的完整转录。
+- [ ] Critic 严格返回 `PASS` 或一个白名单修复动作；Java 校验 query/window 必须属于当前 owner/job、在视频时长内且预算允许，再执行一次补检或扩窗。
+- [ ] 第二次 `GENERATE_AND_VERIFY` 携带首答、missingRequirements、unsupportedClaims 和累积证据；最终仍由现有 `AnswerEvidenceGate` 发布或拒答，Critic 无权放行硬门失败。
+- [ ] 更新 RuleBased Policy 为版本化的有界动作图，删除只看 `EVIDENCE:single/multiple` 的伪动态分支；不增加递归、通用工作流引擎或第二个答案实现。
+- [ ] 完成正常/补检/扩窗/拒答、恢复、幂等、预算和 UNKNOWN 测试，更新 Trace 文档，运行后端快速门与相关集成门后独立提交。
+
+**依赖**：T8。
+
+**预计文件**：T8 决策 Port/Adapter、`AgentPolicy`、`AgentApplicationService`、`AnswerApplicationService` 和相关测试；若超过约 5 个生产文件，优先合并数据记录而不是再加抽象层。
+
+**退出门**：测试能证明 Critic 缺口改变下一 Tool 的名称或参数，新增证据进入第二次 Prompt；正常路径至少 3 次模型调用、修复路径最多 4 次，且所有调用可审计、可限额、可安全停止。
+
+## T10：回放、A/B 与完整质量门
+
+- [ ] 前端在现有折叠 Trace 中显示 `PLAN/CRITIQUE` 的去敏摘要、修复原因、新增证据和模型调用数；不展示思维链、Prompt 或原始模型响应。
+- [ ] 真实浏览器验证正常、补检、扩窗、拒答四条路径，以及刷新恢复、引用跳转、桌面和 320px、Console/Network。
+- [ ] 故障矩阵覆盖 Planner/Critic 非法输出、超预算、重启、重复 Worker、Redis 清空和 UNKNOWN；恢复成功率、重复高成本调用和终止原因按现有门统计。
+- [ ] 冻结新 `agentPolicyVersion`，复用现有 Runner 在 DEV 同题至少运行三轮，报告首答通过率、补检恢复率、无效 Tool 比例、模型调用数、P95、成本、Claim 支持和引用定位。
+- [ ] 依次执行相关测试、`server\mvnw.cmd test`、`server\mvnw.cmd verify -Pintegration`、`client\npm.cmd run check`、变更覆盖率、npm audit、Gitleaks；OWASP 只有得到有效数据才可记作通过。
+- [ ] 回填 Roadmap/M6 ACCEPTANCE；只有 M5 原硬门和 M6 晋级门同时通过且负责人批准，才默认启用，否则保留实验关闭；独立提交。
+
+**依赖**：T9。
+
+**预计文件**：现有 Agent Trace UI/测试、Evaluation Runner/报告和 M6/Roadmap 文档；不创建第二套评测或 Agent 页面。
+
+**退出门**：闭环行为、可靠性、成本和质量都有可复现证据；任何失败不得通过降低阈值、删除断言、跳过测试或 suppression 继续。

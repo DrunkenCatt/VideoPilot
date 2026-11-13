@@ -31,6 +31,12 @@ T0 冻结例外、合同、路径和退出门
           -> T3 恢复故障矩阵与现有问答页回放
               -> T4 DEV/已冻结子集 A/B、晋级裁决与 M6 退出
                   -> T5 READY 后自动目标分析结果闭环（受限例外）
+
+T6 冻结模型驱动闭环合同（待负责人批准继续实验）
+  -> T7 让检索/扩窗证据真正进入回答生成
+      -> T8 用结构化 Planner 决定首次检索内容
+          -> T9 用结构化 Critic 驱动一次定向修复与重答
+              -> T10 回放、A/B 与完整质量门
 ```
 
 ## 任务表
@@ -43,6 +49,11 @@ T0 冻结例外、合同、路径和退出门
 | T3 | 证明恢复故障矩阵并在现有问答页回放 | 重启/UNKNOWN/重复推进与用户看到的预算、拒绝、澄清和终止事实来自同一持久化轨迹，适合作为一个可见纵切 | T2 | M |
 | T4 | 复用 M5 Runner 完成 DEV/已冻结子集 A/B、晋级裁决和退出证据 | 指标、延迟、成本、路径分布和默认启用决定必须来自同一冻结候选；不建设第二套 Agent 评测框架 | T3 | M |
 | T5 | READY 后自动生成并展示目标分析结果 | 自动创建、稳定身份、标准 Answer 绑定、页面去重与恢复共同构成一个用户可见闭环；复用现有 Agent/Answer，不新增结果表或工作流框架 | T4 独立提交；`EX-2026-11-12-M6-T5` 允许效果门未退出时受限推进 | M |
+| T6 | 冻结模型驱动最短闭环合同 | Planner/Critic Schema、动作图、一次修复上限、预算和失败语义会共同改变 Agent Policy，先用 ADR/验收样例冻结，避免边实现边发明协议 | T5；负责人明确批准在 T4 未退出时继续实验 | S |
+| T7 | 打通证据选择到 Executor 的真实传递 | 检索命中的 Chunk、扩窗得到的时间窗、累积证据和 Answer Prompt 必须形成一条可恢复链；这是后续 Planner/Critic 有效的前提，不能拆成各自无效的半成品 | T6 | M |
+| T8 | 结构化 Planner 驱动首次工具参数 | 一次 Planner 模型调用、严格 JSON Schema、Java 白名单/参数校验和首次检索共同构成第一个模型驱动纵切；不建设通用 DAG 或计划树 | T7 | M |
+| T9 | 结构化 Critic 驱动一次定向修复与重答 | Critic 缺口、补检/扩窗参数、第二次生成和最终 Evidence Gate 高度相关，只有一起交付才能证明 Observation 真正改变下一次模型输入 | T8 | M |
+| T10 | 完成轨迹回放、同题 A/B 与晋级裁决 | 新动作展示、正常/修复/拒答三路径、模型调用数、恢复率、质量/延迟/成本必须来自同一冻结 policy，统一形成退出证据 | T9 | M |
 
 ## 明确不做
 
@@ -53,6 +64,9 @@ T0 冻结例外、合同、路径和退出门
 - 不建设多轮澄清会话；MVP 只终止为 `NEEDS_CLARIFICATION` 并返回去敏提示。
 - 不使用 TEST 调参，不因 M6 局部收益删除失败题或降低 M5/M6 阈值。
 - 不默认启用 Agent；未晋级时只保留本地实验开关。
+- 不让模型生成任意工具名、SQL、URL、文件路径或预算；Planner/Critic 只能返回版本化白名单动作和受限参数。
+- 不把“多调用几次模型”本身当作闭环成立；必须证明 Critic 缺口改变了后续 Tool 参数，并且新增证据进入第二次回答 Prompt。
+- 不为首版增加长期记忆、并行分支、反思树、通用 DAG、动态插件或多 Agent。
 
 ## 检查点
 
@@ -83,3 +97,21 @@ T0 冻结例外、合同、路径和退出门
   Redis 清空或进程重启不重复创建。
 - 查询接口只接受 Run Step 中严格的 `answer:<uuid>`，通过现有 Answer service 做 owner/Job 绑定读取；自动
   Answer 不出现在普通问答历史中，拒答或失败不制造空答案。
+
+### Checkpoint E：证据闭环基础（T6-T7）
+
+- 冻结的最短路径为 `PLAN -> RETRIEVE -> GENERATE_AND_VERIFY -> CRITIQUE -> [RETRIEVE|EXPAND_WINDOW] -> GENERATE_AND_VERIFY -> terminal`；正常路径在 Critic `PASS` 后提前结束。
+- 最多一次 Critic 驱动修复，仍受 6 Step、2 次答案生成、deadline、Token 和费用快照约束；确定性 Evidence Gate 始终拥有最终否决权。
+- Retrieval/Expand Step 保存可恢复的 Chunk 或时间窗引用；Answer 只消费这些已选择证据，不再静默按原问题重新检索。
+
+### Checkpoint F：模型驱动修复（T8-T9）
+
+- Planner 至少输出检索 query 和 expected facts；其输出必须实际成为 Retrieval 参数，并经 Java Schema、白名单、长度和 owner/预算门校验。
+- Critic 只检查相关性与完整性，返回 `PASS` 或一次 `RETRIEVE/EXPAND_WINDOW` 修复建议；它不能批准引用、绕过 Evidence Gate 或直接结束数据库状态。
+- 修复路径的第二次回答同时携带原问题、已验证首答、缺失要求、原证据和新增证据；测试证明新增证据出现在 Prompt 且改变最终回答或形成稳定拒答。
+
+### Checkpoint G：可证明与可发布（T10）
+
+- 正常、定向补检、扩窗修复、证据不足拒答至少四条真实 Trace 可回放；每次模型调用都有版本、Token、延迟、成本和调用指纹。
+- 故障测试覆盖 Planner/Critic 非法 JSON、越权参数、超预算、进程重启和高成本调用 UNKNOWN；不得自动重放未知调用。
+- 冻结新 `agentPolicyVersion` 后复用 M5/M6 Runner 完成至少三轮 DEV 同题 A/B；M5 原硬门与 M6 晋级门仍同时适用，未通过则默认关闭。
