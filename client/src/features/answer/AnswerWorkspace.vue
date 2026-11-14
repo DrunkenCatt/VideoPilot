@@ -52,11 +52,14 @@ let pollTimer: ReturnType<typeof globalThis.setTimeout> | null = null
 let goalPollTimer: ReturnType<typeof globalThis.setTimeout> | null = null
 
 const terminalAgentStatuses = new Set<AgentRun['status']>(['COMPLETED', 'REFUSED', 'FAILED'])
-const terminalGoalStates = new Set<GoalAnalysisResult['state']>(['DISABLED', 'ANSWERED', 'REFUSED', 'FAILED'])
+const terminalGoalStates = new Set<GoalAnalysisResult['state']>([
+  'DISABLED', 'ANSWERED', 'PARTIALLY_ANSWERED', 'REFUSED', 'FAILED',
+])
 const agentRunQueryParameter = 'agentRun'
 
 const terminationLabels: Record<string, string> = {
   COMPLETED: '已完成并通过确定性证据门。',
+  PARTIALLY_ANSWERED: '已发布视频可以确认的部分，并明确标出证据缺口。',
   NEEDS_CLARIFICATION: '需要补充更具体的问题后再运行。',
   NO_SUFFICIENT_EVIDENCE: '视频证据不足，Agent 已稳定拒答。',
   OWNER_OR_JOB_REJECTED: '当前账号无权访问该任务，或任务尚未就绪。',
@@ -117,7 +120,13 @@ function traceSummary(step: AgentRun['steps'][number], index: number): string {
   }
   if (step.action === 'CRITIQUE') {
     const action = step.observationSummary.split(';')[0]?.replace('CRITIQUE:', '')
-    const label = action === 'PASS' ? '审查通过' : action === 'EXPAND_WINDOW' ? '扩展上下文' : '定向补检'
+    const label = action === 'PASS'
+      ? '审查通过'
+      : action === 'PARTIAL'
+        ? '发布有界部分回答'
+        : action === 'REFUSE'
+          ? '审查后拒答'
+          : action === 'EXPAND_WINDOW' ? '扩展上下文' : '定向补检'
     const missing = decodeTraceLines(fields.get('missing'))
     const unsupported = decodeTraceLines(fields.get('unsupported'))
     const reasons = [
@@ -136,7 +145,9 @@ function traceSummary(step: AgentRun['steps'][number], index: number): string {
     return `扩窗新增证据：${Number(step.observationSummary.replace('WINDOW:', '')) || 0} 条`
   }
   if (step.action === 'GENERATE_AND_VERIFY') {
-    return step.observationSummary === 'ANSWER:ANSWERED' ? '生成回答并通过证据门' : '生成结果未通过证据门'
+    if (step.observationSummary === 'ANSWER:ANSWERED') return '生成回答并通过证据门'
+    if (step.observationSummary === 'ANSWER:PARTIALLY_ANSWERED') return '生成带证据缺口的候选回答并通过证据门'
+    return '生成结果未通过证据门'
   }
   return '已完成受限动作'
 }
@@ -407,33 +418,53 @@ onBeforeUnmount(() => {
         >
           {{ terminationLabels[goalAnalysis.run?.terminationReason ?? 'FAILED'] ?? `目标分析失败：${goalAnalysis.run?.terminationReason ?? 'FAILED'}` }}
         </p>
-        <ol
-          v-else-if="goalAnalysis.answer?.status === 'ANSWERED'"
-          class="claim-list"
-        >
-          <li
-            v-for="(claim, claimIndex) in goalAnalysis.answer.claims"
-            :key="claim.claimId"
+        <template v-else-if="goalAnalysis.answer?.status === 'ANSWERED' || goalAnalysis.answer?.status === 'PARTIALLY_ANSWERED'">
+          <h5
+            v-if="goalAnalysis.answer.status === 'PARTIALLY_ANSWERED'"
+            class="answer-coverage-title"
           >
-            <div class="claim-copy">
-              <span>{{ String(claimIndex + 1).padStart(2, '0') }}</span>
-              <p>{{ claim.text }}</p>
-            </div>
-            <div class="citation-list">
-              <button
-                v-for="evidence in claim.citations"
-                :key="evidence.citationId"
-                type="button"
-                data-test="goal-cited-evidence"
-                @click="emit('cite', evidence)"
+            视频可以确认
+          </h5>
+          <ol class="claim-list">
+            <li
+              v-for="(claim, claimIndex) in goalAnalysis.answer.claims"
+              :key="claim.claimId"
+            >
+              <div class="claim-copy">
+                <span>{{ String(claimIndex + 1).padStart(2, '0') }}</span>
+                <p>{{ claim.text }}</p>
+              </div>
+              <div class="citation-list">
+                <button
+                  v-for="evidence in claim.citations"
+                  :key="evidence.citationId"
+                  type="button"
+                  data-test="goal-cited-evidence"
+                  @click="emit('cite', evidence)"
+                >
+                  <span class="citation-meta">{{ evidence.channel }} · {{ formatTime(evidence.startMs) }}–{{ formatTime(evidence.endMs) }}</span>
+                  <q>{{ evidence.quote }}</q>
+                  <span class="citation-action">跳到视频证据 →</span>
+                </button>
+              </div>
+            </li>
+          </ol>
+          <section
+            v-if="goalAnalysis.answer.status === 'PARTIALLY_ANSWERED'"
+            class="answer-partial"
+            data-test="goal-answer-partial"
+          >
+            <strong>视频证据不足以确认</strong>
+            <ul>
+              <li
+                v-for="gap in goalAnalysis.answer.missingRequirements"
+                :key="gap"
               >
-                <span class="citation-meta">{{ evidence.channel }} · {{ formatTime(evidence.startMs) }}–{{ formatTime(evidence.endMs) }}</span>
-                <q>{{ evidence.quote }}</q>
-                <span class="citation-action">跳到视频证据 →</span>
-              </button>
-            </div>
-          </li>
-        </ol>
+                {{ gap }}
+              </li>
+            </ul>
+          </section>
+        </template>
       </section>
 
       <form
@@ -612,8 +643,15 @@ onBeforeUnmount(() => {
               <span>{{ refusalLabels[answer.refusalReason] }}</span>
             </p>
 
+            <h5
+              v-if="answer.status === 'PARTIALLY_ANSWERED'"
+              class="answer-coverage-title"
+            >
+              视频可以确认
+            </h5>
+
             <ol
-              v-else
+              v-if="answer.status !== 'REFUSED'"
               class="claim-list"
             >
               <li
@@ -640,6 +678,22 @@ onBeforeUnmount(() => {
                 </div>
               </li>
             </ol>
+
+            <section
+              v-if="answer.status === 'PARTIALLY_ANSWERED'"
+              class="answer-partial"
+              data-test="answer-partial"
+            >
+              <strong>视频证据不足以确认</strong>
+              <ul>
+                <li
+                  v-for="gap in answer.missingRequirements"
+                  :key="gap"
+                >
+                  {{ gap }}
+                </li>
+              </ul>
+            </section>
           </article>
         </li>
       </ol>

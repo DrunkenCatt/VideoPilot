@@ -56,10 +56,12 @@ public final class LanguageModelAgentDecisionAdapter implements AgentDecisionPor
     public CritiqueResponse critique(CritiqueRequest request) {
         String expectedFacts;
         String answerClaims;
+        String answerMissingRequirements;
         String evidenceSummaries;
         try {
             expectedFacts = json.writeValueAsString(request.expectedFacts());
             answerClaims = json.writeValueAsString(request.answerClaims());
+            answerMissingRequirements = json.writeValueAsString(request.answerMissingRequirements());
             evidenceSummaries = json.writeValueAsString(request.evidenceSummaries());
         } catch (java.io.IOException exception) {
             throw new InvalidDecisionException(exception);
@@ -67,11 +69,15 @@ public final class LanguageModelAgentDecisionAdapter implements AgentDecisionPor
         String prompt = """
                 Judge whether the verified answer covers the teaching-video goal and is semantically relevant.
                 Return exactly one JSON object with schemaVersion, action, query, startMs, endMs,
-                missingRequirements, unsupportedClaims. action must be PASS, RETRIEVE, or EXPAND_WINDOW.
+                missingRequirements, unsupportedClaims.
                 PASS is allowed only when ANSWER_STATUS is ANSWERED and all expected facts are covered.
-                A REFUSED answer cannot PASS; choose RETRIEVE or EXPAND_WINDOW to repair its missing requirements.
+                A REFUSED answer cannot PASS.
                 PASS must have empty repair fields. RETRIEVE needs one focused query and missing requirements.
                 EXPAND_WINDOW needs a non-negative [startMs,endMs] and missing requirements.
+                When REPAIR_ALLOWED is true, an incomplete answer must choose RETRIEVE or EXPAND_WINDOW.
+                When REPAIR_ALLOWED is false, do not request another repair: choose PARTIAL when at least one
+                verified claim answers part of the goal, or REFUSE when no verified claim can be published.
+                PARTIAL and REFUSE require missingRequirements and empty query/startMs/endMs.
                 Choose EXPAND_WINDOW when the missing requirement is adjacent temporal context around the
                 current timestamped evidence. Choose RETRIEVE when the missing topic may be elsewhere in the video.
                 missingRequirements and unsupportedClaims each allow at most 3 entries.
@@ -79,14 +85,19 @@ public final class LanguageModelAgentDecisionAdapter implements AgentDecisionPor
                 PASS template: {"schemaVersion":1,"action":"PASS","query":"","startMs":null,"endMs":null,"missingRequirements":[],"unsupportedClaims":[]}
                 RETRIEVE template: {"schemaVersion":1,"action":"RETRIEVE","query":"focused query","startMs":null,"endMs":null,"missingRequirements":["missing fact"],"unsupportedClaims":[]}
                 EXPAND_WINDOW template: {"schemaVersion":1,"action":"EXPAND_WINDOW","query":"","startMs":0,"endMs":1000,"missingRequirements":["missing context"],"unsupportedClaims":[]}
+                PARTIAL template: {"schemaVersion":1,"action":"PARTIAL","query":"","startMs":null,"endMs":null,"missingRequirements":["unconfirmed part"],"unsupportedClaims":[]}
+                REFUSE template: {"schemaVersion":1,"action":"REFUSE","query":"","startMs":null,"endMs":null,"missingRequirements":["unsupported goal"],"unsupportedClaims":[]}
                 Include every template key, add no other keys, use null exactly as shown, and do not use markdown fences.
                 Do not judge citation existence or override the deterministic evidence gate.
                 GOAL: %s
                 EXPECTED_FACTS: %s
                 ANSWER_STATUS: %s
                 VERIFIED_ANSWER_CLAIMS: %s
+                ANSWER_DECLARED_GAPS: %s
+                REPAIR_ALLOWED: %s
                 EVIDENCE_SUMMARIES: %s
-                """.formatted(request.goal(), expectedFacts, request.answerStatus(), answerClaims, evidenceSummaries);
+                """.formatted(request.goal(), expectedFacts, request.answerStatus(), answerClaims,
+                        answerMissingRequirements, request.repairAllowed(), evidenceSummaries);
         LanguageModelPort.Response response = model.generate(
                 new LanguageModelPort.Request(prompt, request.inputFingerprint()));
         try {

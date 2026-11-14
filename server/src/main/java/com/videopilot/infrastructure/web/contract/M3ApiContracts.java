@@ -59,6 +59,7 @@ public final class M3ApiContracts {
 
     public enum AnswerStatus {
         ANSWERED,
+        PARTIALLY_ANSWERED,
         REFUSED
     }
 
@@ -133,9 +134,18 @@ public final class M3ApiContracts {
             String question,
             List<AnswerClaimResponse> claims,
             RefusalReason refusalReason,
+            List<String> missingRequirements,
             List<DegradedChannel> degradedChannels,
             ExecutionVersions versions,
             Instant createdAt) {
+        public AnswerResponse(
+                UUID answerId, AnswerStatus status, String question,
+                List<AnswerClaimResponse> claims, RefusalReason refusalReason,
+                List<DegradedChannel> degradedChannels, ExecutionVersions versions,
+                Instant createdAt) {
+            this(answerId, status, question, claims, refusalReason, List.of(),
+                    degradedChannels, versions, createdAt);
+        }
     }
 
     public record AnswerPageResponse(

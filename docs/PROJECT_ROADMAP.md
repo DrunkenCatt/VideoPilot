@@ -590,6 +590,13 @@ T10D 完整工程门（2026-11-14）：Critic 前进为语义覆盖判定的 `ag
 Gitleaks 干净快照与 Compose 配置通过；负责人明确批准跳过 OWASP Dependency-Check，NVD 数据未取得，
 故该项未形成漏洞结论。T10 工程闭环完成，但 M6 继续未退出、不晋级，所有 Agent 默认开关保持 false。
 
+T11 有界部分回答（2026-11-14）：为避免第二轮仍隐藏已通过硬证据门的教学内容，新增
+`PARTIALLY_ANSWERED` 和第二次 Critic。修复路径上限前进为 7 Step/5 次生成式调用，但仍只有 2 次 Answer、
+1 次工具修复；第二次 Critic 只能 `PASS/PARTIAL/REFUSE`。Answer 明确禁止使用通用知识补齐视频缺口，
+所有发布 Claim 继续由原 Evidence Gate 逐条验证，缺口单独持久化并在页面以“视频证据不足以确认”展示。
+版本冻结为 `agent-policy-v5-partial / agent-critic-v6-partial / answer-evidence-v3-partial`。该体验修正不改写
+T10D 历史指标，不降低 M5/M6 效果门，所有 Agent 开关继续默认关闭。
+
 ### M7：用户反馈采集与复核闭环（1-2 周）
 
 交付：

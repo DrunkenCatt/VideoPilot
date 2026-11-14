@@ -65,7 +65,7 @@ describe('EvaluationWorkbench', () => {
     await wrapper.get('.candidate-controls select').setValue('AGENT')
 
     expect((wrapper.get('.candidate-controls input').element as HTMLInputElement).value)
-      .toBe('agent-policy-v4-window')
+      .toBe('agent-policy-v5-partial')
   })
 
   it('ignores a late run response after another dataset is selected', async () => {

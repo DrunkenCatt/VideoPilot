@@ -153,7 +153,7 @@ MySQL 选择最早一个 READY 且缺少目标 Run 的 Job，以数据库中的�
 GET /api/v1/analysis-jobs/{jobId}/goal-analysis-result
 ```
 
-状态为 `DISABLED/PENDING/REQUESTED/RUNNING/ANSWERED/REFUSED/FAILED`。服务端只从已提交的
+状态为 `DISABLED/PENDING/REQUESTED/RUNNING/ANSWERED/PARTIALLY_ANSWERED/REFUSED/FAILED`。服务端只从已提交的
 `GENERATE_AND_VERIFY` Step 接受严格 `answer:<uuid>`，再用现有 Answer service 校验 owner、Job 与
 Answer；非法引用返回一致性冲突，不猜测结果。自动 Answer 在普通 `GET .../answers` 列表中排除，
 但仍可由目标结果接口精确读取。Run 失败不反向修改 READY Job，也不自动创建替代 Run。
@@ -161,3 +161,17 @@ Answer；非法引用返回一致性冲突，不猜测结果。自动 Answer 在
 排查顺序：先查目标结果接口，再按其中 `runId` 读取 Agent Trace，最后核对 `model_call.run_id`。不要删
 Run、改幂等键或把 UNKNOWN 调用重置为成功。Redis 清空和应用重启后，Worker 会从 MySQL 继续发现缺失
 Run；已有终态 Run 不重建。
+
+## 9. T11 有界部分回答
+
+修复路径现在最多为 7 Step/5 次生成式调用：第二次 Answer 后还会执行一次 Critic。该 Critic 不能再
+检索或扩窗，只能确认完整、发布有界部分回答或拒答。答案生成仍最多两次，工具修复仍最多一次。
+
+`PARTIALLY_ANSWERED` 页面固定显示两区：
+
+- “视频可以确认”：只包含通过 `AnswerEvidenceGate` 的 Claim 和可跳转时间戳引用；
+- “视频证据不足以确认”：只列 `missingRequirements`，不显示模型常识或推测性补充。
+
+排查时先核对 Answer 的 `status/claims/missingRequirements`，再查看最后一个 `CRITIQUE` Step。若任一 Claim
+引用伪造、错绑或不能支撑 Claim，预期结果仍是整份 `REFUSED`，而不是部分发布。不要手工把拒答改成部分
+回答，也不要通过提高 Step/Answer 上限制造第三轮。

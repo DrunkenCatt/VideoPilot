@@ -143,6 +143,37 @@ class AnswerPersistenceAdapterIT {
                 .doesNotContain("candidate", "not-json");
     }
 
+    @Test
+    void finalizesVerifiedClaimsAsABoundedPartialAnswerWithExplicitGaps() {
+        seed();
+        OwnerId owner = new OwnerId(OWNER);
+        UUID answerId = UUID.randomUUID();
+        Instant now = Instant.parse("2026-11-14T00:00:00Z");
+        answers.claim(owner, new AnswerStore.ClaimRequest(
+                answerId, JOB, "partial-intent", "3".repeat(64), "String 有哪些用途？",
+                "answer-evidence-v3-partial", "deepseek-ai/DeepSeek-V4-Flash", now));
+        AnswerEvidenceGate.VerifiedCitation citation = new AnswerEvidenceGate.VerifiedCitation(
+                FIRST + "#ASR", FIRST, 0, 10_000, "ASR", "String 可以存储文本", "NORMALIZED");
+        AnswerStore.StoredAnswer answered = answers.publish(owner, new AnswerStore.Publication(
+                answerId, null, "deepseek-ai/DeepSeek-V4-Flash", "ANSWERED", null, List.of(),
+                "embedding-v1", "hybrid-v1", "chunk-v1", 0, 0, 0,
+                List.of(new AnswerEvidenceGate.VerifiedClaim("String 可以保存文本", List.of(citation))),
+                List.of(), now, now));
+
+        AnswerStore.StoredAnswer partial = answers.finalizeCoverage(
+                owner, JOB, answerId, "PARTIALLY_ANSWERED", List.of("视频未说明计数器用法"));
+
+        assertThat(answered.status()).isEqualTo("ANSWERED");
+        assertThat(partial.status()).isEqualTo("PARTIALLY_ANSWERED");
+        assertThat(partial.claims()).singleElement()
+                .extracting(AnswerStore.StoredClaim::text).isEqualTo("String 可以保存文本");
+        assertThat(partial.missingRequirements()).containsExactly("视频未说明计数器用法");
+        assertThat(jdbc.sql("SELECT JSON_UNQUOTE(JSON_EXTRACT(missing_requirements, '$[0]')) "
+                        + "FROM answer_record WHERE answer_id = :id")
+                .param("id", answerId.toString()).query(String.class).single())
+                .isEqualTo("视频未说明计数器用法");
+    }
+
     private void seed() {
         jdbc.sql("""
                 INSERT INTO media_asset (

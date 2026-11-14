@@ -149,6 +149,39 @@ class EvaluationBaselineRunnerTest {
     }
 
     @Test
+    void evaluatesABoundedPartialAsPublishedVideoEvidenceInsteadOfARefusal() {
+        RetrievalApplicationService retrieval = mock(RetrievalApplicationService.class);
+        AnswerApplicationService answers = mock(AnswerApplicationService.class);
+        UUID expected = UUID.randomUUID();
+        EvaluationCase evaluationCase = new EvaluationCase(
+                "answer-partial", 1, ANSWER, UUID.randomUUID(), "String 有哪些用途？", List.of(expected),
+                Answerability.ANSWERABLE,
+                new AnswerScoring(List.of("保存文本", "计数器"), List.of(), List.of("ASR")),
+                null, "APPROVED", 2, "a".repeat(64));
+        var supported = new AnswerStore.StoredClaim(UUID.randomUUID(), "String 可以保存文本", List.of(
+                new AnswerStore.StoredCitation(
+                        UUID.randomUUID(), expected, 0, 1_000, "ASR", "String 可以保存文本", "EXACT")));
+        when(answers.ask(
+                org.mockito.ArgumentMatchers.eq(OWNER),
+                org.mockito.ArgumentMatchers.eq(evaluationCase.jobId()),
+                org.mockito.ArgumentMatchers.eq(evaluationCase.question()),
+                org.mockito.ArgumentMatchers.startsWith("eval:"),
+                org.mockito.ArgumentMatchers.any(UUID.class),
+                org.mockito.ArgumentMatchers.eq(evaluationCase.caseId())))
+                .thenReturn(new AnswerStore.StoredAnswer(
+                        1, UUID.randomUUID(), "PARTIALLY_ANSWERED", evaluationCase.question(), null, List.of(),
+                        "prompt-v1", "model-v1", "embedding-v1", "formula-v1", "chunk-v1",
+                        List.of(supported), List.of("视频未说明计数器用法"), NOW));
+
+        var result = new EvaluationBaselineRunner(retrieval, answers, () -> NOW)
+                .run(OWNER, run(), evaluationCase);
+
+        assertThat(result.outcome()).isEqualTo(COMPLETED);
+        assertThat(result.claimCount()).isEqualTo(1);
+        assertThat(result.supportedClaimCount()).isZero();
+    }
+
+    @Test
     void scoresRequiredFactsAcrossTheWholeAnswerInsteadOfRequiringEveryFactInEveryClaim() {
         RetrievalApplicationService retrieval = mock(RetrievalApplicationService.class);
         AnswerApplicationService answers = mock(AnswerApplicationService.class);

@@ -88,6 +88,31 @@ class AnswerApplicationServiceTest {
     }
 
     @Test
+    void publishesVerifiedClaimsAndExplicitGapsAsABoundedPartialAnswer() {
+        EvidenceHit hit = hit(0.85);
+        when(retrieval.retrieve(owner, jobId, "help 有哪些用法？", 5)).thenReturn(result(List.of(hit)));
+        when(store.loadEvidence(any(), any(), any(), any())).thenReturn(List.of(
+                new AnswerEvidenceGate.EvidenceSource(
+                        segmentId + "#ASR", chunkId, segmentId, 0, 0, 10_000,
+                        "ASR", "help 命令可以获取命令帮助。", true)));
+        when(model.generate(any())).thenReturn(new LanguageModelPort.Response(
+                "{\"answerable\":true,\"claims\":[{\"text\":\"help 命令可以获取帮助\","
+                        + "\"citations\":[{\"evidenceId\":\"" + segmentId
+                        + "#ASR\",\"quote\":\"help 命令可以获取命令帮助\"}]}],"
+                        + "\"missingRequirements\":[\"第二种用法\",\"第三种用法\"]}",
+                new LanguageModelPort.Usage(100, 30)));
+
+        service.ask(owner, jobId, "help 有哪些用法？", "intent-partial");
+
+        ArgumentCaptor<AnswerStore.Publication> published = ArgumentCaptor.forClass(AnswerStore.Publication.class);
+        verify(store).publish(any(), published.capture());
+        assertThat(published.getValue().status()).isEqualTo("PARTIALLY_ANSWERED");
+        assertThat(published.getValue().missingRequirements())
+                .containsExactly("第二种用法", "第三种用法");
+        assertThat(published.getValue().claims()).hasSize(1);
+    }
+
+    @Test
     void refusesTheWholeCandidateWhenTheModelFabricatesEvidence() {
         EvidenceHit hit = hit(0.85);
         when(retrieval.retrieve(owner, jobId, "String 是什么？", 5)).thenReturn(result(List.of(hit)));
@@ -294,7 +319,9 @@ class AnswerApplicationServiceTest {
         ArgumentCaptor<LanguageModelPort.Request> request = ArgumentCaptor.forClass(LanguageModelPort.Request.class);
         verify(model).generate(request.capture());
         assertThat(request.getValue().prompt())
-                .contains("Answer every part of the question")
+                .contains("Publish every supported part instead of discarding it")
+                .contains("Never use general model knowledge")
+                .contains("missingRequirements")
                 .contains("Copy evidenceId exactly")
                 .contains("contiguous verbatim substring")
                 .contains("one atomic fact");

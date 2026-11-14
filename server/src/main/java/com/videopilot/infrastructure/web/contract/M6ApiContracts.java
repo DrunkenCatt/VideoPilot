@@ -16,7 +16,9 @@ public final class M6ApiContracts {
 
     public enum ToolCallStatus { REQUESTED, RUNNING, COMPLETED, FAILED, UNKNOWN }
 
-    public enum GoalAnalysisState { DISABLED, PENDING, REQUESTED, RUNNING, ANSWERED, REFUSED, FAILED }
+    public enum GoalAnalysisState {
+        DISABLED, PENDING, REQUESTED, RUNNING, ANSWERED, PARTIALLY_ANSWERED, REFUSED, FAILED
+    }
 
     public record CreateAgentRunRequest(@NotBlank @Size(max = 1_000) String goal) {
     }

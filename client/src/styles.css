@@ -541,6 +541,11 @@ button:disabled { cursor: wait; opacity: 0.65; }
 .answer-degraded strong, .answer-degraded span { padding: 0.3rem 0.45rem; border: 1px solid #c89a50; background: #f4ead2; }
 .answer-refusal { display: grid; gap: 0.35rem; margin: 1rem 0; padding: 0.8rem; border-left: 3px solid #ad7b29; background: #f4ead2; font-size: 0.76rem; line-height: 1.55; }
 .answer-refusal strong { color: #704b12; }
+.answer-coverage-title { margin: 1rem 0 0; color: var(--accent-dark); font-family: 'Noto Serif SC', 'Songti SC', serif; font-size: 0.82rem; }
+.answer-partial { margin: 0.2rem 0 1rem; padding: 0.8rem; border-left: 3px solid #ad7b29; background: #fff4d8; font-size: 0.76rem; line-height: 1.55; }
+.answer-partial strong { color: #704b12; }
+.answer-partial ul { margin: 0.45rem 0 0; padding-left: 1.2rem; }
+.answer-partial li + li { margin-top: 0.25rem; }
 .claim-list > li { padding: 1rem 0; border-top: 1px solid var(--line); }
 .claim-copy { display: grid; grid-template-columns: 2rem minmax(0, 1fr); gap: 0.75rem; }
 .claim-copy > span { color: var(--muted); font-family: 'IBM Plex Mono', 'Cascadia Mono', monospace; font-size: 0.65rem; }

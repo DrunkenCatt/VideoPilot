@@ -198,7 +198,8 @@ public class EvaluationBaselineRunner {
                         && evaluationCase.expectedSegmentIds().contains(citation.segmentId()))
                 .count()).sum();
         int supported = supportedClaims(answer.claims(), evaluationCase);
-        CaseOutcome outcome = "ANSWERED".equals(answer.status())
+        CaseOutcome outcome = ("ANSWERED".equals(answer.status())
+                || "PARTIALLY_ANSWERED".equals(answer.status()))
                 ? CaseOutcome.COMPLETED : CaseOutcome.REFUSED;
         return result(run, evaluationCase, outcome, null, answer.claims().size(), citations,
                 supported, localized, answer.answerId(), startedAt, null);

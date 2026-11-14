@@ -93,10 +93,24 @@ class M3ContractTest {
                 List.of(M3ApiContracts.DegradedChannel.SEMANTIC),
                 versions,
                 Instant.parse("2026-11-05T00:01:00Z"));
+        AnswerResponse partial = new AnswerResponse(
+                UUID.randomUUID(),
+                AnswerStatus.PARTIALLY_ANSWERED,
+                "What uses does the lecture demonstrate?",
+                List.of(claim),
+                null,
+                List.of("The video does not demonstrate a counter use case"),
+                List.of(),
+                versions,
+                Instant.parse("2026-11-05T00:02:00Z"));
 
         assertThat(answered.claims()).allSatisfy(answerClaim -> assertThat(answerClaim.citations()).isNotEmpty());
         assertThat(answered.refusalReason()).isNull();
         assertThat(refused.claims()).isEmpty();
         assertThat(refused.refusalReason()).isEqualTo(RefusalReason.NO_SUFFICIENT_EVIDENCE);
+        assertThat(partial.claims()).allSatisfy(answerClaim ->
+                assertThat(answerClaim.citations()).isNotEmpty());
+        assertThat(partial.missingRequirements())
+                .containsExactly("The video does not demonstrate a counter use case");
     }
 }

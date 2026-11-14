@@ -36,10 +36,12 @@ public class AnswerPersistenceAdapter implements AnswerStore {
         jdbc.sql("""
                 INSERT INTO answer_record (
                     answer_id, job_id, owner_id, idempotency_key, input_fingerprint,
-                    question, status, degraded_channels, prompt_version, model_version, created_at
+                    question, status, degraded_channels, missing_requirements,
+                    prompt_version, model_version, created_at
                 )
                 SELECT :answerId, job_id, owner_id, :key, :fingerprint,
-                       :question, 'PROCESSING', JSON_ARRAY(), :promptVersion, :modelVersion, :createdAt
+                       :question, 'PROCESSING', JSON_ARRAY(), JSON_ARRAY(),
+                       :promptVersion, :modelVersion, :createdAt
                 FROM analysis_job
                 WHERE job_id = :jobId AND owner_id = :owner AND status = 'READY'
                 ON DUPLICATE KEY UPDATE answer_id = answer_id
@@ -193,11 +195,13 @@ public class AnswerPersistenceAdapter implements AnswerStore {
         int updated = jdbc.sql("""
                 UPDATE answer_record
                 SET status = :status, refusal_reason = :reason,
+                    missing_requirements = CAST(:missingRequirements AS JSON),
                     degraded_channels = CAST(:degraded AS JSON), embedding_version = :embeddingVersion,
                     retrieval_formula_version = :formulaVersion, chunk_version = :chunkVersion,
                     published_at = :publishedAt
                 WHERE answer_id = :answerId AND owner_id = :owner AND status = 'PROCESSING'
                 """).param("status", publication.status()).param("reason", publication.refusalReason())
+                .param("missingRequirements", write(publication.missingRequirements()))
                 .param("degraded", write(publication.degradedChannels()))
                 .param("embeddingVersion", publication.embeddingVersion())
                 .param("formulaVersion", publication.retrievalFormulaVersion())
@@ -250,6 +254,29 @@ public class AnswerPersistenceAdapter implements AnswerStore {
 
     @Override
     @Transactional
+    public StoredAnswer finalizeCoverage(
+            OwnerId ownerId, UUID jobId, UUID answerId,
+            String status, List<String> missingRequirements) {
+        if (!"PARTIALLY_ANSWERED".equals(status)) {
+            throw new IllegalArgumentException("unsupported answer coverage status");
+        }
+        int updated = jdbc.sql("""
+                UPDATE answer_record
+                SET status = :status, refusal_reason = NULL,
+                    missing_requirements = CAST(:missingRequirements AS JSON)
+                WHERE answer_id = :answerId AND job_id = :jobId AND owner_id = :owner
+                  AND status IN ('ANSWERED', 'PARTIALLY_ANSWERED')
+                """).param("status", status)
+                .param("missingRequirements", write(missingRequirements))
+                .param("answerId", answerId.toString()).param("jobId", jobId.toString())
+                .param("owner", ownerId.value().toString()).update();
+        if (updated != 1) throw new IllegalStateException("answer coverage finalization was rejected");
+        return find(ownerId, jobId, answerId)
+                .orElseThrow(() -> new IllegalStateException("finalized answer could not be read"));
+    }
+
+    @Override
+    @Transactional
     public void fail(
             UUID answerId, UUID modelCallId, String callStatus, String category,
             String code, String diagnosticSummary, Instant completedAt) {
@@ -278,7 +305,7 @@ public class AnswerPersistenceAdapter implements AnswerStore {
         return queryAnswers("""
                 SELECT * FROM answer_record
                 WHERE owner_id = :owner AND job_id = :jobId AND answer_id = :answerId
-                  AND status IN ('ANSWERED', 'REFUSED')
+                  AND status IN ('ANSWERED', 'PARTIALLY_ANSWERED', 'REFUSED')
                 """, ownerId, jobId, Map.of("answerId", answerId.toString())).stream().findFirst();
     }
 
@@ -286,7 +313,7 @@ public class AnswerPersistenceAdapter implements AnswerStore {
     public List<StoredAnswer> list(OwnerId ownerId, UUID jobId, Long cursor, int pageSize) {
         String sql = cursor == null ? """
                 SELECT * FROM answer_record WHERE owner_id = :owner AND job_id = :jobId
-                  AND status IN ('ANSWERED', 'REFUSED')
+                  AND status IN ('ANSWERED', 'PARTIALLY_ANSWERED', 'REFUSED')
                   AND NOT EXISTS (
                       SELECT 1 FROM model_call call_record
                       INNER JOIN agent_run run ON run.run_id = call_record.run_id
@@ -296,7 +323,7 @@ public class AnswerPersistenceAdapter implements AnswerStore {
                 ORDER BY sequence_id DESC LIMIT :limit
                 """ : """
                 SELECT * FROM answer_record WHERE owner_id = :owner AND job_id = :jobId
-                  AND status IN ('ANSWERED', 'REFUSED') AND sequence_id < :cursor
+                  AND status IN ('ANSWERED', 'PARTIALLY_ANSWERED', 'REFUSED') AND sequence_id < :cursor
                   AND NOT EXISTS (
                       SELECT 1 FROM model_call call_record
                       INNER JOIN agent_run run ON run.run_id = call_record.run_id
@@ -330,6 +357,7 @@ public class AnswerPersistenceAdapter implements AnswerStore {
                 row.getString("model_version"), row.getString("embedding_version"),
                 row.getString("retrieval_formula_version"), row.getString("chunk_version"),
                 loadClaims(UUID.fromString(row.getString("answer_id"))),
+                readStrings(row.getString("missing_requirements")),
                 row.getTimestamp("created_at").toInstant())).list();
     }
 

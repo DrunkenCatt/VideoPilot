@@ -11,6 +11,7 @@ const answer: AnswerResponse = {
   question: 'Redis 有哪些数据结构？',
   claims: [],
   refusalReason: 'NO_SUFFICIENT_EVIDENCE',
+  missingRequirements: [],
   degradedChannels: [],
   versions: {
     promptVersion: 'answer-evidence-v1',

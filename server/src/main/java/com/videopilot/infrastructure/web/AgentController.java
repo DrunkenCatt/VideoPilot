@@ -103,6 +103,7 @@ public class AgentController {
                                         citation.quote())).toList())).toList(),
                 answer.refusalReason() == null ? null
                         : M3ApiContracts.RefusalReason.valueOf(answer.refusalReason()),
+                answer.missingRequirements(),
                 answer.degradedChannels().stream().map(M3ApiContracts.DegradedChannel::valueOf).toList(),
                 new M3ApiContracts.ExecutionVersions(
                         answer.promptVersion(), answer.modelVersion(), answer.embeddingVersion(),

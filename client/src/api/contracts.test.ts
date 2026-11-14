@@ -77,7 +77,7 @@ describe('M3 API contract', () => {
     expect(hit.scores.total).toBe(0.75)
   })
 
-  it('models verified answers and refusals as a discriminated union', () => {
+  it('models full, bounded partial and refused answers as a discriminated union', () => {
     const answered = {
       status: 'ANSWERED',
       claims: [{ claimId: 'claim-1', text: 'A supported claim', citations: [{ citationId: 'citation-1' }] }],
@@ -87,8 +87,16 @@ describe('M3 API contract', () => {
       claims: [],
       refusalReason: 'NO_SUFFICIENT_EVIDENCE',
     } as AnswerResponse
+    const partial = {
+      status: 'PARTIALLY_ANSWERED',
+      claims: answered.claims,
+      refusalReason: null,
+      missingRequirements: ['Unconfirmed use case'],
+    } as AnswerResponse
 
     expect(answered.status === 'ANSWERED' && answered.claims[0]?.citations).toHaveLength(1)
+    expect(partial.status === 'PARTIALLY_ANSWERED' && partial.missingRequirements)
+      .toEqual(['Unconfirmed use case'])
     expect(refused.status === 'REFUSED' && refused.refusalReason).toBe('NO_SUFFICIENT_EVIDENCE')
   })
 })

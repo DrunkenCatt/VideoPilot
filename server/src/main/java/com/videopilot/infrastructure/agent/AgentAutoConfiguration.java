@@ -67,7 +67,7 @@ public class AgentAutoConfiguration {
         return new AgentApplicationService(
                 store, versions,
                 () -> new AgentBudget(
-                        6, 2, 12_000, 6_000, new BigDecimal("1.00"),
+                        7, 2, 12_000, 6_000, new BigDecimal("1.00"),
                         clock.instant().plus(Duration.ofMinutes(3))),
                 clock::instant, UUID::randomUUID, policy, decisions, retrieval, contexts, answers,
                 goalAnalysisEnabled);

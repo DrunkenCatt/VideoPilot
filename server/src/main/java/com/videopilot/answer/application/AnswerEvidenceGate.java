@@ -36,7 +36,7 @@ public final class AnswerEvidenceGate {
         Objects.requireNonNull(candidate, "candidate");
         List<EvidenceSource> sources = List.copyOf(evidence);
         if (!candidate.answerable() || candidate.claims().isEmpty()) {
-            return ValidationResult.rejected("NO_SUFFICIENT_EVIDENCE");
+            return ValidationResult.rejected("NO_SUFFICIENT_EVIDENCE", candidate.missingRequirements());
         }
         if (candidate.claims().size() > maxClaims) {
             return ValidationResult.rejected("CITATION_VALIDATION_FAILED");
@@ -60,7 +60,8 @@ public final class AnswerEvidenceGate {
             }
             verified.add(new VerifiedClaim(claim.text().trim(), citations));
         }
-        return new ValidationResult(true, List.copyOf(verified), null);
+        return new ValidationResult(
+                true, List.copyOf(verified), candidate.missingRequirements(), null);
     }
 
     private List<VerifiedCitation> align(CandidateCitation citation, List<EvidenceSource> sources) {
@@ -201,8 +202,21 @@ public final class AnswerEvidenceGate {
         return result;
     }
 
-    public record Candidate(boolean answerable, List<CandidateClaim> claims) {
-        public Candidate { claims = List.copyOf(Objects.requireNonNull(claims, "claims")); }
+    public record Candidate(
+            boolean answerable, List<CandidateClaim> claims, List<String> missingRequirements) {
+        public Candidate {
+            claims = List.copyOf(Objects.requireNonNull(claims, "claims"));
+            missingRequirements = List.copyOf(
+                    Objects.requireNonNull(missingRequirements, "missingRequirements"));
+            if (missingRequirements.size() > 3 || missingRequirements.stream()
+                    .anyMatch(value -> value == null || value.isBlank() || value.length() > 72)) {
+                throw new IllegalArgumentException("missing requirements are invalid");
+            }
+        }
+
+        public Candidate(boolean answerable, List<CandidateClaim> claims) {
+            this(answerable, claims, List.of());
+        }
     }
 
     public record CandidateClaim(String text, List<CandidateCitation> citations) {
@@ -249,11 +263,20 @@ public final class AnswerEvidenceGate {
             String quote,
             String alignmentType) { }
 
-    public record ValidationResult(boolean accepted, List<VerifiedClaim> claims, String failure) {
-        public ValidationResult { claims = List.copyOf(claims); }
+    public record ValidationResult(
+            boolean accepted, List<VerifiedClaim> claims,
+            List<String> missingRequirements, String failure) {
+        public ValidationResult {
+            claims = List.copyOf(claims);
+            missingRequirements = List.copyOf(missingRequirements);
+        }
 
         static ValidationResult rejected(String failure) {
-            return new ValidationResult(false, List.of(), failure);
+            return rejected(failure, List.of());
+        }
+
+        static ValidationResult rejected(String failure, List<String> missingRequirements) {
+            return new ValidationResult(false, List.of(), missingRequirements, failure);
         }
     }
 }

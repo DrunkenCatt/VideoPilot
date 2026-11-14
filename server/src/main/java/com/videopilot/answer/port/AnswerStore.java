@@ -21,6 +21,12 @@ public interface AnswerStore {
 
     StoredAnswer publish(OwnerId ownerId, Publication publication);
 
+    default StoredAnswer finalizeCoverage(
+            OwnerId ownerId, UUID jobId, UUID answerId,
+            String status, List<String> missingRequirements) {
+        throw new UnsupportedOperationException("answer coverage finalization is not implemented");
+    }
+
     void fail(
             UUID answerId, UUID modelCallId, String callStatus, String category,
             String code, String diagnosticSummary, Instant completedAt);
@@ -71,11 +77,24 @@ public interface AnswerStore {
             long outputTokens,
             long latencyMs,
             List<AnswerEvidenceGate.VerifiedClaim> claims,
+            List<String> missingRequirements,
             Instant startedAt,
             Instant publishedAt) {
         public Publication {
             degradedChannels = List.copyOf(degradedChannels);
             claims = List.copyOf(claims);
+            missingRequirements = List.copyOf(missingRequirements);
+        }
+
+        public Publication(
+                UUID answerId, UUID modelCallId, String modelVersion, String status,
+                String refusalReason, List<String> degradedChannels, String embeddingVersion,
+                String retrievalFormulaVersion, String chunkVersion, long inputTokens,
+                long outputTokens, long latencyMs, List<AnswerEvidenceGate.VerifiedClaim> claims,
+                Instant startedAt, Instant publishedAt) {
+            this(answerId, modelCallId, modelVersion, status, refusalReason, degradedChannels,
+                    embeddingVersion, retrievalFormulaVersion, chunkVersion, inputTokens,
+                    outputTokens, latencyMs, claims, List.of(), startedAt, publishedAt);
         }
 
         public Publication(
@@ -86,7 +105,7 @@ public interface AnswerStore {
                 Instant publishedAt) {
             this(answerId, modelCallId, "deepseek-ai/DeepSeek-V4-Flash", status, refusalReason,
                     degradedChannels, embeddingVersion, retrievalFormulaVersion, chunkVersion,
-                    inputTokens, outputTokens, latencyMs, claims, publishedAt, publishedAt);
+                    inputTokens, outputTokens, latencyMs, claims, List.of(), publishedAt, publishedAt);
         }
     }
 
@@ -111,10 +130,22 @@ public interface AnswerStore {
             String retrievalFormulaVersion,
             String chunkVersion,
             List<StoredClaim> claims,
+            List<String> missingRequirements,
             Instant createdAt) {
         public StoredAnswer {
             degradedChannels = List.copyOf(degradedChannels);
             claims = List.copyOf(claims);
+            missingRequirements = List.copyOf(missingRequirements);
+        }
+
+        public StoredAnswer(
+                long sequence, UUID answerId, String status, String question,
+                String refusalReason, List<String> degradedChannels, String promptVersion,
+                String modelVersion, String embeddingVersion, String retrievalFormulaVersion,
+                String chunkVersion, List<StoredClaim> claims, Instant createdAt) {
+            this(sequence, answerId, status, question, refusalReason, degradedChannels,
+                    promptVersion, modelVersion, embeddingVersion, retrievalFormulaVersion,
+                    chunkVersion, claims, List.of(), createdAt);
         }
     }
 }

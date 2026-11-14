@@ -34,7 +34,7 @@ import java.util.regex.Pattern;
 
 public final class AgentApplicationService {
 
-    public static final String POLICY_VERSION = "agent-policy-v4-window";
+    public static final String POLICY_VERSION = "agent-policy-v5-partial";
     private static final Pattern IDEMPOTENCY_KEY = Pattern.compile("[A-Za-z0-9._:-]{1,128}");
     private static final Pattern ANSWER_REFERENCE = Pattern.compile(
             "answer:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
@@ -252,8 +252,11 @@ public final class AgentApplicationService {
             throw new AgentException(AgentException.Reason.CONFLICT, exception);
         }
         AnswerStore.StoredAnswer answer = answers.get(owner, jobId, answerId);
-        GoalAnalysisState state = "ANSWERED".equals(answer.status())
-                ? GoalAnalysisState.ANSWERED : GoalAnalysisState.REFUSED;
+        GoalAnalysisState state = switch (answer.status()) {
+            case "ANSWERED" -> GoalAnalysisState.ANSWERED;
+            case "PARTIALLY_ANSWERED" -> GoalAnalysisState.PARTIALLY_ANSWERED;
+            default -> GoalAnalysisState.REFUSED;
+        };
         return new GoalAnalysisResult(state, trace, answer);
     }
 
@@ -459,20 +462,23 @@ public final class AgentApplicationService {
         List<String> evidence = answers.evidenceSummaries(owner, run.jobId(), selectedSegments);
         List<String> expectedFacts = expectedFacts(steps);
         List<String> claims = answer.claims().stream().map(AnswerStore.StoredClaim::text).toList();
+        boolean repairAllowed = run.answerAttemptCount() < run.budget().maxAnswerAttempts();
         String fingerprint = sha256(AgentDecisionPort.CRITIC_PROMPT_VERSION + "|" + run.goal()
-                + "|" + answerId + "|" + expectedFacts + "|" + evidence);
+                + "|" + answerId + "|" + expectedFacts + "|" + answer.missingRequirements()
+                + "|" + repairAllowed + "|" + evidence);
         UUID modelCallId = ids.get();
         Instant startedAt = now.get();
         store.startDecisionModelCall(new AgentStore.DecisionModelCallStart(
                 modelCallId, run.jobId(), run.runId(), run.evaluationRunId(), run.evaluationCaseId(),
-                "AGENT_CRITIQUE", "agent-critique-" + run.runId(), "SiliconFlow",
+                "AGENT_CRITIQUE", "agent-critique-" + run.runId() + "-" + (run.stepCount() + 1), "SiliconFlow",
                 run.versions().modelVersion(), AgentDecisionPort.CRITIC_PROMPT_VERSION,
                 fingerprint, startedAt));
         AgentDecisionPort.CritiqueResponse response;
         try {
             response = decisions.critique(new AgentDecisionPort.CritiqueRequest(
                     run.jobId(), run.runId(), run.evaluationRunId(), run.evaluationCaseId(),
-                    run.goal(), expectedFacts, answer.status(), claims, evidence, run.versions().modelVersion(),
+                    run.goal(), expectedFacts, answer.status(), claims, answer.missingRequirements(),
+                    evidence, repairAllowed, run.versions().modelVersion(),
                     AgentDecisionPort.CRITIC_PROMPT_VERSION, fingerprint));
         } catch (RuntimeException exception) {
             Instant failedAt = now.get();
@@ -494,12 +500,33 @@ public final class AgentApplicationService {
                 response.usage().inputTokens(), response.usage().outputTokens(),
                 Math.max(0, Duration.between(startedAt, completedAt).toMillis()),
                 startedAt, completedAt));
-        if (response.critique().action() == AgentDecisionPort.CritiqueAction.PASS
-                && !"ANSWERED".equals(answer.status())) {
-            throw new AgentDecisionPort.InvalidDecisionException(
-                    new IllegalArgumentException("critic cannot pass a refused answer"));
+        validateCritique(response.critique(), answer, repairAllowed);
+        if (response.critique().action() == AgentDecisionPort.CritiqueAction.PARTIAL) {
+            answers.finalizeCoverage(
+                    owner, run.jobId(), answer.answerId(), response.critique().missingRequirements());
         }
         return critiqueResult(response.critique());
+    }
+
+    private void validateCritique(
+            AgentDecisionPort.Critique critique, AnswerStore.StoredAnswer answer,
+            boolean repairAllowed) {
+        boolean repair = critique.action() == AgentDecisionPort.CritiqueAction.RETRIEVE
+                || critique.action() == AgentDecisionPort.CritiqueAction.EXPAND_WINDOW;
+        boolean terminal = critique.action() == AgentDecisionPort.CritiqueAction.PARTIAL
+                || critique.action() == AgentDecisionPort.CritiqueAction.REFUSE;
+        boolean invalid = critique.action() == AgentDecisionPort.CritiqueAction.PASS
+                        && !"ANSWERED".equals(answer.status())
+                || repairAllowed && terminal
+                || !repairAllowed && repair
+                || critique.action() == AgentDecisionPort.CritiqueAction.PARTIAL
+                        && answer.claims().isEmpty()
+                || critique.action() == AgentDecisionPort.CritiqueAction.REFUSE
+                        && !answer.claims().isEmpty();
+        if (invalid) {
+            throw new AgentDecisionPort.InvalidDecisionException(
+                    new IllegalArgumentException("critic action contradicts the bounded answer state"));
+        }
     }
 
     private ActionResult critiqueResult(AgentDecisionPort.Critique critique) {
@@ -509,6 +536,8 @@ public final class AgentApplicationService {
                 + ";unsupported:" + unsupported;
         String reference = switch (critique.action()) {
             case PASS -> "critique:v1:PASS";
+            case PARTIAL -> "critique:v1:PARTIAL";
+            case REFUSE -> "critique:v1:REFUSE";
             case RETRIEVE -> "critique:v1:RETRIEVE:" + critique.query();
             case EXPAND_WINDOW -> "critique:v1:EXPAND_WINDOW:" + critique.startMs() + ":" + critique.endMs();
         };
@@ -732,7 +761,9 @@ public final class AgentApplicationService {
     private record ActionResult(String observation, String reference) {
     }
 
-    public enum GoalAnalysisState { DISABLED, PENDING, REQUESTED, RUNNING, ANSWERED, REFUSED, FAILED }
+    public enum GoalAnalysisState {
+        DISABLED, PENDING, REQUESTED, RUNNING, ANSWERED, PARTIALLY_ANSWERED, REFUSED, FAILED
+    }
 
     public record GoalAnalysisResult(
             GoalAnalysisState state, AgentTrace trace, AnswerStore.StoredAnswer answer) {

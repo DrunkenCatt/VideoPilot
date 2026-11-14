@@ -725,3 +725,39 @@ T10A--T10D 四个工程退出门已按顺序完成并分别提交。T10D 没有�
 增加 suppression。由于 M5 原效果硬门仍失败，**T10 工程闭环完成但 M6 不退出、不晋级**；
 `AGENT_ENABLED`、`AGENT_WORKER_ENABLED`、`AGENT_GOAL_ANALYSIS_ENABLED` 和 `VITE_AGENT_ENABLED` 的
 仓库默认值继续为 false。
+
+## 21. T11 第二轮 Critic 与有界视频证据部分回答（2026-11-14）
+
+T11 按 ADR-0018 将修复路径前进为 7 Step/5 次生成式调用。第一次 Critic 仍只能决定通过或执行唯一一次
+补检/扩窗；第二次 Critic 只能 `PASS/PARTIAL/REFUSE`，不能产生第三次工具或 Answer。Policy、Critic 和
+Answer Prompt 分别冻结为 `agent-policy-v5-partial`、`agent-critic-v6-partial`、
+`answer-evidence-v3-partial`。
+
+`PARTIALLY_ANSWERED` 只发布已经通过原 `AnswerEvidenceGate` 的 Claim。候选中任何 Claim 的 evidenceId、
+引文或 Claim-Evidence 支撑无效时仍整份拒绝；没有按 Claim 静默丢弃错误项。未覆盖请求项以
+`missingRequirements` 写入 MySQL 和 API，页面分别显示“视频可以确认”和“视频证据不足以确认”。Prompt
+明确禁止使用通用模型知识或推断补齐视频缺口。
+
+- RED/GREEN 覆盖合法部分回答、伪造/错绑引用拒绝、第二次 Critic、最终 PARTIAL、7 Step 补检/扩窗和
+  不存在第三轮修复。
+- 全新隔离库 `videopilot_partial_answer_it` 由 `videopilot` 用户执行 V1--V23 前进迁移；首次门发现
+  `PROCESSING` Answer 未初始化新 JSON 列并失败，修复为显式 `JSON_ARRAY()` 后，
+  `AnswerPersistenceAdapterIT` 3/3 通过。
+- `server\mvnw.cmd test` 为 496 项通过、0 failure/error、1 项既有 FFmpeg 条件跳过；JaCoCo 与 ArchUnit
+  通过。`client\npm.cmd run check` 为 19 个文件、127 项测试通过，Statements 87.60%、Branches 81.57%、
+  Functions 89.13%、Lines 92.63%，typecheck、零 warning lint 和生产构建通过。
+- 完整门在全新隔离库 `videopilot_t11_final_gate` 和当前 server 工具链镜像中执行
+  `mvn -B clean verify -Pintegration -Dbenchmark.commit=8c8c1bc5b3daa715358b12d343212445aabe3cc3`：
+  497/497 快速/架构测试通过，98 项集成测试 0 failure/error、2 项既有付费发布开关按设计跳过；
+  V1--V23 前进迁移、五依赖健康、FFmpeg/Tesseract、真实检索基准、Qdrant、JaCoCo 和打包均通过，
+  总耗时 11 分 28 秒。完整门生成的 M3 临时报告未用于改写 T10D 历史基线。
+- 完整门还发现旧评测夹具未填写新增 JSON 列；修复夹具为显式 `JSON_ARRAY()` 后，
+  `JdbcEvaluationStoreIT` 定向集成测试和最终完整门均通过。
+- 提交前变异审查将最终 Critic 的修复上限故意从 `>= 2` 改为 `>= 3`，暴露既有 Policy 测试未锁死
+  “不存在第三轮修复”；新增 `rejectsARepairActionAfterTheSecondAnswer` 后，变异为 1 项失败，恢复实现后
+  `RuleBasedAgentPolicyTest` 8/8 通过。
+- `npm audit --registry=https://registry.npmjs.org --audit-level=high` 退出码 0，High/Critical 为 0，
+  10 项 moderate 保留且未使用 `--force`；`docker compose config --quiet` 与 `git diff --check` 通过。
+
+T11 只修正发布体验和第二轮完整性判断，不重写 T10D 历史评测。M5 85% Claim 支持率和 95% 引用定位率
+未降低，M6 仍不退出、不晋级，所有 Agent 开关继续默认关闭。

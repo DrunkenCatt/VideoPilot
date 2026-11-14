@@ -593,6 +593,7 @@ export interface AnswerExecutionVersions {
 interface AnswerResponseBase {
   answerId: AnswerId
   question: string
+  missingRequirements: string[]
   degradedChannels: DegradedChannel[]
   versions: AnswerExecutionVersions
   createdAt: string
@@ -600,6 +601,12 @@ interface AnswerResponseBase {
 
 export interface AnsweredResponse extends AnswerResponseBase {
   status: 'ANSWERED'
+  claims: AnswerClaim[]
+  refusalReason: null
+}
+
+export interface PartiallyAnsweredResponse extends AnswerResponseBase {
+  status: 'PARTIALLY_ANSWERED'
   claims: AnswerClaim[]
   refusalReason: null
 }
@@ -616,7 +623,7 @@ export interface RefusedResponse extends AnswerResponseBase {
   refusalReason: RefusalReason
 }
 
-export type AnswerResponse = AnsweredResponse | RefusedResponse
+export type AnswerResponse = AnsweredResponse | PartiallyAnsweredResponse | RefusedResponse
 
 export interface AnswerPageResponse {
   data: AnswerResponse[]
@@ -691,7 +698,7 @@ export interface AgentRun {
   toolCalls: AgentToolCall[]
 }
 
-export type GoalAnalysisState = 'DISABLED' | 'PENDING' | 'REQUESTED' | 'RUNNING' | 'ANSWERED' | 'REFUSED' | 'FAILED'
+export type GoalAnalysisState = 'DISABLED' | 'PENDING' | 'REQUESTED' | 'RUNNING' | 'ANSWERED' | 'PARTIALLY_ANSWERED' | 'REFUSED' | 'FAILED'
 
 export interface GoalAnalysisResult {
   state: GoalAnalysisState

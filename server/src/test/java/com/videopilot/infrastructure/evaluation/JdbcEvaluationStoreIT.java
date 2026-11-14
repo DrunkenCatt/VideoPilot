@@ -67,9 +67,11 @@ class JdbcEvaluationStoreIT {
         jdbc.sql("""
                 INSERT INTO answer_record (
                     answer_id, job_id, owner_id, idempotency_key, input_fingerprint, question,
-                    status, degraded_channels, prompt_version, model_version, created_at, published_at
+                    status, degraded_channels, missing_requirements,
+                    prompt_version, model_version, created_at, published_at
                 ) VALUES (:answerId,:jobId,:owner,'evaluation-answer',REPEAT('c',64),'question',
-                    'REFUSED',JSON_ARRAY(),'prompt-v1','model-v1',CURRENT_TIMESTAMP(6),CURRENT_TIMESTAMP(6))
+                    'REFUSED',JSON_ARRAY(),JSON_ARRAY(),
+                    'prompt-v1','model-v1',CURRENT_TIMESTAMP(6),CURRENT_TIMESTAMP(6))
                 """).param("answerId", answerId.toString()).param("jobId", jobId.toString())
                 .param("owner", ownerId.value().toString()).update();
     }

@@ -134,6 +134,23 @@ class AnswerEvidenceGateTest {
         assertThat(result.failure()).isEqualTo("CITATION_VALIDATION_FAILED");
     }
 
+    @Test
+    void acceptsVerifiedClaimsAsBoundedPartialWithoutWeakeningCitationChecks() {
+        var evidence = evidence(SEGMENT, 0, 10_000, "help 命令可以获取命令帮助。", true);
+        var candidate = new AnswerEvidenceGate.Candidate(true, List.of(
+                new AnswerEvidenceGate.CandidateClaim("help 命令可以获取帮助", List.of(
+                        new AnswerEvidenceGate.CandidateCitation(
+                                SEGMENT + "#ASR", "help 命令可以获取命令帮助")))),
+                List.of("视频没有说明第二种用法", "视频没有说明第三种用法"));
+
+        var result = new AnswerEvidenceGate(8, 600, 4, 300).validate(candidate, List.of(evidence));
+
+        assertThat(result.accepted()).isTrue();
+        assertThat(result.missingRequirements())
+                .containsExactly("视频没有说明第二种用法", "视频没有说明第三种用法");
+        assertThat(result.claims()).hasSize(1);
+    }
+
     private AnswerEvidenceGate.Candidate candidate(String evidenceId, String quote) {
         return new AnswerEvidenceGate.Candidate(true, List.of(new AnswerEvidenceGate.CandidateClaim(
                 "Redis 数据结构说明", List.of(new AnswerEvidenceGate.CandidateCitation(evidenceId, quote)))));

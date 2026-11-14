@@ -7,7 +7,7 @@ public interface AgentDecisionPort {
 
     int SCHEMA_VERSION = 1;
     String PLANNER_PROMPT_VERSION = "agent-planner-v3";
-    String CRITIC_PROMPT_VERSION = "agent-critic-v5-window";
+    String CRITIC_PROMPT_VERSION = "agent-critic-v6-partial";
 
     PlanResponse plan(PlanRequest request);
 
@@ -15,7 +15,7 @@ public interface AgentDecisionPort {
 
     enum PlanAction { RETRIEVE, NEEDS_CLARIFICATION, REFUSE }
 
-    enum CritiqueAction { PASS, RETRIEVE, EXPAND_WINDOW }
+    enum CritiqueAction { PASS, PARTIAL, REFUSE, RETRIEVE, EXPAND_WINDOW }
 
     record PlanRequest(
             UUID jobId,
@@ -77,20 +77,32 @@ public interface AgentDecisionPort {
     record CritiqueRequest(
             UUID jobId, UUID runId, UUID evaluationRunId, String evaluationCaseId,
             String goal, List<String> expectedFacts, String answerStatus, List<String> answerClaims,
-            List<String> evidenceSummaries, String modelVersion, String promptVersion,
-            String inputFingerprint) {
+            List<String> answerMissingRequirements, List<String> evidenceSummaries,
+            boolean repairAllowed, String modelVersion, String promptVersion, String inputFingerprint) {
         public CritiqueRequest {
             expectedFacts = List.copyOf(expectedFacts);
             answerClaims = List.copyOf(answerClaims);
+            answerMissingRequirements = List.copyOf(answerMissingRequirements);
             evidenceSummaries = List.copyOf(evidenceSummaries);
             if (jobId == null || runId == null || goal == null || goal.isBlank()
                     || expectedFacts.isEmpty() || evidenceSummaries.isEmpty()
-                    || !("ANSWERED".equals(answerStatus) || "REFUSED".equals(answerStatus))
+                    || !("ANSWERED".equals(answerStatus) || "PARTIALLY_ANSWERED".equals(answerStatus)
+                            || "REFUSED".equals(answerStatus))
                     || modelVersion == null || modelVersion.isBlank()
                     || promptVersion == null || promptVersion.isBlank()
                     || inputFingerprint == null || !inputFingerprint.matches("[0-9a-f]{64}")) {
                 throw new IllegalArgumentException("critic request is incomplete");
             }
+        }
+
+        public CritiqueRequest(
+                UUID jobId, UUID runId, UUID evaluationRunId, String evaluationCaseId,
+                String goal, List<String> expectedFacts, String answerStatus,
+                List<String> answerClaims, List<String> evidenceSummaries,
+                String modelVersion, String promptVersion, String inputFingerprint) {
+            this(jobId, runId, evaluationRunId, evaluationCaseId, goal, expectedFacts,
+                    answerStatus, answerClaims, List.of(), evidenceSummaries, true,
+                    modelVersion, promptVersion, inputFingerprint);
         }
     }
 
@@ -109,6 +121,12 @@ public interface AgentDecisionPort {
                     if (!query.isBlank() || startMs != null || endMs != null
                             || !missingRequirements.isEmpty() || !unsupportedClaims.isEmpty()) {
                         throw new IllegalArgumentException("passing critique cannot request repair");
+                    }
+                }
+                case PARTIAL, REFUSE -> {
+                    if (!query.isBlank() || startMs != null || endMs != null
+                            || missingRequirements.isEmpty()) {
+                        throw new IllegalArgumentException("terminal critique is incomplete");
                     }
                 }
                 case RETRIEVE -> {

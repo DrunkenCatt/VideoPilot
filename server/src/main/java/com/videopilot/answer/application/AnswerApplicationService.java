@@ -29,7 +29,7 @@ import java.util.stream.Collectors;
 
 public final class AnswerApplicationService {
 
-    public static final String PROMPT_VERSION = "answer-evidence-v2";
+    public static final String PROMPT_VERSION = "answer-evidence-v3-partial";
     private static final Pattern IDEMPOTENCY_KEY = Pattern.compile("[A-Za-z0-9._:-]{1,128}");
     private static final int TOP_K = 5;
     private static final int MAX_PROMPT_EVIDENCE = 12;
@@ -282,13 +282,15 @@ public final class AnswerApplicationService {
             validation = AnswerEvidenceGate.ValidationResult.rejected("CITATION_VALIDATION_FAILED");
         }
         Instant completed = now.get();
-        String status = validation.accepted() ? "ANSWERED" : "REFUSED";
+        String status = validation.accepted()
+                ? validation.missingRequirements().isEmpty() ? "ANSWERED" : "PARTIALLY_ANSWERED"
+                : "REFUSED";
         return store.publish(owner.ownerId(), new AnswerStore.Publication(
                 answerId, callId, modelVersion, status, validation.failure(), degraded,
                 embeddingVersion, formulaVersion, chunkVersion,
                 response.usage().inputTokens(), response.usage().outputTokens(),
                 Math.max(0, Duration.between(started, completed).toMillis()),
-                validation.claims(), started, completed));
+                validation.claims(), validation.missingRequirements(), started, completed));
     }
 
     private RetrievalApplicationService.RetrievalResult retrieve(
@@ -323,6 +325,18 @@ public final class AnswerApplicationService {
                 .orElseThrow(() -> new AnswerException(AnswerException.Reason.NOT_FOUND));
     }
 
+    public AnswerStore.StoredAnswer finalizeCoverage(
+            OwnerContext owner, UUID jobId, UUID answerId, List<String> missingRequirements) {
+        if (owner == null || jobId == null || answerId == null || missingRequirements == null
+                || missingRequirements.isEmpty() || missingRequirements.size() > 3
+                || missingRequirements.stream().anyMatch(value -> value == null
+                        || value.isBlank() || value.length() > 72)) {
+            throw new AnswerException(AnswerException.Reason.INVALID_REQUEST);
+        }
+        return store.finalizeCoverage(
+                owner.ownerId(), jobId, answerId, "PARTIALLY_ANSWERED", missingRequirements);
+    }
+
     public List<String> evidenceSummaries(OwnerContext owner, UUID jobId, List<UUID> segmentIds) {
         if (segmentIds == null || segmentIds.isEmpty() || segmentIds.size() > MAX_PROMPT_EVIDENCE
                 || !store.ownsJob(owner.ownerId(), jobId)) {
@@ -349,7 +363,7 @@ public final class AnswerApplicationService {
     private AnswerStore.StoredAnswer existing(AnswerStore.StoredAnswer answer) {
         if (answer == null) throw new AnswerException(AnswerException.Reason.IN_PROGRESS);
         return switch (answer.status()) {
-            case "ANSWERED", "REFUSED" -> answer;
+            case "ANSWERED", "PARTIALLY_ANSWERED", "REFUSED" -> answer;
             case "PROCESSING" -> throw new AnswerException(AnswerException.Reason.IN_PROGRESS);
             case "FAILED" -> {
                 if (answer.refusalReason() != null && answer.refusalReason().startsWith("BUDGET_EXHAUSTED:")) {
@@ -383,13 +397,17 @@ public final class AnswerApplicationService {
                                 0, Math.min(source.text().length(), MAX_PROMPT_EVIDENCE_CHARACTERS))))
                 .toList();
         try {
-            return "Answer every part of the question using only the evidence. Return exactly one JSON object "
-                    + "{answerable:boolean,claims:[{text:string,citations:[{evidenceId:string,quote:string}]}]}. "
+            return "Answer using only the teaching-video evidence. Return exactly one JSON object "
+                    + "{answerable:boolean,claims:[{text:string,citations:[{evidenceId:string,quote:string}]}],"
+                    + "missingRequirements:[string]}. "
                     + "Use one atomic fact per claim. Copy evidenceId exactly from EVIDENCE. Each quote must be a "
                     + "contiguous verbatim substring of the text for that evidenceId; never paraphrase a quote. "
                     + "Every claim must be directly supported by its quotes. Maximum 8 claims and 4 citations per "
-                    + "claim. If the evidence cannot support every requested part, return answerable=false and "
-                    + "claims=[].\nQUESTION:\n"
+                    + "claim. Publish every supported part instead of discarding it. Put each requested part that "
+                    + "the video evidence cannot confirm in missingRequirements (maximum 3, each maximum 72 "
+                    + "characters). Set answerable=true when at least one claim is supported, even when gaps remain. "
+                    + "Set answerable=false with claims=[] only when no requested part is supported. Never use "
+                    + "general model knowledge or infer facts absent from the video.\nQUESTION:\n"
                     + question + repairPrompt(repair)
                     + "\nEVIDENCE:\n" + json.writeValueAsString(selectable);
         } catch (JsonProcessingException exception) {
@@ -473,11 +491,16 @@ public final class AnswerApplicationService {
         }
     }
 
-    private record CandidateJson(boolean answerable, List<ClaimJson> claims) {
-        CandidateJson { claims = claims == null ? List.of() : List.copyOf(claims); }
+    private record CandidateJson(
+            boolean answerable, List<ClaimJson> claims, List<String> missingRequirements) {
+        CandidateJson {
+            claims = claims == null ? List.of() : List.copyOf(claims);
+            missingRequirements = missingRequirements == null ? List.of() : List.copyOf(missingRequirements);
+        }
 
         AnswerEvidenceGate.Candidate toCandidate() {
-            return new AnswerEvidenceGate.Candidate(answerable, claims.stream().map(ClaimJson::toClaim).toList());
+            return new AnswerEvidenceGate.Candidate(
+                    answerable, claims.stream().map(ClaimJson::toClaim).toList(), missingRequirements);
         }
     }
 

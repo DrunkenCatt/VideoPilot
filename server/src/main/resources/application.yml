@@ -50,7 +50,7 @@ videopilot:
     api-key: ${SILICONFLOW_API_KEY:}
     provider: SiliconFlow
     model: ${SILICONFLOW_LLM_MODEL_VERSION:deepseek-ai/DeepSeek-V4-Flash}
-    prompt-version: ${ANSWER_PROMPT_VERSION:answer-evidence-v2}
+    prompt-version: ${ANSWER_PROMPT_VERSION:answer-evidence-v3-partial}
     timeout: ${SILICONFLOW_LLM_TIMEOUT:120s}
     max-output-tokens: ${ANSWER_MAX_OUTPUT_TOKENS:1200}
     max-prompt-characters: ${ANSWER_MAX_PROMPT_CHARACTERS:20000}

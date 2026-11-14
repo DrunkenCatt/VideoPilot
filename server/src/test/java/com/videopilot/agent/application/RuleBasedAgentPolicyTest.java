@@ -71,7 +71,7 @@ class RuleBasedAgentPolicyTest {
     }
 
     @Test
-    void critiquesTheFirstAnswerAndFinishesOnlyTheSecondAnsweredResult() {
+    void critiquesBothAnswerAttemptsBeforeTerminating() {
         assertThat(policy.next(trace(step(
                 "GENERATE_AND_VERIFY", "ANSWER:ANSWERED", "answer:1"))).action())
                 .isEqualTo(Action.CRITIQUE);
@@ -80,13 +80,13 @@ class RuleBasedAgentPolicyTest {
                 step("CRITIQUE", "CRITIQUE:RETRIEVE;missing:x;unsupported:", "critique:v1:RETRIEVE:q"),
                 step("RETRIEVE", "EVIDENCE:multiple", "window:1:2"),
                 step("GENERATE_AND_VERIFY", "ANSWER:ANSWERED", "answer:2"))).action())
-                .isEqualTo(Action.FINISH);
+                .isEqualTo(Action.CRITIQUE);
         assertThat(policy.next(trace(
                 step("GENERATE_AND_VERIFY", "ANSWER:REFUSED", "answer:1"),
                 step("CRITIQUE", "CRITIQUE:RETRIEVE;missing:x;unsupported:", "critique:v1:RETRIEVE:q"),
                 step("RETRIEVE", "EVIDENCE:multiple", "window:1:2"),
                 step("GENERATE_AND_VERIFY", "ANSWER:REFUSED", "answer:2"))).action())
-                .isEqualTo(Action.REFUSE);
+                .isEqualTo(Action.CRITIQUE);
         assertThat(policy.next(trace(step("RETRIEVE", "unexpected", null))).action())
                 .isEqualTo(Action.REFUSE);
         assertThat(policy.next(trace(step("UNKNOWN", "unexpected", null))).action())
@@ -101,6 +101,25 @@ class RuleBasedAgentPolicyTest {
                 "critique:v1:RETRIEVE:focused"))).action()).isEqualTo(Action.RETRIEVE);
         assertThat(policy.next(trace(step("CRITIQUE", "CRITIQUE:EXPAND_WINDOW;missing:x;unsupported:",
                 "critique:v1:EXPAND_WINDOW:1000:9000"))).action()).isEqualTo(Action.EXPAND_WINDOW);
+        assertThat(policy.next(trace(step("CRITIQUE", "CRITIQUE:PARTIAL;missing:x;unsupported:",
+                "critique:v1:PARTIAL"))).action()).isEqualTo(Action.FINISH);
+        assertThat(policy.next(trace(step("CRITIQUE", "CRITIQUE:REFUSE;missing:x;unsupported:",
+                "critique:v1:REFUSE"))).action()).isEqualTo(Action.REFUSE);
+    }
+
+    @Test
+    void rejectsARepairActionAfterTheSecondAnswer() {
+        var decision = policy.next(trace(
+                step("GENERATE_AND_VERIFY", "ANSWER:ANSWERED", "answer:1"),
+                step("CRITIQUE", "CRITIQUE:RETRIEVE;missing:x;unsupported:",
+                        "critique:v1:RETRIEVE:focused"),
+                step("RETRIEVE", "EVIDENCE:multiple", "window:1:2"),
+                step("GENERATE_AND_VERIFY", "ANSWER:ANSWERED", "answer:2"),
+                step("CRITIQUE", "CRITIQUE:RETRIEVE;missing:y;unsupported:",
+                        "critique:v1:RETRIEVE:again")));
+
+        assertThat(decision.action()).isEqualTo(Action.REFUSE);
+        assertThat(decision.terminationReason()).isEqualTo("INVALID_FINAL_CRITIQUE");
     }
 
     private AgentTrace trace(AgentStep... steps) {

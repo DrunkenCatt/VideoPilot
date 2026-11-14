@@ -15,7 +15,7 @@ public final class RuleBasedAgentPolicy implements AgentPolicy {
             case "RETRIEVE" -> afterRetrieval(trace, last);
             case "EXPAND_WINDOW" -> Decision.action(Action.GENERATE_AND_VERIFY);
             case "GENERATE_AND_VERIFY" -> afterAnswer(trace, last);
-            case "CRITIQUE" -> afterCritique(last);
+            case "CRITIQUE" -> afterCritique(trace, last);
             default -> Decision.terminal(Action.REFUSE, "INVALID_POLICY_STATE");
         };
     }
@@ -50,18 +50,28 @@ public final class RuleBasedAgentPolicy implements AgentPolicy {
         long attempts = trace.steps().stream()
                 .filter(value -> "GENERATE_AND_VERIFY".equals(value.action())).count();
         if (attempts == 1) return Decision.action(Action.CRITIQUE);
-        if (attempts == 2 && step.observationSummary().startsWith("ANSWER:ANSWERED")) {
-            return Decision.terminal(Action.FINISH, "COMPLETED");
-        }
-        if (attempts == 2 && step.observationSummary().startsWith("ANSWER:REFUSED")) {
-            return Decision.terminal(Action.REFUSE, "NO_SUFFICIENT_EVIDENCE");
+        if (attempts == 2 && (step.observationSummary().startsWith("ANSWER:ANSWERED")
+                || step.observationSummary().startsWith("ANSWER:PARTIALLY_ANSWERED")
+                || step.observationSummary().startsWith("ANSWER:REFUSED"))) {
+            return Decision.action(Action.CRITIQUE);
         }
         return Decision.terminal(Action.REFUSE, "INVALID_OBSERVATION");
     }
 
-    private Decision afterCritique(AgentStep step) {
+    private Decision afterCritique(AgentTrace trace, AgentStep step) {
         if (step.observationSummary().startsWith("CRITIQUE:PASS;")) {
             return Decision.terminal(Action.FINISH, "COMPLETED");
+        }
+        if (step.observationSummary().startsWith("CRITIQUE:PARTIAL;")) {
+            return Decision.terminal(Action.FINISH, "PARTIALLY_ANSWERED");
+        }
+        if (step.observationSummary().startsWith("CRITIQUE:REFUSE;")) {
+            return Decision.terminal(Action.REFUSE, "NO_SUFFICIENT_EVIDENCE");
+        }
+        long attempts = trace.steps().stream()
+                .filter(value -> "GENERATE_AND_VERIFY".equals(value.action())).count();
+        if (attempts >= 2) {
+            return Decision.terminal(Action.REFUSE, "INVALID_FINAL_CRITIQUE");
         }
         if (step.observationSummary().startsWith("CRITIQUE:RETRIEVE;")) {
             return Decision.action(Action.RETRIEVE);

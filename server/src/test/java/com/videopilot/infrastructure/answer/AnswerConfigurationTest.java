@@ -22,7 +22,7 @@ class AnswerConfigurationTest {
     void usesTheVersionedMvpPromptAndBoundedProviderTimeoutByDefault() {
         AnswerProperties properties = new AnswerProperties();
 
-        assertThat(properties.getPromptVersion()).isEqualTo("answer-evidence-v2");
+        assertThat(properties.getPromptVersion()).isEqualTo("answer-evidence-v3-partial");
         assertThat(properties.getTimeout()).isEqualTo(Duration.ofSeconds(120));
     }
 

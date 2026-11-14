@@ -38,6 +38,7 @@ const answered: AnswerResponse = {
     citations: [citation],
   }],
   refusalReason: null,
+  missingRequirements: [],
   degradedChannels: ['VECTOR_STORE'],
   versions: {
     promptVersion: 'answer-evidence-v1',
@@ -55,7 +56,15 @@ const refused: AnswerResponse = {
   question: '讲师最喜欢哪种咖啡？',
   claims: [],
   refusalReason: 'NO_SUFFICIENT_EVIDENCE',
+  missingRequirements: [],
   degradedChannels: ['SEMANTIC', 'VECTOR_STORE', 'OCR'],
+}
+const partial: AnswerResponse = {
+  ...answered,
+  answerId: '60000000-0000-0000-0000-000000000011' as AnswerResponse['answerId'],
+  status: 'PARTIALLY_ANSWERED',
+  question: 'String 有哪些用法？',
+  missingRequirements: ['视频未说明计数器用法'],
 }
 
 function page(data: AnswerResponse[] = []): AnswerPageResponse {
@@ -144,6 +153,32 @@ describe('AnswerWorkspace', () => {
 
     await wrapper.get('[data-test="goal-cited-evidence"]').trigger('click')
     expect(wrapper.emitted('cite')?.[0]).toEqual([citation])
+  })
+
+  it('separates verified video claims from gaps for manual and goal partial answers', async () => {
+    const goalPartial = { ...partial, answerId: '60000000-0000-0000-0000-000000000012' as AnswerResponse['answerId'] }
+    const result = {
+      state: 'PARTIALLY_ANSWERED',
+      run: run({ status: 'COMPLETED', goal: goalPartial.question, terminationReason: 'PARTIALLY_ANSWERED' }),
+      answer: goalPartial,
+    } satisfies GoalAnalysisResult
+    const wrapper = mount(AnswerWorkspace, {
+      props: {
+        job: { ...job, goal: goalPartial.question }, csrfToken: session.csrfToken,
+        api: answersApi({ list: vi.fn().mockResolvedValue(page([partial])) }),
+        agentApi: agentsApi({ getGoalAnalysisResult: vi.fn().mockResolvedValue(result) }),
+        agentAvailable: true, goalAnalysisAvailable: true,
+      },
+    })
+    await flushPromises()
+
+    const goalResult = wrapper.get('[data-test="goal-analysis-result"]')
+    expect(goalResult.text()).toContain('视频可以确认')
+    expect(goalResult.text()).toContain('视频证据不足以确认')
+    expect(goalResult.text()).toContain('视频未说明计数器用法')
+    expect(wrapper.get('[data-test="answer-partial"]').text()).toContain('视频证据不足以确认')
+    expect(wrapper.get('[data-test="answer-partial"]').text()).toContain('视频未说明计数器用法')
+    expect(wrapper.findAll('[data-test="answer-claim"]')).toHaveLength(1)
   })
 
   it('polls a pending goal result until it reaches a terminal state', async () => {

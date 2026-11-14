@@ -200,3 +200,15 @@ Answer；owner 隔离、预算和证据门不变；前端不重复目标 Answer�
 **预计文件**：现有 Agent Trace UI/测试、Evaluation Runner/报告和 M6/Roadmap 文档；不创建第二套评测或 Agent 页面。
 
 **退出门**：闭环行为、两轮修复、可靠性、成本和质量都有可复现证据；任何失败不得通过补跑覆盖、降低阈值、删除断言、跳过测试或 suppression 继续。
+
+## T11：第二轮 Critic 与有界视频证据部分回答
+
+- [x] 新增 ADR-0018，冻结 `ANSWERED/PARTIALLY_ANSWERED/REFUSED` 三态、第二次 Critic 和“禁止通用知识补齐”的边界。
+- [x] 先写失败测试；Answer 候选支持 `missingRequirements`，但任一 Claim 的引用或内容校验失败仍整份拒绝。
+- [x] 修复路径前进为 7 Step/5 LLM；第二次 Critic 只能 `PASS/PARTIAL/REFUSE`，不能发起第三次工具或 Answer。
+- [x] V23 持久化缺口；API、目标分析、评测和前端分区展示同步支持 `PARTIALLY_ANSWERED`。
+- [x] 运行 Answer/Agent/契约定向测试、全新隔离 MySQL 持久化门、后端快速门和前端完整门。
+
+**依赖**：T10D；不改变 T10D 历史结果，不表示 M6 晋级。
+
+**退出门**：发布的每条 Claim 都通过原 Evidence Gate；缺口只描述视频不能确认的请求项；不存在模型常识区、第三次修复或降低后的效果门。Agent 默认开关保持关闭。
