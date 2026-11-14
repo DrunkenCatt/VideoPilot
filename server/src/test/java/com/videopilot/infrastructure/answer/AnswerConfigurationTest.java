@@ -23,7 +23,7 @@ class AnswerConfigurationTest {
         AnswerProperties properties = new AnswerProperties();
 
         assertThat(properties.getPromptVersion()).isEqualTo("answer-evidence-v2");
-        assertThat(properties.getTimeout()).isEqualTo(Duration.ofSeconds(60));
+        assertThat(properties.getTimeout()).isEqualTo(Duration.ofSeconds(120));
     }
 
     @Test

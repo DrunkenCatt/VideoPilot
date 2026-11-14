@@ -123,7 +123,11 @@ public class EvaluationBaselineRunner {
             return result(run, evaluationCase, CaseOutcome.UNKNOWN, null, 0, 0,
                     0, 0, null, startedAt, trace.run().terminationReason());
         }
-        String reference = trace.steps().getLast().resultReference();
+        String reference = trace.steps().stream()
+                .filter(step -> "GENERATE_AND_VERIFY".equals(step.action()))
+                .map(step -> step.resultReference())
+                .reduce((first, second) -> second)
+                .orElse(null);
         if (reference == null || !reference.startsWith("answer:")) {
             return result(run, evaluationCase, CaseOutcome.ERROR, null, 0, 0,
                     0, 0, null, startedAt, "AGENT_RESULT_MISSING");

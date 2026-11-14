@@ -7,7 +7,7 @@ public interface AgentDecisionPort {
 
     int SCHEMA_VERSION = 1;
     String PLANNER_PROMPT_VERSION = "agent-planner-v3";
-    String CRITIC_PROMPT_VERSION = "agent-critic-v4";
+    String CRITIC_PROMPT_VERSION = "agent-critic-v5-window";
 
     PlanResponse plan(PlanRequest request);
 

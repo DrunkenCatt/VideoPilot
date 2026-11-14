@@ -72,6 +72,8 @@ public final class LanguageModelAgentDecisionAdapter implements AgentDecisionPor
                 A REFUSED answer cannot PASS; choose RETRIEVE or EXPAND_WINDOW to repair its missing requirements.
                 PASS must have empty repair fields. RETRIEVE needs one focused query and missing requirements.
                 EXPAND_WINDOW needs a non-negative [startMs,endMs] and missing requirements.
+                Choose EXPAND_WINDOW when the missing requirement is adjacent temporal context around the
+                current timestamped evidence. Choose RETRIEVE when the missing topic may be elsewhere in the video.
                 missingRequirements and unsupportedClaims each allow at most 3 entries.
                 Each missing requirement is at most 72 characters; each unsupported claim is at most 120 characters.
                 PASS template: {"schemaVersion":1,"action":"PASS","query":"","startMs":null,"endMs":null,"missingRequirements":[],"unsupportedClaims":[]}

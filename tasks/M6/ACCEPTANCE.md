@@ -663,3 +663,65 @@ Chunk 的全部 Segment 都选中，因而即使 Trace 进入第二轮也不可�
 
 T10C 退出门通过，可以独立提交并进入 T10D。Agent/Worker/目标分析的仓库默认值仍为 false；本结果只
 证明最短真实两轮闭环，不改写 M5/T4 效果缺口，也不代表 M6 已达到晋级门。
+
+## 20. T10D 四路径、Runner 与完整质量门（2026-11-14）
+
+T10D 将候选冻结为 `agent-policy-v4-window / agent-planner-v3 / agent-critic-v5-window / answer-evidence-v2`。
+Critic Prompt 明确只检查问题覆盖和语义相关性；引用存在、原文绑定和 Claim 发布继续由
+`AnswerEvidenceGate` 独占。Answer HTTP 超时从 30 秒调整为 120 秒，以覆盖供应商合法长推理响应；预算、
+可见输出 Token 上限和调用次数未提高。
+
+### 迁移与 Runner 缺陷修复
+
+- 旧 V20 库的 `tool_call.step_id -> agent_step` 外键要求 Tool 必须晚于 Step 写入，与当前“先持久化 Tool
+  意图、完成后再写 Step”顺序冲突。V22 只条件删除该旧外键，并补齐旧库缺失的 Step number/completion
+  检查约束；新库 V1--V22 和历史 V20--V22 均已验证。
+- 第一次完整 Runner 在第 72/90 题触发该旧外键，三轮失败结果保留。迁移后第二组虽为 90/90，却出现
+  26 个 `AGENT_RESULT_MISSING`：Runner 错把终态 `CRITIQUE(PASS)` 当作结果 Step。RED 测试以真实 4 Step
+  正常路径复现，随后改为读取最后一个 `GENERATE_AND_VERIFY` Step；10/10 Runner 单测通过，失败 series
+  未被覆盖。
+- 最终不可变候选 series 为 `f91df8c8-7c84-4e94-b46a-822f6c086fe1`、
+  `53e46713-675c-4734-98c5-a02968dad92d` 和 `332f4cc3-0a6e-4064-b9e9-7779410d3a51`；每轮 90/90，
+  零 ERROR，合计 252 个 `COMPLETED`、18 个 `REFUSED`。
+
+### 四路径浏览器证据
+
+| 路径 | Run | 持久化结果 |
+| --- | --- | --- |
+| 正常 | `3837feb9-ca8a-48c1-9530-db6a904e9807` | 4 Step、1 次 Answer、Critic PASS、COMPLETED |
+| 补检 | `710b3a48-5bf4-4f01-baa7-7b5396598e5d` | Critic RETRIEVE 改变 query，新增首段 Segment，6 Step、COMPLETED |
+| 扩窗 | `004dac6c-5c91-40a9-9d34-a8c0f082e6c6` | Critic `EXPAND_WINDOW(180000,300000)`，6 Step、COMPLETED |
+| 拒答 | `9c49c666-584e-4d1e-bd7f-b3fa4473658c` | 补检后仍无充分证据，6 Step、稳定 `NO_SUFFICIENT_EVIDENCE` |
+
+页面显示 6/6 Step、2/2 Answer 和 4 次生成式模型调用；刷新后从 MySQL 恢复同一 Trace，引用跳转可定位
+视频时间。1265px 桌面和 320px 移动视口均无横向溢出，Console 无 error/warning；页面不显示 Prompt、
+原始模型响应或 chain-of-thought。
+
+### 三轮 DEV 指标与裁决
+
+- 54 道 Answer case 中首答一次通过 30 道（55.56%）；24 道进入修复，6 道恢复 `COMPLETED`、18 道
+  稳定 `REFUSED`，补检恢复率 25%。264 个 ToolCall 全部完成，无效 Tool 比例 0%。
+- 生成式调用为 54 PLAN + 54 CRITIQUE + 78 ANSWER = 186，平均 3.44 次/Answer case；Embedding 294 次
+  单独审计，不混入生成式调用数。候选已知总成本 CNY 1.089876，未知价格调用为 0。
+- 三轮 P95 分别为 35.042s、50.778s、116.204s。Claim 严格支持率为 28.947%、17.949%、22.500%，
+  均值 23.132%、样本标准差 5.526%；引用定位率为 71.429%、69.048%、69.048%，均值 69.841%、
+  标准差 1.375%。检索保持 `Recall@3=100% / Hit@1=95.833% / MRR@3=97.917%`。
+- 相对基线 `014f0b57-197b-4ade-a2ab-677900d32364`，Java 裁决 `ruleTwoMet=true`，但
+  `m5GatesMet=false`、`promotionEligible=false`，原因 `M5_GATES_NOT_MET`。M5 的 85% Claim 支持和
+  95% 引用定位硬门未改变，Agent 不得默认启用。
+
+### 完整质量门
+
+| 命令/检查 | 结果 |
+| --- | --- |
+| 容器化 `server/mvnw verify -Pintegration` | 492/492 单元/架构测试通过；97 项集成测试 0 failure/error、2 项既有条件跳过；V1--V22、真实 Embedding/Qdrant、五依赖健康、JaCoCo、ArchUnit 和打包通过，总耗时 8 分 46 秒 |
+| `client/npm.cmd run check` | typecheck、零 warning lint、19 个文件 126/126 测试、Statements 87.48%、Branches 81.44%、Functions 89.06%、Lines 92.60% 和生产构建通过 |
+| `npm.cmd audit --audit-level=high` | 退出码 0；High/Critical 为 0；10 项 moderate 保留，未使用破坏性 `--force` |
+| Gitleaks 8.30.1 | 干净交付快照扫描约 3.28 MB，无泄漏；测试 SQL 的固定占位误报通过参数化消除，未加 allowlist/suppression，对应 MySQL IT 1/1 通过 |
+| `docker compose config --quiet` / `git diff --check` | 通过 |
+| OWASP Dependency-Check 12.2.2 | NVD 首页请求连续失败 31 次后仍重试，未取得有效漏洞数据；负责人于 2026-11-14 明确批准跳过。本项不记作通过，也不形成“无漏洞”结论，CVSS 7 阈值未修改 |
+
+T10A--T10D 四个工程退出门已按顺序完成并分别提交。T10D 没有删除断言、降低覆盖率/预算/效果阈值或
+增加 suppression。由于 M5 原效果硬门仍失败，**T10 工程闭环完成但 M6 不退出、不晋级**；
+`AGENT_ENABLED`、`AGENT_WORKER_ENABLED`、`AGENT_GOAL_ANALYSIS_ENABLED` 和 `VITE_AGENT_ENABLED` 的
+仓库默认值继续为 false。

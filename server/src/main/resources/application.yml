@@ -51,7 +51,7 @@ videopilot:
     provider: SiliconFlow
     model: ${SILICONFLOW_LLM_MODEL_VERSION:deepseek-ai/DeepSeek-V4-Flash}
     prompt-version: ${ANSWER_PROMPT_VERSION:answer-evidence-v2}
-    timeout: ${SILICONFLOW_LLM_TIMEOUT:60s}
+    timeout: ${SILICONFLOW_LLM_TIMEOUT:120s}
     max-output-tokens: ${ANSWER_MAX_OUTPUT_TOKENS:1200}
     max-prompt-characters: ${ANSWER_MAX_PROMPT_CHARACTERS:20000}
     max-response-bytes: ${ANSWER_MAX_RESPONSE_BYTES:65536}
@@ -226,7 +226,7 @@ videopilot:
     deepseek:
       provider: SiliconFlow
       model-version: ${SILICONFLOW_LLM_MODEL_VERSION:deepseek-ai/DeepSeek-V4-Flash}
-      timeout: ${SILICONFLOW_LLM_TIMEOUT:60s}
+      timeout: ${SILICONFLOW_LLM_TIMEOUT:120s}
       cost-unit: token
       cost-tracking: true
     telespeech-asr:

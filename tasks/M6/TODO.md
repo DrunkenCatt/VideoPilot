@@ -176,17 +176,24 @@ Answer；owner 隔离、预算和证据门不变；前端不重复目标 Answer�
 ### T10D：完成四路径、Runner 与完整质量门
 
 - [x] 前端在现有折叠 Trace 中显示 `PLAN/CRITIQUE` 的去敏摘要、修复原因、新增证据和模型调用数；不展示思维链、Prompt 或原始模型响应。
-- [ ] 真实浏览器补齐正常、补检、扩窗、拒答四条路径，以及刷新恢复、引用跳转、桌面和 320px、Console/Network。
+- [x] 真实浏览器补齐正常、补检、扩窗、拒答四条路径，以及刷新恢复、引用跳转、桌面和 320px、Console/Network。
 - [x] 故障矩阵覆盖 Planner/Critic 非法输出、超预算、重启、重复 Worker、Redis 清空和 UNKNOWN；恢复成功率、重复高成本调用和终止原因按现有门统计。
-- [ ] 冻结新 `agentPolicyVersion`，复用现有 Runner 在 DEV 同题至少运行三轮，报告首答通过率、补检恢复率、无效 Tool 比例、模型调用数、P95、成本、Claim 支持和引用定位。
-- [ ] 依次执行相关测试、`server\mvnw.cmd test`、`server\mvnw.cmd verify -Pintegration`、`client\npm.cmd run check`、变更覆盖率、npm audit、Gitleaks；OWASP 只有得到有效数据才可记作通过。
-- [ ] 回填 Roadmap/M6 ACCEPTANCE；只有 M5 原硬门和 M6 晋级门同时通过且负责人批准，才默认启用，否则保留实验关闭；独立提交。
+- [x] 冻结新 `agentPolicyVersion`，复用现有 Runner 在 DEV 同题至少运行三轮，报告首答通过率、补检恢复率、无效 Tool 比例、模型调用数、P95、成本、Claim 支持和引用定位。
+- [x] 依次执行相关测试、`server\mvnw.cmd test`、`server\mvnw.cmd verify -Pintegration`、`client\npm.cmd run check`、变更覆盖率、npm audit、Gitleaks；OWASP 只有得到有效数据才可记作通过。
+- [x] 回填 Roadmap/M6 ACCEPTANCE；只有 M5 原硬门和 M6 晋级门同时通过且负责人批准，才默认启用，否则保留实验关闭；独立提交。
 
 > 2026-11-13 阻断：隔离库权限补齐后的容器化完整集成门曾通过，但浏览器验收暴露同题跨 Run
 > Planner 指纹冲突与结构化 Prompt 歧义。两项均已按红绿测试修复；冻结的
 > `agent-planner-v3/agent-critic-v2` 同题三轮仍只有 `2/3` 完成，第三轮 Answer 返回
 > `INVALID_RESPONSE`。按退出门停止，未用补跑替代失败轮，未执行剩余四路径、Runner、后修复完整门，
 > T10 不提交且 Agent 保持默认关闭。详见 `tasks/M6/ACCEPTANCE.md` 第 16 节。
+
+> 2026-11-14 完成记录：T10A-T10D 已按退出门串行完成。T10D 冻结 `agent-policy-v4-window`，
+> 四条真实浏览器路径和三轮 90/90 DEV Runner 已完成；后端 492 项单元/架构测试、97 项集成测试、
+> 前端 126 项测试、npm high/critical 审计、Gitleaks 干净交付快照和 Compose 配置均通过。负责人明确
+> 批准跳过 OWASP Dependency-Check；NVD 连续请求失败，因此该项只记录为“跳过/未形成结论”，不记作
+> 通过。候选 Claim 支持率均值 23.132%、引用定位率均值 69.841%，未达到 M5 85%/95% 硬门；
+> `promotionEligible=false`，全部 Agent 开关继续默认关闭，T10D 工程任务完成但 M6 不退出、不晋级。
 
 **依赖**：T9；按 T10A -> T10B -> T10C -> T10D 串行，上一退出门不通过即停止。
 

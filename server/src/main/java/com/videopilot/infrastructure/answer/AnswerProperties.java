@@ -11,7 +11,7 @@ public class AnswerProperties {
     private String provider = "SiliconFlow";
     private String model = "deepseek-ai/DeepSeek-V4-Flash";
     private String promptVersion = "answer-evidence-v2";
-    private Duration timeout = Duration.ofSeconds(60);
+    private Duration timeout = Duration.ofSeconds(120);
     private int maxOutputTokens = 1200;
     private int maxPromptCharacters = 20_000;
     private int maxResponseBytes = 65_536;

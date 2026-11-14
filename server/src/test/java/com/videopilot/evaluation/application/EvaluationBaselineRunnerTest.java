@@ -295,8 +295,10 @@ class EvaluationBaselineRunnerTest {
                 com.videopilot.agent.domain.AgentModels.RunStatus.REQUESTED, null);
         AgentRun completed = agentState(agentRunId,
                 com.videopilot.agent.domain.AgentModels.RunStatus.COMPLETED, "COMPLETED");
-        AgentStep step = new AgentStep(agentRunId, 1, "GENERATE_AND_VERIFY",
+        AgentStep answerStep = new AgentStep(agentRunId, 3, "GENERATE_AND_VERIFY",
                 "ANSWER:ANSWERED", "answer:" + answerId, NOW);
+        AgentStep criticStep = new AgentStep(agentRunId, 4, "CRITIQUE",
+                "CRITIQUE:PASS", "critique:v1:PASS", NOW);
         when(agents.createForEvaluation(
                 org.mockito.ArgumentMatchers.eq(OWNER), org.mockito.ArgumentMatchers.eq(evaluationCase.jobId()),
                 org.mockito.ArgumentMatchers.eq(evaluationCase.question()), org.mockito.ArgumentMatchers.any(),
@@ -304,7 +306,7 @@ class EvaluationBaselineRunnerTest {
                 org.mockito.ArgumentMatchers.eq(evaluationCase.caseId()))).thenReturn(requested);
         when(agents.get(OWNER, agentRunId)).thenReturn(
                 new AgentTrace(requested, List.of(), List.of()),
-                new AgentTrace(completed, List.of(step), List.of()));
+                new AgentTrace(completed, List.of(answerStep, criticStep), List.of()));
         when(agents.process(OWNER, agentRunId)).thenReturn(true);
         when(answers.get(OWNER, evaluationCase.jobId(), answerId)).thenReturn(new AnswerStore.StoredAnswer(
                 1, answerId, "ANSWERED", evaluationCase.question(), null, List.of(),

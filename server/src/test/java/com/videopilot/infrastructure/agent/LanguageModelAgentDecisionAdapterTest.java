@@ -111,7 +111,8 @@ class LanguageModelAgentDecisionAdapterTest {
                 .contains("PASS template", "\"startMs\":null", "RETRIEVE template",
                         "EXPAND_WINDOW template", "ANSWER_STATUS: REFUSED",
                         "A REFUSED answer cannot PASS", "at most 3 entries",
-                        "missing requirement is at most 72 characters");
+                        "missing requirement is at most 72 characters",
+                        "adjacent temporal context", "missing topic may be elsewhere");
     }
 
     @Test

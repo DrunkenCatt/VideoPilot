@@ -34,7 +34,7 @@ import java.util.regex.Pattern;
 
 public final class AgentApplicationService {
 
-    public static final String POLICY_VERSION = "agent-policy-v3-loop";
+    public static final String POLICY_VERSION = "agent-policy-v4-window";
     private static final Pattern IDEMPOTENCY_KEY = Pattern.compile("[A-Za-z0-9._:-]{1,128}");
     private static final Pattern ANSWER_REFERENCE = Pattern.compile(
             "answer:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");

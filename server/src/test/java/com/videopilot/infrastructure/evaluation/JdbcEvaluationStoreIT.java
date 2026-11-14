@@ -51,8 +51,9 @@ class JdbcEvaluationStoreIT {
         jdbc.sql("""
                 INSERT INTO media_asset (
                     media_id, owner_id, media_fingerprint, object_key, original_filename, media_status
-                ) VALUES (:mediaId,:owner,REPEAT('a',64),:objectKey,'evaluation.mp4','UPLOADED')
+                ) VALUES (:mediaId,:owner,SHA2('evaluation-fixture',256),:objectKey,:filename,'UPLOADED')
                 """).param("mediaId", mediaId.toString()).param("owner", ownerId.value().toString())
+                .param("filename", "evaluation.mp4")
                 .param("objectKey", "evaluation/" + mediaId + ".mp4").update();
         jdbc.sql("""
                 INSERT INTO analysis_job (
