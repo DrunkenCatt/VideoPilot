@@ -20,7 +20,7 @@ async function mountShell(path = '/workspace') {
   return mount(AppShell, {
     props: { session, pageTitle: '视频工作台' },
     slots: { default: '<main><h1>真实内容</h1></main>' },
-    global: { plugins: [router] },
+    global: { plugins: [router], stubs: { WorkspaceSwitcher: { template: '<button>切换视频</button>' } } },
   })
 }
 
@@ -55,6 +55,14 @@ describe('AppShell', () => {
     expect(wrapper.get('[data-test="app-sidebar"]').attributes('data-open')).toBe('false')
   })
 
+  it('preserves the current job across workspace, context, and answer navigation', async () => {
+    const jobId = '10000000-0000-0000-0000-000000000008'
+    const wrapper = await mountShell(`/workspace/${jobId}`)
+
+    expect(wrapper.find(`a[href="/context/${jobId}"]`).exists()).toBe(true)
+    expect(wrapper.find(`a[href="/answers/${jobId}"]`).exists()).toBe(true)
+  })
+
   it('shows a login action without exposing account data for an empty session', async () => {
     const router = createRouter({ history: createMemoryHistory(), routes: appRoutes })
     await router.push('/workspace')
@@ -62,7 +70,7 @@ describe('AppShell', () => {
     const wrapper = mount(AppShell, {
       props: { session: null, pageTitle: '视频工作台', contentBlocked: true },
       slots: { default: '<p data-test="public-shell-copy">请登录后继续</p>' },
-      global: { plugins: [router] },
+      global: { plugins: [router], stubs: { WorkspaceSwitcher: { template: '<button>切换视频</button>' } } },
     })
 
     expect(wrapper.get('[data-test="login-action"]').text()).toBe('登录')

@@ -14,10 +14,11 @@ import { statusLabel } from './jobPresentation'
 
 const props = defineProps<{
   session: Session
+  jobId?: AnalysisJob['jobId'] | string
   mediaApi?: Pick<MediaApi, 'get'>
   operationsApi?: Pick<OperationsApi, 'get'>
 }>()
-const emit = defineEmits<{ unauthenticated: [] }>()
+const emit = defineEmits<{ unauthenticated: []; 'select-job': [jobId: AnalysisJob['jobId']] }>()
 const api = createJobsApi()
 const mediaApi = props.mediaApi ?? createMediaApi()
 const operationsApi = props.operationsApi ?? createOperationsApi()
@@ -41,6 +42,8 @@ const reliabilityError = ref('')
 let idempotencyKey: string | null = null
 let eventController: globalThis.AbortController | null = null
 let mediaRevision = 0
+let openRevision = 0
+let mounted = false
 
 watch([() => selectedMedia.value?.mediaId, goal], () => {
   idempotencyKey = null
@@ -69,10 +72,6 @@ function replaceJob(job: AnalysisJob) {
   selected.value = job
 }
 
-function selectLink(selfLink: string) {
-  globalThis.window.history.replaceState(null, '', `#${selfLink}`)
-}
-
 async function follow(job: AnalysisJob) {
   eventController?.abort()
   const controller = new globalThis.AbortController()
@@ -96,18 +95,21 @@ async function follow(job: AnalysisJob) {
   }
 }
 
-async function openJob(selfLink: string) {
+async function openJob(selfLink: string, announce = true) {
+  const revision = ++openRevision
+  eventController?.abort()
   errorMessage.value = ''
   events.value = []
   try {
     const existing = jobs.value.find((job) => job.links.self === selfLink)
     const job = existing ?? await api.get(selfLink)
+    if (revision !== openRevision) return
     selected.value = job
-    selectLink(job.links.self)
+    if (announce) emit('select-job', job.jobId)
     void loadJobMedia(job)
     void follow(job)
   } catch (error) {
-    handleError(error)
+    if (revision === openRevision) handleError(error)
   }
 }
 
@@ -144,7 +146,7 @@ async function submit() {
     jobMedia.value = media
     jobMediaUnavailable.value = false
     mediaRevision += 1
-    selectLink(job.links.self)
+    emit('select-job', job.jobId)
     events.value = []
     void follow(job)
   } catch (error) {
@@ -232,15 +234,29 @@ onMounted(async () => {
   try {
     const page = await api.list()
     jobs.value = page.data
-    const hashLink = decodeURI(globalThis.window.location.hash.slice(1))
-    if (hashLink.startsWith('/api/v1/analysis-jobs/')) {
-      await openJob(hashLink)
+    mounted = true
+    if (props.jobId) {
+      await openJob(`/api/v1/analysis-jobs/${encodeURIComponent(props.jobId)}`, false)
     }
   } catch (error) {
     handleError(error)
   } finally {
     loading.value = false
+    mounted = true
   }
+})
+
+watch(() => props.jobId, (jobId) => {
+  if (!mounted) return
+  if (!jobId) {
+    openRevision += 1
+    eventController?.abort()
+    selected.value = null
+    jobMedia.value = null
+    events.value = []
+    return
+  }
+  void openJob(`/api/v1/analysis-jobs/${encodeURIComponent(jobId)}`, false)
 })
 
 onBeforeUnmount(() => eventController?.abort())

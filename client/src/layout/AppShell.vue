@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
 import type { Session } from '../api/contracts'
+import WorkspaceSwitcher from '../features/workspace/WorkspaceSwitcher.vue'
 import { navigationItems } from '../router'
 
 withDefaults(defineProps<{
@@ -15,12 +16,20 @@ withDefaults(defineProps<{
   contentBlocked: false,
 })
 
-defineEmits<{ logout: []; login: [] }>()
+defineEmits<{ logout: []; login: []; unauthenticated: [] }>()
 
 const route = useRoute()
 const drawerOpen = ref(false)
 const accountMenuOpen = ref(false)
 const activeName = computed(() => String(route.meta.navigationName ?? route.name ?? ''))
+const currentJobId = computed(() => typeof route.params.jobId === 'string' ? route.params.jobId : undefined)
+
+function navigationTarget(name: string) {
+  if (currentJobId.value && ['workspace', 'context', 'answers'].includes(name)) {
+    return { name, params: { jobId: currentJobId.value } }
+  }
+  return { name }
+}
 
 watch(() => route.fullPath, () => {
   drawerOpen.value = false
@@ -51,7 +60,7 @@ watch(() => route.fullPath, () => {
     >
       <RouterLink
         class="app-brand"
-        :to="{ name: 'workspace' }"
+        :to="navigationTarget('workspace')"
         aria-label="VideoPilot 视频工作台"
       >
         <span
@@ -69,7 +78,7 @@ watch(() => route.fullPath, () => {
         <RouterLink
           v-for="item in navigationItems.slice(0, 5)"
           :key="item.name"
-          :to="{ name: item.name }"
+          :to="navigationTarget(item.name)"
           :aria-current="activeName === item.name ? 'page' : undefined"
           @click="drawerOpen = false"
         >
@@ -79,7 +88,7 @@ watch(() => route.fullPath, () => {
         <RouterLink
           v-for="item in navigationItems.slice(5)"
           :key="item.name"
-          :to="{ name: item.name }"
+          :to="navigationTarget(item.name)"
           :aria-current="activeName === item.name ? 'page' : undefined"
           @click="drawerOpen = false"
         >
@@ -158,7 +167,13 @@ watch(() => route.fullPath, () => {
           <p>VideoPilot / {{ pageTitle }}</p>
           <strong>{{ pageTitle }}</strong>
         </div>
-        <span class="system-status"><i aria-hidden="true" />本地工作区</span>
+        <div class="app-toolbar__actions">
+          <WorkspaceSwitcher
+            v-if="session"
+            @unauthenticated="$emit('unauthenticated')"
+          />
+          <span class="system-status"><i aria-hidden="true" />本地工作区</span>
+        </div>
       </header>
 
       <div

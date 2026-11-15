@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { RouterView, useRoute } from 'vue-router'
+import { RouterView, useRoute, useRouter } from 'vue-router'
 
 import type { LoginRequest, Session } from './api/contracts'
 import { ApiClientError, createSessionApi } from './api/session'
@@ -13,6 +13,7 @@ const status = ref<'loading' | 'ready' | 'submitting'>('loading')
 const errorMessage = ref('')
 const sessionEpoch = ref(0)
 const route = useRoute()
+const router = useRouter()
 const pageTitle = computed(() => String(route.meta.title ?? '视频工作台'))
 
 function messageFor(error: unknown): string {
@@ -65,6 +66,16 @@ function sessionExpired() {
   sessionEpoch.value += 1
   errorMessage.value = '会话已过期，请重新登录。'
 }
+
+async function selectJob(jobId: string) {
+  const routeName = String(route.name ?? '')
+  if (routeName === 'analysis' || routeName === 'analysis-detail') {
+    await router.push({ name: 'analysis-detail', params: { jobId } })
+    return
+  }
+  const name = ['workspace', 'context', 'answers'].includes(routeName) ? routeName : 'workspace'
+  await router.push({ name, params: { jobId } })
+}
 </script>
 
 <template>
@@ -88,6 +99,7 @@ function sessionExpired() {
       :busy="status === 'submitting'"
       :content-blocked="!session"
       @logout="logout"
+      @unauthenticated="sessionExpired"
     >
       <template v-if="session">
         <p
@@ -102,6 +114,8 @@ function sessionExpired() {
             :is="Component"
             :key="`${session.userId}:${sessionEpoch}`"
             :session="session"
+            :job-id="typeof route.params.jobId === 'string' ? route.params.jobId : undefined"
+            @select-job="selectJob"
             @unauthenticated="sessionExpired"
           />
         </RouterView>

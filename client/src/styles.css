@@ -244,8 +244,36 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 
 .app-toolbar p { margin: 0 0 0.2rem; color: var(--color-text-muted); font-size: 0.66rem; }
 .app-toolbar strong { font-size: 0.9rem; }
+.app-toolbar__actions { display: flex; align-items: center; gap: var(--space-3); }
 .system-status { display: flex; align-items: center; gap: var(--space-2); color: var(--color-text-muted); font-size: 0.72rem; }
 .system-status i { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: #8993a0; }
+
+.workspace-switcher { position: relative; }
+.workspace-switcher__trigger { display: flex; max-width: 18rem; min-height: 2.4rem; align-items: center; gap: var(--space-2); padding: 0 var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-control); color: var(--color-text); background: var(--color-surface); cursor: pointer; }
+.workspace-switcher__trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-switcher__trigger small { flex: none; color: var(--color-primary); font-size: 0.65rem; }
+.workspace-switcher__error { position: absolute; top: calc(100% + var(--space-2)); right: 0; width: 18rem; padding: var(--space-2) var(--space-3); border: 1px solid #efd0d0; border-radius: var(--radius-control); color: var(--color-danger); background: var(--color-surface); box-shadow: var(--shadow-popover); font-size: 0.68rem; line-height: 1.5; }
+
+.workspace-dialog-backdrop { position: fixed; z-index: 70; inset: 0; display: grid; place-items: center; padding: var(--space-4); background: rgb(29 39 51 / 28%); backdrop-filter: blur(0.35rem); }
+.workspace-dialog { width: min(100%, 42rem); max-height: min(44rem, calc(100vh - 2rem)); overflow-y: auto; padding: clamp(1.25rem, 4vw, 2rem); border: 1px solid rgb(255 255 255 / 70%); border-radius: var(--radius-panel); background: var(--color-surface); box-shadow: var(--shadow-popover); }
+.workspace-dialog > header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
+.workspace-dialog h2 { margin: var(--space-1) 0 0; font-size: clamp(1.6rem, 5vw, 2.2rem); letter-spacing: -0.04em; }
+.workspace-dialog > header > button { width: 2.3rem; height: 2.3rem; border: 1px solid var(--color-border); border-radius: var(--radius-control); color: var(--color-text-muted); background: var(--color-surface); font-size: 1.3rem; cursor: pointer; }
+.workspace-dialog__intro { margin: var(--space-4) 0 var(--space-6); color: var(--color-text-muted); line-height: 1.65; }
+.workspace-media-group { padding: var(--space-4) 0; border-top: 1px solid var(--color-border); }
+.workspace-media-group__heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-2); }
+.workspace-media-group__heading strong, .workspace-media-group__heading small { display: block; }
+.workspace-media-group__heading strong { max-width: 30rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-media-group__heading small { margin-top: var(--space-1); color: var(--color-text-muted); font-size: 0.65rem; }
+.workspace-media-group__heading a { color: var(--color-primary); font-size: 0.72rem; }
+.workspace-job { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: var(--space-4); margin-top: var(--space-2); padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-control); color: var(--color-text); background: #fff; text-align: left; cursor: pointer; }
+.workspace-job:hover { border-color: #a9c3f7; background: #f8faff; }
+.workspace-job[aria-current='true'] { border-color: var(--color-primary); background: var(--color-surface-selected); }
+.workspace-job > span:first-child { min-width: 0; }
+.workspace-job strong, .workspace-job small { display: block; }
+.workspace-job strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-job small { margin-top: var(--space-1); color: var(--color-text-muted); font-size: 0.66rem; }
+.workspace-job__status { flex: none; color: var(--color-primary); font-size: 0.7rem; font-weight: 750; }
 
 .menu-toggle, .sidebar-backdrop { display: none; }
 .app-content { min-width: 0; }
@@ -979,6 +1007,9 @@ button:disabled { cursor: wait; opacity: 0.65; }
   .menu-toggle span { width: 1rem; height: 1px; background: var(--color-text); }
   .app-toolbar { justify-content: flex-start; }
   .system-status { margin-left: auto; }
+  .app-toolbar__actions { margin-left: auto; }
+  .app-toolbar__actions .system-status { display: none; }
+  .workspace-switcher__trigger { max-width: 9rem; }
   .app-footer { display: none; }
   .settings-overview { width: min(100% - 2rem, 42rem); padding: 2.5rem 0; }
   .settings-overview dl div { grid-template-columns: 1fr; gap: var(--space-2); }

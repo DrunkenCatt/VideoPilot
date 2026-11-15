@@ -30,14 +30,15 @@ async function mountApp(path = '/workspace') {
       stubs: {
         JobWorkbench: {
           props: ['session'],
-          emits: ['unauthenticated'],
-          template: '<main><h1>假任务工作台</h1><button data-test="expire" @click="$emit(\'unauthenticated\')">模拟过期</button></main>',
+          emits: ['unauthenticated', 'select-job'],
+          template: '<main><h1>假任务工作台</h1><button data-test="expire" @click="$emit(\'unauthenticated\')">模拟过期</button><button data-test="select-job" @click="$emit(\'select-job\', \'10000000-0000-0000-0000-000000000099\')">切换任务</button></main>',
         },
         EvaluationWorkbench: {
           props: ['session'],
           emits: ['unauthenticated'],
           template: '<main><h1>假评测工作台</h1></main>',
         },
+        WorkspaceSwitcher: { template: '<button data-test="workspace-switcher-stub">切换视频</button>' },
       },
     },
   })
@@ -116,6 +117,18 @@ describe('App session flow', () => {
 
     expect(wrapper.get('h1').text()).toBe('假评测工作台')
     expect(wrapper.get('[aria-current="page"]').text()).toContain('评测中心')
+  })
+
+  it('keeps the current page when the workbench selects another job', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, activeSession)))
+    const wrapper = await mountApp('/context/10000000-0000-0000-0000-000000000008')
+    await flushPromises()
+
+    await wrapper.get('[data-test="select-job"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('a[href="/context/10000000-0000-0000-0000-000000000099"]').exists()).toBe(true)
+    expect(wrapper.find('a[href="/answers/10000000-0000-0000-0000-000000000099"]').exists()).toBe(true)
   })
 
   it('uses a generic message and clears the password after invalid credentials', async () => {
