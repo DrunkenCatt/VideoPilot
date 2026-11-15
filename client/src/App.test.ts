@@ -31,7 +31,7 @@ async function mountApp(path = '/workspace') {
         JobWorkbench: {
           props: ['session'],
           emits: ['unauthenticated'],
-          template: '<main><h1>假任务工作台</h1></main>',
+          template: '<main><h1>假任务工作台</h1><button data-test="expire" @click="$emit(\'unauthenticated\')">模拟过期</button></main>',
         },
         EvaluationWorkbench: {
           props: ['session'],
@@ -54,10 +54,12 @@ describe('App session flow', () => {
     const wrapper = await mountApp()
     await flushPromises()
 
-    expect(wrapper.get('h1').text()).toBe('回到视频，也回到证据。')
+    expect(wrapper.get('#login-dialog-title').text()).toBe('登录工作区')
     expect(wrapper.get('label[for="username"]').text()).toContain('账号')
     expect(wrapper.get('label[for="password"]').text()).toContain('密码')
-    expect(wrapper.get('button[type="submit"]').text()).toContain('进入工作台')
+    expect(wrapper.get('button[type="submit"]').text()).toContain('登录')
+    expect(wrapper.get('[data-test="shell-content"]').attributes('inert')).toBeDefined()
+    expect(wrapper.text()).not.toContain('假任务工作台')
   })
 
   it('logs in against the session API and opens the authenticated workspace', async () => {
@@ -96,6 +98,24 @@ describe('App session flow', () => {
     await flushPromises()
     expect(wrapper.get('h1').text()).toBe('假评测工作台')
     expect(wrapper.text()).toContain('teacher')
+  })
+
+  it('keeps the original target route after login', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(401))
+      .mockResolvedValueOnce(jsonResponse(201, activeSession))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const wrapper = await mountApp('/evaluation')
+    await flushPromises()
+    await wrapper.get('#username').setValue('teacher')
+    await wrapper.get('#password').setValue('password')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.get('h1').text()).toBe('假评测工作台')
+    expect(wrapper.get('[aria-current="page"]').text()).toContain('评测中心')
   })
 
   it('uses a generic message and clears the password after invalid credentials', async () => {
@@ -172,6 +192,7 @@ describe('App session flow', () => {
     await flushPromises()
     expect(wrapper.get('.sidebar-account').text()).toContain('teacher')
 
+    await wrapper.get('[data-test="account-menu"]').trigger('click')
     await wrapper.get('[data-test="logout"]').trigger('click')
     await flushPromises()
 
@@ -183,7 +204,22 @@ describe('App session flow', () => {
         headers: { 'X-CSRF-Token': 'csrf-for-test' },
       }),
     )
-    expect(wrapper.get('button[type="submit"]').text()).toContain('进入工作台')
+    expect(wrapper.get('button[type="submit"]').text()).toContain('登录')
+    expect(wrapper.text()).not.toContain('假任务工作台')
+  })
+
+  it('blocks the old page state and explains an expired session', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, activeSession)))
+    const wrapper = await mountApp('/workspace/example-job')
+    await flushPromises()
+
+    await wrapper.get('[data-test="expire"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true)
+    expect(wrapper.get('[role="alert"]').text()).toContain('会话已过期')
+    expect(wrapper.text()).not.toContain('假任务工作台')
+    expect(wrapper.get('[data-test="shell-content"]').attributes('inert')).toBeDefined()
   })
 
   it('keeps the authenticated workspace when logout fails', async () => {
@@ -202,6 +238,7 @@ describe('App session flow', () => {
 
     const wrapper = await mountApp()
     await flushPromises()
+    await wrapper.get('[data-test="account-menu"]').trigger('click')
     await wrapper.get('[data-test="logout"]').trigger('click')
     await flushPromises()
 

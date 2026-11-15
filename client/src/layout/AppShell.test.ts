@@ -54,4 +54,20 @@ describe('AppShell', () => {
 
     expect(wrapper.get('[data-test="app-sidebar"]').attributes('data-open')).toBe('false')
   })
+
+  it('shows a login action without exposing account data for an empty session', async () => {
+    const router = createRouter({ history: createMemoryHistory(), routes: appRoutes })
+    await router.push('/workspace')
+    await router.isReady()
+    const wrapper = mount(AppShell, {
+      props: { session: null, pageTitle: '视频工作台', contentBlocked: true },
+      slots: { default: '<p data-test="public-shell-copy">请登录后继续</p>' },
+      global: { plugins: [router] },
+    })
+
+    expect(wrapper.get('[data-test="login-action"]').text()).toBe('登录')
+    expect(wrapper.find('.sidebar-account__avatar').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('teacher')
+    expect(wrapper.get('[data-test="shell-content"]').attributes('inert')).toBeDefined()
+  })
 })

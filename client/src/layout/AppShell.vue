@@ -5,20 +5,26 @@ import { RouterLink, useRoute } from 'vue-router'
 import type { Session } from '../api/contracts'
 import { navigationItems } from '../router'
 
-defineProps<{
-  session: Session
+withDefaults(defineProps<{
+  session: Session | null
   pageTitle: string
   busy?: boolean
-}>()
+  contentBlocked?: boolean
+}>(), {
+  busy: false,
+  contentBlocked: false,
+})
 
-defineEmits<{ logout: [] }>()
+defineEmits<{ logout: []; login: [] }>()
 
 const route = useRoute()
 const drawerOpen = ref(false)
+const accountMenuOpen = ref(false)
 const activeName = computed(() => String(route.meta.navigationName ?? route.name ?? ''))
 
 watch(() => route.fullPath, () => {
   drawerOpen.value = false
+  accountMenuOpen.value = false
 })
 </script>
 
@@ -81,7 +87,10 @@ watch(() => route.fullPath, () => {
         </RouterLink>
       </nav>
 
-      <div class="sidebar-account">
+      <div
+        v-if="session"
+        class="sidebar-account"
+      >
         <span
           class="sidebar-account__avatar"
           aria-hidden="true"
@@ -91,11 +100,42 @@ watch(() => route.fullPath, () => {
         <span><strong>{{ session.username }}</strong><small>本地工作区</small></span>
         <button
           type="button"
-          data-test="logout"
-          :disabled="busy"
-          @click="$emit('logout')"
+          data-test="account-menu"
+          :aria-expanded="accountMenuOpen"
+          aria-controls="account-popover"
+          @click="accountMenuOpen = !accountMenuOpen"
         >
-          {{ busy ? '正在退出…' : '退出' }}
+          账户
+        </button>
+        <div
+          v-if="accountMenuOpen"
+          id="account-popover"
+          class="account-popover"
+          role="menu"
+        >
+          <p><strong>{{ session.username }}</strong><span>已登录本地工作区</span></p>
+          <button
+            type="button"
+            role="menuitem"
+            data-test="logout"
+            :disabled="busy"
+            @click="$emit('logout')"
+          >
+            {{ busy ? '正在退出…' : '退出登录' }}
+          </button>
+        </div>
+      </div>
+      <div
+        v-else
+        class="sidebar-login"
+      >
+        <p><strong>未登录</strong><span>登录后访问本地视频资源</span></p>
+        <button
+          type="button"
+          data-test="login-action"
+          @click="$emit('login')"
+        >
+          登录
         </button>
       </div>
     </aside>
@@ -124,7 +164,10 @@ watch(() => route.fullPath, () => {
       <div
         id="main-content"
         class="app-content"
+        data-test="shell-content"
         tabindex="-1"
+        :inert="contentBlocked ? true : undefined"
+        :aria-hidden="contentBlocked ? 'true' : undefined"
       >
         <slot />
       </div>

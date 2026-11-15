@@ -90,3 +90,49 @@
 - [x] 原视频与评测组件仍通过同一 Session 边界装载。
 - [x] 类型、Lint、测试、覆盖率、构建和真实浏览器检查通过。
 - [x] 未进入 F2 登录弹框、F3 视频切换或 F4-F8 页面拆分范围。
+
+## F2：登录弹框和会话边界
+
+日期：2026-11-16
+
+结论：通过，可以进入 F3。
+
+### 交付证据
+
+- 原全页登录改为应用壳层上的必需登录弹框；未登录时不挂载 `RouterView` 业务组件，壳层内容同时设为 `inert` 和 `aria-hidden`。
+- 登录失败、限流、服务不可用、提交中和 Session 过期都保留可恢复状态；失败后清空密码但保留账号。
+- 登录不改写当前 URL，因此可恢复原目标路由；退出和 Session 过期会卸载当前业务页并递增会话 epoch，不保留前一用户的组件状态。
+- 侧栏账户区显示当前账号和账户菜单，退出仍通过既有 Session API 发送页面内存中的 CSRF Token。
+- `.env` 只检查了变量名与是否设置，未输出或复制任何值；实际 `.env` 不声明 Agent 开关，未改变默认关闭边界。
+
+### 自动化检查
+
+| 检查 | 结果 |
+| --- | --- |
+| LoginDialog/AppShell RED | 组件未实现时 2 个 Suite 按预期失败 |
+| Session/App/LoginDialog 定向测试 | 22/22 通过 |
+| `client\npm.cmd run check` | 通过；23 个测试文件、141 项测试 |
+| 覆盖率 | Statements 87.91%、Branches 82.11%、Functions 89.91%、Lines 93.08% |
+| 生产构建 | 通过；65 modules transformed |
+| `server\.\mvnw.cmd -Dtest=SessionSecurityContractTest test` | 通过；7 项测试，验证 HttpOnly、SameSite=Strict 和 CSRF 合同 |
+
+### 真实浏览器检查
+
+- 使用 localhost 临时 Session 响应器实际设置 HttpOnly/SameSite Cookie，刷新 `/settings` 后会话恢复，退出请求必须同时带 Cookie 与正确 `X-CSRF-Token`。
+- 未登录时账号输入框自动获得焦点；Tab 顺序为账号 -> 密码 -> 登录 -> 账号，Shift+Tab 反向圈定正常。
+- Esc 不关闭必需登录弹框；错误登录显示安全文案并清空密码；成功后 URL 仍为 `/settings`。
+- 登录、刷新恢复和退出全流程 Console warning/error 为 0。
+
+### 环境边界
+
+- 真实 Docker server 仍受既有 Flyway V20 checksum mismatch 阻断；未执行 `flyway repair`，未修改数据库历史。
+- 临时 localhost Session 响应器、Vite 进程和浏览器页签均已停止；没有向仓库、数据库或外部站点写入数据。
+- F2 未引入视频切换、最近视频存储或业务页面拆分；这些仍属于 F3 及后续任务。
+
+### F2 退出门
+
+- [x] 未登录时不挂载业务数据组件，弹框自动打开且无法误关闭。
+- [x] 错误、限流、提交中、成功、过期和退出状态有自动化覆盖。
+- [x] 原目标路由恢复、页面状态清理、Cookie/CSRF 和键盘路径已验证。
+- [x] 类型、Lint、测试、覆盖率、构建和真实浏览器检查通过。
+- [x] 未进入 F3 视频工作区或 F4-F8 业务页面范围。
