@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { RouterView, useRoute } from 'vue-router'
 
 import type { Session } from './api/contracts'
 import { ApiClientError, createSessionApi } from './api/session'
-import JobWorkbench from './features/jobs/JobWorkbench.vue'
-import EvaluationWorkbench from './features/evaluation/EvaluationWorkbench.vue'
+import AppShell from './layout/AppShell.vue'
 
 const sessionApi = createSessionApi()
 const session = ref<Session | null>(null)
@@ -12,7 +12,8 @@ const username = ref('')
 const password = ref('')
 const status = ref<'loading' | 'ready' | 'submitting'>('loading')
 const errorMessage = ref('')
-const workspace = ref<'video' | 'evaluation'>('video')
+const route = useRoute()
+const pageTitle = computed(() => String(route.meta.title ?? '视频工作台'))
 
 function messageFor(error: unknown): string {
   if (!(error instanceof ApiClientError)) return '无法连接本地服务，请确认后端已启动。'
@@ -68,44 +69,16 @@ function sessionExpired() {
 
 <template>
   <div class="app-frame">
-    <header class="brand-bar">
+    <header
+      v-if="!session"
+      class="brand-bar"
+    >
       <a
         class="wordmark"
         href="/"
         aria-label="VideoPilot 首页"
       >VIDEOPILOT</a>
-      <div
-        v-if="session"
-        class="session-actions"
-      >
-        <button
-          class="text-button"
-          :aria-pressed="workspace === 'video'"
-          @click="workspace = 'video'"
-        >
-          视频
-        </button>
-        <button
-          class="text-button"
-          :aria-pressed="workspace === 'evaluation'"
-          @click="workspace = 'evaluation'"
-        >
-          评测
-        </button>
-        <span>{{ session.username }}</span>
-        <button
-          class="text-button"
-          data-test="logout"
-          :disabled="status === 'submitting'"
-          @click="logout"
-        >
-          {{ status === 'submitting' ? '正在退出…' : '退出' }}
-        </button>
-      </div>
-      <span
-        v-else
-        class="environment"
-      >LOCAL WORKSPACE</span>
+      <span class="environment">LOCAL WORKSPACE</span>
     </header>
 
     <main
@@ -204,7 +177,13 @@ function sessionExpired() {
       </section>
     </main>
 
-    <template v-else>
+    <AppShell
+      v-else
+      :session="session"
+      :page-title="pageTitle"
+      :busy="status === 'submitting'"
+      @logout="logout"
+    >
       <p
         v-if="errorMessage"
         class="form-error app-alert"
@@ -212,18 +191,17 @@ function sessionExpired() {
       >
         {{ errorMessage }}
       </p>
-      <JobWorkbench
-        v-if="workspace === 'video'"
-        :session="session"
-        @unauthenticated="sessionExpired"
-      />
-      <EvaluationWorkbench
-        v-else
-        :session="session"
-        @unauthenticated="sessionExpired"
-      />
-    </template>
+      <RouterView v-slot="{ Component }">
+        <component
+          :is="Component"
+          :session="session"
+          @unauthenticated="sessionExpired"
+        />
+      </RouterView>
+    </AppShell>
 
-    <footer><span>VideoPilot / M5</span><span>Local-first · Evidence-bound</span></footer>
+    <footer v-if="!session">
+      <span>VideoPilot / M5</span><span>Local-first · Evidence-bound</span>
+    </footer>
   </div>
 </template>

@@ -1,8 +1,10 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createMemoryHistory, createRouter } from 'vue-router'
 
 import App from './App.vue'
 import type { Session } from './api/contracts'
+import { appRoutes } from './router'
 
 const activeSession: Session = {
   userId: 'f97a9f68-b14c-412c-a0f2-1ad20c62f769' as Session['userId'],
@@ -18,9 +20,13 @@ function jsonResponse(status: number, body?: unknown): Response {
   })
 }
 
-function mountApp() {
+async function mountApp(path = '/workspace') {
+  const router = createRouter({ history: createMemoryHistory(), routes: appRoutes })
+  await router.push(path)
+  await router.isReady()
   return mount(App, {
     global: {
+      plugins: [router],
       stubs: {
         JobWorkbench: {
           props: ['session'],
@@ -45,7 +51,7 @@ describe('App session flow', () => {
   it('shows the login surface when there is no active session', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(401)))
 
-    const wrapper = mountApp()
+    const wrapper = await mountApp()
     await flushPromises()
 
     expect(wrapper.get('h1').text()).toBe('回到视频，也回到证据。')
@@ -61,7 +67,7 @@ describe('App session flow', () => {
       .mockResolvedValueOnce(jsonResponse(201, activeSession))
     vi.stubGlobal('fetch', fetchMock)
 
-    const wrapper = mountApp()
+    const wrapper = await mountApp()
     await flushPromises()
     await wrapper.get('#username').setValue('teacher')
     await wrapper.get('#password').setValue('a local password')
@@ -77,16 +83,17 @@ describe('App session flow', () => {
         credentials: 'same-origin',
       }),
     )
-    expect(wrapper.get('.session-actions').text()).toContain('teacher')
+    expect(wrapper.get('.sidebar-account').text()).toContain('teacher')
     expect(wrapper.get('h1').text()).toContain('假任务工作台')
     expect(wrapper.text()).not.toContain('a local password')
   })
 
   it('switches between video and evaluation without creating another session boundary', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, activeSession)))
-    const wrapper = mountApp()
+    const wrapper = await mountApp()
     await flushPromises()
-    await wrapper.get('button[aria-pressed="false"]').trigger('click')
+    await wrapper.get('a[href="/evaluation"]').trigger('click')
+    await flushPromises()
     expect(wrapper.get('h1').text()).toBe('假评测工作台')
     expect(wrapper.text()).toContain('teacher')
   })
@@ -105,7 +112,7 @@ describe('App session flow', () => {
       )
     vi.stubGlobal('fetch', fetchMock)
 
-    const wrapper = mountApp()
+    const wrapper = await mountApp()
     await flushPromises()
     await wrapper.get('#username').setValue('teacher')
     await wrapper.get('#password').setValue('wrong password')
@@ -135,7 +142,7 @@ describe('App session flow', () => {
       )
     vi.stubGlobal('fetch', fetchMock)
 
-    const wrapper = mountApp()
+    const wrapper = await mountApp()
     await flushPromises()
     await wrapper.get('#username').setValue('teacher')
     await wrapper.get('#password').setValue('password')
@@ -148,7 +155,7 @@ describe('App session flow', () => {
   it('shows a connection message when session restoration cannot reach the server', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('connection failed')))
 
-    const wrapper = mountApp()
+    const wrapper = await mountApp()
     await flushPromises()
 
     expect(wrapper.get('[role="alert"]').text()).toContain('无法连接本地服务')
@@ -161,9 +168,9 @@ describe('App session flow', () => {
       .mockResolvedValueOnce(jsonResponse(204))
     vi.stubGlobal('fetch', fetchMock)
 
-    const wrapper = mountApp()
+    const wrapper = await mountApp()
     await flushPromises()
-    expect(wrapper.get('.session-actions').text()).toContain('teacher')
+    expect(wrapper.get('.sidebar-account').text()).toContain('teacher')
 
     await wrapper.get('[data-test="logout"]').trigger('click')
     await flushPromises()
@@ -193,12 +200,12 @@ describe('App session flow', () => {
       )
     vi.stubGlobal('fetch', fetchMock)
 
-    const wrapper = mountApp()
+    const wrapper = await mountApp()
     await flushPromises()
     await wrapper.get('[data-test="logout"]').trigger('click')
     await flushPromises()
 
-    expect(wrapper.get('.session-actions').text()).toContain('teacher')
+    expect(wrapper.get('.sidebar-account').text()).toContain('teacher')
     expect(wrapper.get('[role="alert"]').text()).toContain('登录服务暂时不可用')
   })
 })
@@ -207,6 +214,7 @@ describe('application bootstrap', () => {
   beforeEach(() => {
     document.body.innerHTML = '<div id="app"></div>'
     vi.resetModules()
+    vi.stubGlobal('scrollTo', vi.fn())
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(401)))
   })
 
