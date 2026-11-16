@@ -593,6 +593,59 @@ h1 {
 .product-modal .upload-panel--compact .upload-readout { padding: var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-card); }
 .product-modal .upload-panel--compact .upload-readout__heading strong { font-family: inherit; font-size: 0.85rem; }
 
+.jobs-new-action { display: inline-flex; align-items: center; text-decoration: none; }
+.job-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); }
+.job-metrics article { display: grid; min-height: 7.2rem; align-content: space-between; padding: var(--space-4); }
+.job-metrics span, .job-metrics small { color: var(--color-text-muted); font-size: 0.66rem; }
+.job-metrics strong { font-size: 1.8rem; letter-spacing: -0.04em; }
+.jobs-product-toolbar { display: flex; gap: var(--space-2); margin: var(--space-4) 0; }
+.jobs-product-toolbar input, .jobs-product-toolbar select, .jobs-product-toolbar button { min-height: 2.55rem; padding: 0 var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-control); color: var(--color-text); background: #fff; font-size: 0.72rem; }
+.jobs-product-toolbar input { width: min(28rem, 100%); }
+.jobs-product-toolbar button { margin-left: auto; cursor: pointer; }
+.jobs-product-list { overflow: hidden; }
+.jobs-product-list > header { display: flex; align-items: center; justify-content: space-between; padding: var(--space-4); border-bottom: 1px solid var(--color-border); }
+.jobs-product-list > header h2 { margin: 0; font-size: 0.95rem; }
+.jobs-product-list > header span { color: var(--color-text-muted); font-size: 0.66rem; }
+.jobs-product-list > ul { display: grid; gap: var(--space-2); margin: 0; padding: var(--space-3); list-style: none; }
+.jobs-product-list li > button { display: grid; width: 100%; grid-template-columns: 2.5rem minmax(12rem, 1.7fr) minmax(8rem, 1fr) auto 7rem 5rem; align-items: center; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--color-border); border-radius: 0.7rem; color: var(--color-text); background: #fff; text-align: left; cursor: pointer; }
+.jobs-product-list li > button:hover, .jobs-product-list li > button[aria-current='page'] { border-color: #b8cff5; background: #f8faff; }
+.job-row__icon { display: grid; width: 2.25rem; height: 2.25rem; place-items: center; border-radius: 0.6rem; color: var(--color-primary); background: var(--color-surface-selected); }
+.job-row__identity { min-width: 0; }
+.job-row__identity strong, .job-row__identity small, .job-row__updated small { display: block; }
+.job-row__identity strong { overflow: hidden; font-size: 0.74rem; text-overflow: ellipsis; white-space: nowrap; }
+.job-row__identity small, .job-row__stage small, .job-row__updated small { color: var(--color-text-muted); font-size: 0.58rem; }
+.job-row__stage { display: grid; gap: var(--space-2); }
+.job-row__stage i { height: 0.25rem; overflow: hidden; border-radius: 999px; background: #e8edf3; }
+.job-row__stage b { display: block; height: 100%; border-radius: inherit; background: var(--color-primary); }
+.job-row__status { padding: 0.28rem 0.55rem; border-radius: 999px; color: var(--color-primary); background: var(--color-surface-selected); font-size: 0.6rem; font-weight: 750; text-align: center; }
+.job-row__status[data-status='READY'] { color: var(--color-success); background: #edf8f4; }
+.job-row__status[data-status='FAILED'], .job-row__status[data-status='DEAD_LETTERED'] { color: var(--color-danger); background: #fff1f1; }
+.job-row__updated { color: var(--color-text); font-size: 0.64rem; }
+.job-row__action { color: var(--color-primary); font-size: 0.66rem; text-align: right; }
+
+.job-drawer-backdrop { position: fixed; z-index: 74; inset: 0; display: flex; justify-content: flex-end; background: rgb(24 32 43 / 26%); }
+.job-drawer { width: min(42rem, 100%); height: 100%; overflow-y: auto; border-left: 1px solid var(--color-border); background: #fff; box-shadow: -1rem 0 3rem rgb(20 32 48 / 12%); }
+.job-drawer > header { position: sticky; z-index: 2; top: 0; display: flex; min-height: 3.75rem; align-items: center; justify-content: space-between; padding: 0 var(--space-4); border-bottom: 1px solid var(--color-border); background: #fff; }
+.job-drawer > header span { font-size: 0.8rem; font-weight: 750; }
+.job-drawer > header button { width: 2rem; height: 2rem; border: 1px solid var(--color-border); border-radius: var(--radius-control); color: var(--color-text-muted); background: #fff; cursor: pointer; }
+.job-drawer .job-detail { min-height: 0; padding: var(--space-6); border: 0; box-shadow: none; }
+.job-drawer .job-detail .section-index { margin-bottom: var(--space-2); color: var(--color-primary); font-size: 0.62rem; }
+.job-drawer .job-detail .job-detail__heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); padding-bottom: var(--space-4); border-bottom: 1px solid var(--color-border); }
+.job-drawer .job-detail .job-detail__heading h2 { max-width: 26rem; margin: 0; font-family: inherit; font-size: 1.15rem; line-height: 1.45; letter-spacing: -0.025em; }
+.job-drawer .job-detail .status-stamp { flex: none; margin: 0; padding: 0.35rem 0.6rem; border: 0; border-radius: 999px; color: var(--color-primary); background: var(--color-surface-selected); font-size: 0.62rem; }
+.job-drawer .job-detail .job-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); margin: var(--space-4) 0; border: 0; }
+.job-drawer .job-detail .job-facts > div { display: block; min-width: 0; padding: var(--space-3); border: 1px solid var(--color-border); border-radius: 0.65rem; background: var(--color-surface-muted); }
+.job-drawer .job-detail .job-facts dt { color: var(--color-text-muted); font-size: 0.6rem; }
+.job-drawer .job-detail .job-facts dd { margin: var(--space-1) 0 0; overflow: hidden; color: var(--color-text); font-size: 0.72rem; text-overflow: ellipsis; white-space: nowrap; }
+.job-drawer .job-detail .job-media-facts { grid-template-columns: 1fr 1fr; }
+.job-drawer .job-detail .timeline-heading { margin-top: var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--color-border); }
+.job-drawer .job-detail .timeline-heading h3 { margin: 0; font-size: 0.9rem; }
+.job-drawer .job-detail .event-list { margin-top: var(--space-3); padding: 0; border: 0; }
+.job-drawer .job-detail .event-list li { margin-top: var(--space-2); padding: var(--space-3); border: 1px solid var(--color-border); border-radius: 0.65rem; background: #fff; }
+.job-drawer .job-detail .event-sequence { border-radius: 0.45rem; color: var(--color-primary); background: var(--color-surface-selected); }
+.reliability-dialog { width: min(100%, 58rem); }
+.reliability-dialog .operations-panel { margin: 0; border: 0; box-shadow: none; }
+
 @media (max-width: 48rem) {
   .product-page { padding: var(--space-4); }
   .product-page-header { align-items: flex-start; }
@@ -602,6 +655,9 @@ h1 {
   .workspace-player, .workspace-evidence { min-height: auto; }
   .workspace-player video, .workspace-player__placeholder { min-height: 22rem; }
   .media-feature-grid { grid-template-columns: 1fr 1fr; }
+  .job-metrics { grid-template-columns: 1fr 1fr; }
+  .jobs-product-list li > button { grid-template-columns: 2.5rem minmax(0, 1fr) auto; }
+  .job-row__stage, .job-row__updated, .job-row__action { display: none; }
 }
 
 @media (max-width: 36rem) {
@@ -619,6 +675,17 @@ h1 {
   .media-feature-grid { grid-template-columns: 1fr; }
   .media-recent table { min-width: 42rem; }
   .product-modal { padding: var(--space-4); }
+  .job-metrics { grid-template-columns: 1fr 1fr; }
+  .jobs-product-toolbar { display: grid; grid-template-columns: 1fr 1fr; }
+  .jobs-product-toolbar input { width: 100%; grid-column: 1 / -1; }
+  .jobs-product-toolbar button { width: 100%; margin-left: 0; }
+  .jobs-product-list li > button { grid-template-columns: 2.25rem minmax(0, 1fr); }
+  .job-row__status { grid-column: 2; justify-self: start; }
+  .job-drawer { width: 100%; }
+  .job-drawer .job-detail { padding: var(--space-4); }
+  .job-drawer .job-detail .job-detail__heading { display: grid; }
+  .job-drawer .job-detail .job-facts { grid-template-columns: 1fr; }
+  .job-drawer .job-detail .job-media-facts { grid-template-columns: 1fr 1fr; }
 }
 
 .intro {

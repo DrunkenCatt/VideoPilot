@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import type { AnalysisJob, JobEvent, MediaAsset, ReliabilitySummary, Session } from '../../api/contracts'
@@ -7,9 +7,10 @@ import { ApiClientError } from '../../api/session'
 import { createJobsApi } from '../../api/jobs'
 import { createOperationsApi, type OperationsApi } from '../../api/operations'
 import { createMediaApi, type MediaApi } from '../../api/media'
+import ProductPageHeader from '../../components/ProductPageHeader.vue'
 import JobDetail from './JobDetail.vue'
 import ReliabilityPanel from './ReliabilityPanel.vue'
-import { statusLabel } from './jobPresentation'
+import { stageLabel, statusLabel } from './jobPresentation'
 
 const props = defineProps<{
   session: Session
@@ -35,10 +36,39 @@ const errorMessage = ref('')
 const reliabilitySummary = ref<ReliabilitySummary | null>(null)
 const reliabilityLoading = ref(true)
 const reliabilityError = ref('')
+const search = ref('')
+const statusFilter = ref('ALL')
+const reliabilityOpen = ref(false)
 let eventController: globalThis.AbortController | null = null
 let mediaRevision = 0
 let openRevision = 0
 let mounted = false
+
+const filteredJobs = computed(() => {
+  const query = search.value.trim().toLocaleLowerCase()
+  return jobs.value.filter((job) => (
+    (statusFilter.value === 'ALL' || job.status === statusFilter.value)
+    && (!query || job.goal.toLocaleLowerCase().includes(query) || job.jobId.toLocaleLowerCase().includes(query))
+  ))
+})
+
+const jobMetrics = computed(() => ({
+  active: jobs.value.filter((job) => !['READY', 'FAILED', 'CANCELED', 'DEAD_LETTERED'].includes(job.status)).length,
+  ready: jobs.value.filter((job) => job.status === 'READY').length,
+  recovering: jobs.value.filter((job) => job.reliability.recoveryState !== 'NONE').length,
+  attention: jobs.value.filter((job) => ['FAILED', 'DEAD_LETTERED'].includes(job.status)).length,
+}))
+
+function stageProgress(job: AnalysisJob): string {
+  if (['READY', 'FAILED', 'CANCELED', 'DEAD_LETTERED'].includes(job.status)) return '100%'
+  const stages = ['PROBING', 'EXTRACTING', 'TRANSCRIBING', 'OCR', 'ALIGNING', 'CONTEXT_BUILDING', 'INDEXING']
+  const index = job.currentStage ? stages.indexOf(job.currentStage) : -1
+  return `${Math.max(10, Math.round(((index + 1) / stages.length) * 100))}%`
+}
+
+function updatedLabel(value: string): string {
+  return new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
+}
 
 function safeMessage(error: unknown): string {
   if (!(error instanceof ApiClientError)) return '无法连接本地服务，请确认后端已启动。'
@@ -176,6 +206,15 @@ async function openWorkspace(jobId: AnalysisJob['jobId']) {
   await router.push({ name: 'workspace', params: { jobId } })
 }
 
+async function closeDetail() {
+  openRevision += 1
+  eventController?.abort()
+  selected.value = null
+  jobMedia.value = null
+  events.value = []
+  await router.push({ name: 'analysis' })
+}
+
 async function loadReliability() {
   reliabilityLoading.value = true
   reliabilityError.value = ''
@@ -223,16 +262,22 @@ onBeforeUnmount(() => eventController?.abort())
 </script>
 
 <template>
-  <main class="jobs-shell">
-    <header class="jobs-heading">
-      <div>
-        <p class="kicker">
-          ANALYSIS JOBS
-        </p>
-        <h1>解析任务</h1>
-      </div>
-      <p>查看持久化状态、阶段事件与恢复操作。任务详情不会把处理中状态伪装成已完成。</p>
-    </header>
+  <main class="product-page jobs-product-page">
+    <ProductPageHeader
+      eyebrow="ANALYSIS JOBS"
+      title="解析任务"
+      description="查看持久化任务、阶段状态、失败原因与恢复动作。"
+      status="MySQL 状态真源"
+    >
+      <template #actions>
+        <RouterLink
+          class="product-primary-action jobs-new-action"
+          to="/library"
+        >
+          + 新建分析
+        </RouterLink>
+      </template>
+    </ProductPageHeader>
 
     <p
       v-if="errorMessage"
@@ -242,83 +287,181 @@ onBeforeUnmount(() => eventController?.abort())
       {{ errorMessage }}
     </p>
 
-    <ReliabilityPanel
-      :summary="reliabilitySummary"
-      :loading="reliabilityLoading"
-      :error="reliabilityError"
-      @refresh="loadReliability"
-    />
+    <section
+      class="job-metrics"
+      data-test="job-metrics"
+      aria-label="当前列表任务统计"
+    >
+      <article class="product-surface">
+        <span>活动任务</span><strong>{{ jobMetrics.active }}</strong><small>当前列表</small>
+      </article>
+      <article class="product-surface">
+        <span>已就绪</span><strong>{{ jobMetrics.ready }}</strong><small>可进入工作台</small>
+      </article>
+      <article class="product-surface">
+        <span>恢复中</span><strong>{{ jobMetrics.recovering }}</strong><small>自动或人工恢复</small>
+      </article>
+      <article class="product-surface">
+        <span>需要关注</span><strong>{{ jobMetrics.attention }}</strong><small>失败或死信</small>
+      </article>
+    </section>
 
-    <div class="jobs-layout">
-      <aside
-        class="jobs-rail"
-        aria-label="最近任务"
+    <div class="jobs-product-toolbar">
+      <input
+        v-model="search"
+        data-test="job-search"
+        type="search"
+        placeholder="搜索 Job ID 或分析目标"
       >
-        <section
-          class="recent-jobs"
-          aria-labelledby="recent-jobs-title"
-        >
-          <div class="rail-heading">
-            <h2 id="recent-jobs-title">
-              最近任务
-            </h2><span>{{ jobs.length }}</span>
-          </div>
-          <p
-            v-if="loading"
-            aria-live="polite"
-          >
-            正在读取服务端任务…
-          </p>
-          <p
-            v-else-if="jobs.length === 0"
-            data-test="jobs-empty"
-            class="empty-copy"
-          >
-            还没有分析任务。请先到媒体资料库为已就绪媒体创建任务。
-          </p>
-          <ul
-            v-else
-            class="job-list"
-          >
-            <li
-              v-for="job in jobs"
-              :key="job.jobId"
-            >
-              <button
-                data-test="open-job"
-                :aria-current="selected?.jobId === job.jobId ? 'page' : undefined"
-                @click="openJob(job.links.self)"
-              >
-                <span>{{ job.goal }}</span><small>{{ statusLabel(job.status) }}</small>
-              </button>
-            </li>
-          </ul>
-        </section>
-      </aside>
+      <select
+        v-model="statusFilter"
+        aria-label="任务状态"
+      >
+        <option value="ALL">
+          全部状态
+        </option>
+        <option value="READY">
+          已就绪
+        </option>
+        <option value="FAILED">
+          已失败
+        </option>
+        <option value="DEAD_LETTERED">
+          需要人工处理
+        </option>
+        <option value="CONTEXT_BUILDING">
+          构建上下文
+        </option>
+      </select>
+      <button
+        type="button"
+        @click="reliabilityOpen = true"
+      >
+        可靠性面板
+      </button>
+    </div>
 
-      <JobDetail
-        v-if="selected"
-        :job="selected"
-        :media="jobMedia"
-        :media-unavailable="jobMediaUnavailable"
-        :events="events"
-        :action-busy="canceling || replaying"
-        @cancel="cancel"
-        @replay="replay"
-        @open-workspace="openWorkspace"
-      />
-      <section
+    <section
+      class="jobs-product-list product-surface"
+      aria-labelledby="jobs-product-title"
+    >
+      <header>
+        <h2 id="jobs-product-title">
+          分析任务
+        </h2><span>当前列表 {{ jobs.length }} 项</span>
+      </header>
+      <p
+        v-if="loading"
+        class="empty-copy"
+        aria-live="polite"
+      >
+        正在读取服务端任务…
+      </p>
+      <p
+        v-else-if="jobs.length === 0"
+        data-test="jobs-empty"
+        class="empty-copy"
+      >
+        还没有分析任务。请先到媒体资料库为已就绪媒体创建任务。
+      </p>
+      <p
+        v-else-if="filteredJobs.length === 0"
+        class="empty-copy"
+      >
+        没有匹配当前筛选条件的任务。
+      </p>
+      <ul
         v-else
-        class="job-placeholder"
-        aria-labelledby="placeholder-title"
+        data-test="job-table"
       >
-        <p class="section-index">
-          NO JOB SELECTED
-        </p>
-        <h2 id="placeholder-title">
-          选择一条任务查看服务端时间线
-        </h2>
-        <p>刷新页面后，任务和事件将从 MySQL 重新读取。</p>
+        <li
+          v-for="job in filteredJobs"
+          :key="job.jobId"
+        >
+          <button
+            data-test="open-job"
+            :aria-current="selected?.jobId === job.jobId ? 'page' : undefined"
+            @click="openJob(job.links.self)"
+          >
+            <span
+              class="job-row__icon"
+              aria-hidden="true"
+            >{{ job.status === 'READY' ? '✓' : '▶' }}</span>
+            <span class="job-row__identity"><strong>{{ job.goal }}</strong><small>{{ job.jobId }} · attempt {{ job.attempt + 1 }}</small></span>
+            <span class="job-row__stage"><small>{{ stageLabel(job.currentStage) }}</small><i><b :style="{ width: stageProgress(job) }" /></i></span>
+            <span
+              class="job-row__status"
+              :data-status="job.status"
+            >{{ statusLabel(job.status) }}</span>
+            <span class="job-row__updated"><small>最近更新</small>{{ updatedLabel(job.updatedAt) }}</span>
+            <span class="job-row__action">查看详情</span>
+          </button>
+        </li>
+      </ul>
+    </section>
+
+    <div
+      v-if="selected"
+      class="job-drawer-backdrop"
+      data-test="job-detail-drawer"
+      role="presentation"
+      @click.self="closeDetail"
+    >
+      <aside
+        class="job-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-label="任务详情"
+      >
+        <header>
+          <span>任务详情</span><button
+            type="button"
+            aria-label="关闭任务详情"
+            @click="closeDetail"
+          >
+            ×
+          </button>
+        </header>
+        <JobDetail
+          :job="selected"
+          :media="jobMedia"
+          :media-unavailable="jobMediaUnavailable"
+          :events="events"
+          :action-busy="canceling || replaying"
+          @cancel="cancel"
+          @replay="replay"
+          @open-workspace="openWorkspace"
+        />
+      </aside>
+    </div>
+
+    <div
+      v-if="reliabilityOpen"
+      class="product-modal-backdrop"
+      role="presentation"
+      @click.self="reliabilityOpen = false"
+    >
+      <section
+        class="product-modal reliability-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label="可靠性面板"
+      >
+        <header>
+          <div><p>RELIABILITY</p><h2>可靠性面板</h2></div><button
+            type="button"
+            aria-label="关闭可靠性面板"
+            @click="reliabilityOpen = false"
+          >
+            ×
+          </button>
+        </header>
+        <ReliabilityPanel
+          :summary="reliabilitySummary"
+          :loading="reliabilityLoading"
+          :error="reliabilityError"
+          @refresh="loadReliability"
+        />
       </section>
     </div>
   </main>

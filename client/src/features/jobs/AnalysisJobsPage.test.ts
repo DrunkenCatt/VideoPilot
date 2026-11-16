@@ -96,6 +96,7 @@ describe('AnalysisJobsPage', () => {
     await flushPromises()
 
     expect(wrapper.get('h1').text()).toContain('解析任务')
+    expect(wrapper.get('[data-test="job-metrics"]')).toBeTruthy()
     expect(wrapper.get('[data-test="jobs-empty"]').text()).toContain('还没有分析任务')
   })
 
@@ -125,12 +126,37 @@ describe('AnalysisJobsPage', () => {
 
     await wrapper.get('[data-test="open-job"]').trigger('click')
     await flushPromises()
+    expect(wrapper.get('[data-test="job-detail-drawer"]')).toBeTruthy()
     await wrapper.get('[data-test="cancel-job"]').trigger('click')
     await flushPromises()
 
     expect(fetchMock.mock.calls[2]?.[0]).toBe(job.links.cancellations)
     expect(wrapper.get('[data-test="job-status"]').text()).toContain('已取消')
     expect(wrapper.get('[aria-live="polite"]').text()).toContain('已取消')
+  })
+
+  it('presents jobs as full-width filtered rows instead of the old rail layout', async () => {
+    const ready = { ...job, status: 'READY' as const, goal: 'Redis 可靠性课程' }
+    const failed = {
+      ...job,
+      jobId: '10000000-0000-0000-0000-000000000009' as AnalysisJob['jobId'],
+      status: 'FAILED' as const,
+      goal: 'MySQL 索引课程',
+    }
+    const page = {
+      ...emptyPage,
+      data: [ready, failed],
+      pagination: { ...emptyPage.pagination, totalItems: 2, totalPages: 1 },
+    }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, page)))
+    const wrapper = mountWorkbench()
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="job-table"]')).toBeTruthy()
+    expect(wrapper.find('.jobs-layout').exists()).toBe(false)
+    await wrapper.get('[data-test="job-search"]').setValue('Redis')
+    expect(wrapper.text()).toContain('Redis 可靠性课程')
+    expect(wrapper.text()).not.toContain('MySQL 索引课程')
   })
 
   it('confirms a dead-letter replay once and refreshes the persisted attempt', async () => {
