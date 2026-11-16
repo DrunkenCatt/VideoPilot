@@ -128,6 +128,7 @@ async function selectJob(jobId: string) {
             :seek-target="citationSeekTarget"
             @select-job="selectJob"
             @unauthenticated="sessionExpired"
+            @logout="logout"
           />
         </RouterView>
       </template>

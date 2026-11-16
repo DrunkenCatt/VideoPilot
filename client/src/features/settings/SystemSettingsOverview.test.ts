@@ -18,6 +18,19 @@ describe('SystemSettingsOverview', () => {
     expect(wrapper.get('h1').text()).toBe('系统设置')
     expect(wrapper.text()).toContain('teacher')
     expect(wrapper.text()).toContain('HttpOnly Cookie')
+    expect(wrapper.get('[data-test="settings-product-grid"]')).toBeTruthy()
+    expect(wrapper.findAll('[data-test="settings-section"]')).toHaveLength(4)
+    expect(wrapper.get('[data-test="infrastructure-settings"]').text()).toContain('未提供浏览器健康合同')
+    expect(wrapper.get('[data-test="model-settings"]').text()).toContain('SiliconFlow')
     expect(wrapper.text()).not.toContain(session.csrfToken)
+    expect(wrapper.text()).not.toContain('API Key')
+  })
+
+  it('exposes account logout as an explicit parent-owned action', async () => {
+    const wrapper = mount(SystemSettingsOverview, { props: { session } })
+
+    await wrapper.get('[data-test="settings-logout"]').trigger('click')
+
+    expect(wrapper.emitted('logout')).toHaveLength(1)
   })
 })
