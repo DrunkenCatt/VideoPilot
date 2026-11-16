@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 
 import type { CitedEvidence, LoginRequest, Session } from './api/contracts'
@@ -14,6 +14,8 @@ const errorMessage = ref('')
 const sessionEpoch = ref(0)
 const route = useRoute()
 const router = useRouter()
+const currentWorkspaceJobId = ref('')
+const jobScopedRouteNames = new Set(['workspace', 'context', 'answers'])
 const pageTitle = computed(() => String(route.meta.title ?? '视频工作台'))
 const citationSeekTarget = computed<Pick<CitedEvidence, 'segmentId' | 'startMs' | 'endMs'> | null>(() => {
   if (route.name !== 'context') return null
@@ -25,6 +27,16 @@ const citationSeekTarget = computed<Pick<CitedEvidence, 'segmentId' | 'startMs' 
   }
   return { segmentId: segmentId as CitedEvidence['segmentId'], startMs, endMs }
 })
+
+watch(
+  () => [String(route.name ?? ''), route.params.jobId] as const,
+  ([routeName, jobId]) => {
+    if (jobScopedRouteNames.has(routeName) && typeof jobId === 'string') {
+      currentWorkspaceJobId.value = jobId
+    }
+  },
+  { immediate: true },
+)
 
 function messageFor(error: unknown): string {
   if (!(error instanceof ApiClientError)) return '无法连接本地服务，请确认后端已启动。'
@@ -63,6 +75,7 @@ async function logout() {
   try {
     await sessionApi.logout(session.value.csrfToken)
     session.value = null
+    currentWorkspaceJobId.value = ''
     sessionEpoch.value += 1
   } catch (error) {
     errorMessage.value = messageFor(error)
@@ -73,6 +86,7 @@ async function logout() {
 
 function sessionExpired() {
   session.value = null
+  currentWorkspaceJobId.value = ''
   sessionEpoch.value += 1
   errorMessage.value = '会话已过期，请重新登录。'
 }
@@ -84,6 +98,7 @@ async function selectJob(jobId: string) {
     return
   }
   const name = ['workspace', 'context', 'answers'].includes(routeName) ? routeName : 'workspace'
+  currentWorkspaceJobId.value = jobId
   await router.push({ name, params: { jobId } })
 }
 </script>
@@ -106,6 +121,7 @@ async function selectJob(jobId: string) {
       v-else
       :session="session"
       :page-title="pageTitle"
+      :current-workspace-job-id="currentWorkspaceJobId"
       :busy="status === 'submitting'"
       :content-blocked="!session"
       @logout="logout"

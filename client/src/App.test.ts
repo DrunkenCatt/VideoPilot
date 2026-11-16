@@ -135,6 +135,20 @@ describe('App session flow', () => {
     expect(wrapper.find('a[href="/answers/10000000-0000-0000-0000-000000000099"]').exists()).toBe(true)
   })
 
+  it('remembers the selected workspace job after visiting a non-job page', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, activeSession)))
+    const wrapper = await mountApp('/workspace/10000000-0000-0000-0000-000000000008')
+    await flushPromises()
+
+    await wrapper.get('[data-test="select-job"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('a[href="/library"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('a[href="/context/10000000-0000-0000-0000-000000000099"]').exists()).toBe(true)
+    expect(wrapper.find('a[href="/answers/10000000-0000-0000-0000-000000000099"]').exists()).toBe(true)
+  })
+
   it('restores a valid citation seek target from the context URL', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, activeSession)))
     const wrapper = await mountApp('/context/10000000-0000-0000-0000-000000000008?segmentId=40000000-0000-0000-0000-000000000008&fromMs=72000&toMs=89000')

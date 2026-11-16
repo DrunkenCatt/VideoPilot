@@ -1,6 +1,6 @@
 # VideoPilot 前端重构任务清单
 
-> 状态：F0-F8 的功能迁移已完成，Checkpoint A 已确认；Checkpoint B 的功能闭环通过，但产品视觉审阅未通过。现有业务页仍沿用旧页面骨架，必须先完成 F8R0-F8R8 的结构重建并再次确认，之后才能进入 F9。任务按薄切片顺序执行，前驱退出门未通过时不得进入后续任务。
+> 状态：F0-F8 的功能迁移和 F8R0-F8R8 的产品结构修正已完成，Checkpoint A 已确认；Checkpoint B 等待负责人再次进行产品视觉审阅，确认前不得进入 F9。任务按薄切片顺序执行，前驱退出门未通过时不得进入后续任务。
 
 ## F0：冻结页面、路由和视觉验收合同
 
@@ -312,7 +312,7 @@
 - [x] 上传 -> 解析 -> READY -> 播放 -> 上下文 -> 问答 -> 引用跳转端到端无回归。
 
 **验证：**
-- [x] `client\npm.cmd run check` 通过且覆盖率不低于 `CONSTRAINTS.md`（30 个测试文件、187 项测试；Statements 86.84%、Branches 80.50%、Functions 88.79%、Lines 91.73%；生产构建成功）。
+- [x] `client\npm.cmd run check` 通过且覆盖率不低于 `CONSTRAINTS.md`（30 个测试文件、202 项测试；Statements 87.05%、Branches 80.86%、Functions 89.17%、Lines 91.87%；生产构建成功）。
 - [x] 七个页面逐页保存桌面与移动截图；真实 API 数据成功渲染，Console warning/error 为 0，无未解释请求错误。
 - [ ] 负责人再次确认 Checkpoint B 后才允许进入 F9。
 

@@ -268,16 +268,7 @@ onBeforeUnmount(() => eventController?.abort())
       title="解析任务"
       description="查看持久化任务、阶段状态、失败原因与恢复动作。"
       status="MySQL 状态真源"
-    >
-      <template #actions>
-        <RouterLink
-          class="product-primary-action jobs-new-action"
-          to="/library"
-        >
-          + 新建分析
-        </RouterLink>
-      </template>
-    </ProductPageHeader>
+    />
 
     <p
       v-if="errorMessage"

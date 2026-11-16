@@ -46,7 +46,7 @@ const job: AnalysisJob = {
   },
 }
 
-async function mountPage(submit = vi.fn().mockResolvedValue(job)) {
+async function mountPage(submit = vi.fn().mockResolvedValue(job), path = '/library') {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -54,7 +54,7 @@ async function mountPage(submit = vi.fn().mockResolvedValue(job)) {
       { path: '/analysis/:jobId', name: 'analysis-detail', component: { template: '<div />' } },
     ],
   })
-  await router.push('/library')
+  await router.push(path)
   await router.isReady()
   const wrapper = mount(MediaLibraryPage, {
     props: { session, jobsApi: { submit } },
@@ -80,6 +80,14 @@ async function mountPage(submit = vi.fn().mockResolvedValue(job)) {
 }
 
 describe('MediaLibraryPage', () => {
+  it('opens the upload dialog from the shell toolbar action', async () => {
+    const { wrapper, router } = await mountPage(vi.fn().mockResolvedValue(job), '/library?action=upload')
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="upload-dialog"]')).toBeTruthy()
+    expect(router.currentRoute.value.query.action).toBeUndefined()
+  })
+
   it('keeps uploaded media in the page and only enables analysis after READY selection', async () => {
     const { wrapper } = await mountPage()
 

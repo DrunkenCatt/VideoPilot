@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import type { MediaAsset, Session } from '../../api/contracts'
 import { createJobsApi } from '../../api/jobs'
@@ -16,6 +16,7 @@ const props = defineProps<{
   jobsApi?: JobsApi
 }>()
 const emit = defineEmits<{ unauthenticated: [] }>()
+const route = useRoute()
 const router = useRouter()
 const jobsApi = props.jobsApi ?? createJobsApi()
 const uploadedMedia = ref<MediaAsset | null>(null)
@@ -30,6 +31,14 @@ let idempotencyKey: string | null = null
 watch([() => selectedMedia.value?.mediaId, goal], () => {
   idempotencyKey = null
 })
+
+watch(() => route.query.action, (action) => {
+  if (action !== 'upload') return
+  uploadOpen.value = true
+  const query = { ...route.query }
+  delete query.action
+  void router.replace({ query })
+}, { immediate: true })
 
 function messageFor(error: unknown): string {
   if (!(error instanceof ApiClientError)) return '无法连接本地服务，请确认后端已启动。'

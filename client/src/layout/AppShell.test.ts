@@ -13,14 +13,14 @@ const session: Session = {
   expiresAt: '2026-10-30T08:00:00Z',
 }
 
-async function mountShell(path = '/workspace') {
+async function mountShell(path = '/workspace', currentWorkspaceJobId?: string) {
   const router = createRouter({ history: createMemoryHistory(), routes: appRoutes })
   await router.push(path)
   await router.isReady()
   return mount(AppShell, {
-    props: { session, pageTitle: '视频工作台' },
+    props: { session, pageTitle: '视频工作台', currentWorkspaceJobId },
     slots: { default: '<main><h1>真实内容</h1></main>' },
-    global: { plugins: [router], stubs: { WorkspaceSwitcher: { template: '<button>切换视频</button>' } } },
+    global: { plugins: [router], stubs: { WorkspaceSwitcher: { template: '<button data-test="workspace-switcher-stub">切换视频</button>' } } },
   })
 }
 
@@ -61,6 +61,49 @@ describe('AppShell', () => {
 
     expect(wrapper.find(`a[href="/context/${jobId}"]`).exists()).toBe(true)
     expect(wrapper.find(`a[href="/answers/${jobId}"]`).exists()).toBe(true)
+  })
+
+  it('keeps the last workspace job when navigating through a collection page', async () => {
+    const jobId = '10000000-0000-0000-0000-000000000008'
+    const wrapper = await mountShell('/library', jobId)
+
+    expect(wrapper.find(`a[href="/workspace/${jobId}"]`).exists()).toBe(true)
+    expect(wrapper.find(`a[href="/context/${jobId}"]`).exists()).toBe(true)
+    expect(wrapper.find(`a[href="/answers/${jobId}"]`).exists()).toBe(true)
+  })
+
+  it.each([
+    ['/workspace/10000000-0000-0000-0000-000000000008', true],
+    ['/context/10000000-0000-0000-0000-000000000008', true],
+    ['/answers/10000000-0000-0000-0000-000000000008', true],
+    ['/library', false],
+    ['/analysis', false],
+    ['/evaluation', false],
+    ['/settings', false],
+  ])('only shows the video switcher on job-scoped routes: %s', async (path, expected) => {
+    const wrapper = await mountShell(path)
+
+    expect(wrapper.find('[data-test="workspace-switcher-stub"]').exists()).toBe(expected)
+  })
+
+  it.each([
+    ['/library', '上传视频', '/library?action=upload'],
+    ['/analysis', '新建分析', '/library'],
+    ['/evaluation', '打开最近视频', '/workspace/10000000-0000-0000-0000-000000000008'],
+    ['/settings', '打开最近视频', '/workspace/10000000-0000-0000-0000-000000000008'],
+  ])('renders the route-specific toolbar action for %s', async (path, label, href) => {
+    const wrapper = await mountShell(path, '10000000-0000-0000-0000-000000000008')
+    const action = wrapper.get('[data-test="toolbar-page-action"]')
+
+    expect(action.text()).toContain(label)
+    expect(action.attributes('href')).toBe(href)
+  })
+
+  it('keeps the toolbar breadcrumb without repeating the page title', async () => {
+    const wrapper = await mountShell('/library')
+
+    expect(wrapper.get('.app-toolbar p').text()).toBe('VideoPilot / 视频工作台')
+    expect(wrapper.find('.app-toolbar strong').exists()).toBe(false)
   })
 
   it('shows a login action without exposing account data for an empty session', async () => {

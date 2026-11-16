@@ -210,10 +210,19 @@
 
 | 检查 | 结果 |
 | --- | --- |
-| `client\npm.cmd run check` | 通过；30 个测试文件、187 项测试，类型检查、零 warning lint 和生产构建成功 |
-| 覆盖率 | Statements 86.84%、Branches 80.50%、Functions 88.79%、Lines 91.73%，满足 `CONSTRAINTS.md` |
+| `client\npm.cmd run check` | 通过；30 个测试文件、202 项测试，类型检查、零 warning lint 和生产构建成功 |
+| 覆盖率 | Statements 87.05%、Branches 80.86%、Functions 89.17%、Lines 91.87%，满足 `CONSTRAINTS.md` |
 | 回归敏感性 | 将选中答案临时变异为始终选择首项后，历史选择测试按预期失败；恢复实现后重新通过 |
 | 五轴审查 | correctness、readability、architecture、security、performance 均无阻断项 |
+
+### 产品复审修正：壳层顶栏与当前视频
+
+- 顶栏从暖黄色半透明背景改为 64px 白色产品壳层，只保留面包屑和页面动作；页面标题只在主体中出现一次。移动端动作保持单行，320px 无横向溢出。
+- 视频选择器只在视频工作台、视频上下文和证据问答三个 Job 作用域页面出现。媒体资料库显示“上传视频”，解析任务显示“新建分析”，评测中心和系统设置显示“打开最近视频”。
+- 根应用在当前登录会话内保存最后选择的 `jobId` 作为导航指针；三个 Job 页面仍以 URL 参数为事实来源。离开视频页面进入资料库、评测或设置后，工作台、上下文、问答和“打开最近视频”仍指向同一个 Job。
+- 真实浏览器从上下文切换到 Job `79259a8a-1cc8-4de0-82ed-1cb8b38a6e46` 后，问答导航和最终 URL 均保持该 ID；资料库顶栏动作实际打开上传弹框。
+- 修正后桌面与移动截图保存在 `C:/Users/zzm/.codex/visualizations/2026/11/16/videopilot-shell-fix/`；Console warning/error 为 0。
+- 反向将视频选择器改为全路由显示后，壳层测试有 8 项按预期失败；恢复正确条件后 18/18 通过。
 
 ### 边界与退出门
 

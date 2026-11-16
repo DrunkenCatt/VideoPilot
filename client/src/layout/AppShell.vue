@@ -6,12 +6,14 @@ import type { Session } from '../api/contracts'
 import WorkspaceSwitcher from '../features/workspace/WorkspaceSwitcher.vue'
 import { navigationItems } from '../router'
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   session: Session | null
   pageTitle: string
+  currentWorkspaceJobId?: string
   busy?: boolean
   contentBlocked?: boolean
 }>(), {
+  currentWorkspaceJobId: '',
   busy: false,
   contentBlocked: false,
 })
@@ -22,11 +24,29 @@ const route = useRoute()
 const drawerOpen = ref(false)
 const accountMenuOpen = ref(false)
 const activeName = computed(() => String(route.meta.navigationName ?? route.name ?? ''))
-const currentJobId = computed(() => typeof route.params.jobId === 'string' ? route.params.jobId : undefined)
+const jobScopedRoutes = new Set(['workspace', 'context', 'answers'])
+const routeJobId = computed(() => typeof route.params.jobId === 'string' ? route.params.jobId : '')
+const activeWorkspaceJobId = computed(() => routeJobId.value || props.currentWorkspaceJobId)
+const showsWorkspaceSwitcher = computed(() => jobScopedRoutes.has(String(route.name)))
+const recentWorkspaceTarget = computed(() => activeWorkspaceJobId.value
+  ? { name: 'workspace', params: { jobId: activeWorkspaceJobId.value } }
+  : { name: 'workspace' })
+const toolbarAction = computed(() => {
+  if (activeName.value === 'library') {
+    return { label: '+ 上传视频', to: { name: 'library', query: { action: 'upload' } } }
+  }
+  if (activeName.value === 'analysis') {
+    return { label: '+ 新建分析', to: { name: 'library' } }
+  }
+  if (activeName.value === 'evaluation' || activeName.value === 'settings') {
+    return { label: '打开最近视频', to: recentWorkspaceTarget.value }
+  }
+  return null
+})
 
 function navigationTarget(name: string) {
-  if (currentJobId.value && ['workspace', 'context', 'answers'].includes(name)) {
-    return { name, params: { jobId: currentJobId.value } }
+  if (activeWorkspaceJobId.value && jobScopedRoutes.has(name)) {
+    return { name, params: { jobId: activeWorkspaceJobId.value } }
   }
   return { name }
 }
@@ -165,13 +185,20 @@ watch(() => route.fullPath, () => {
         </button>
         <div>
           <p>VideoPilot / {{ pageTitle }}</p>
-          <strong>{{ pageTitle }}</strong>
         </div>
         <div class="app-toolbar__actions">
           <WorkspaceSwitcher
-            v-if="session"
+            v-if="session && showsWorkspaceSwitcher"
             @unauthenticated="$emit('unauthenticated')"
           />
+          <RouterLink
+            v-else-if="session && toolbarAction"
+            class="product-primary-action app-toolbar__page-action"
+            data-test="toolbar-page-action"
+            :to="toolbarAction.to"
+          >
+            {{ toolbarAction.label }}
+          </RouterLink>
           <span class="system-status"><i aria-hidden="true" />本地工作区</span>
         </div>
       </header>
