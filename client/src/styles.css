@@ -572,6 +572,27 @@ button:disabled { cursor: wait; opacity: 0.65; }
 .jobs-heading > p { margin: 0 0 0.45rem; color: var(--muted); line-height: 1.8; }
 .workspace-error { margin: 1.5rem 0 0; }
 
+.media-page {
+  width: min(100% - 3rem, 82rem);
+  margin: 0 auto;
+  padding: clamp(2.5rem, 5vw, 5rem) 0 6rem;
+}
+
+.media-page__heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(18rem, 0.7fr);
+  gap: 3rem;
+  align-items: end;
+  padding-bottom: 2.5rem;
+  border-bottom: 1px solid var(--ink);
+}
+
+.media-page__heading h1 { max-width: none; font-size: clamp(3rem, 6vw, 6.5rem); }
+.media-page__heading > p { margin: 0 0 0.45rem; color: var(--muted); line-height: 1.8; }
+.media-page__workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(19rem, 0.36fr); gap: 2rem; align-items: start; margin-top: 2.5rem; }
+.media-page__workspace .media-library { margin-top: 0; }
+.media-page__submission { position: sticky; top: 6rem; }
+
 .upload-panel {
   display: grid;
   grid-template-columns: minmax(15rem, 0.75fr) minmax(16rem, 0.7fr) minmax(18rem, 1fr);
@@ -932,7 +953,7 @@ button:disabled { cursor: wait; opacity: 0.65; }
 }
 
 @media (max-width: 800px) {
-  .brand-bar, .app-frame > footer, .login-shell, .workspace-shell, .jobs-shell, .app-alert { width: min(100% - 2rem, 42rem); }
+  .brand-bar, .app-frame > footer, .login-shell, .workspace-shell, .jobs-shell, .media-page, .app-alert { width: min(100% - 2rem, 42rem); }
   .environment, .app-frame > footer span:last-child, .principle-list { display: none; }
 
   .login-shell, .workspace-shell {
@@ -946,13 +967,14 @@ button:disabled { cursor: wait; opacity: 0.65; }
   .intro { margin-bottom: 0; }
   .login-panel, .readiness { padding: 1.5rem; box-shadow: 0.45rem 0.45rem 0 var(--paper-deep); }
 
-  .jobs-heading, .jobs-layout { grid-template-columns: 1fr; }
+  .jobs-heading, .media-page__heading, .jobs-layout, .media-page__workspace { grid-template-columns: 1fr; }
   .operations-heading { display: grid; }
   .operations-heading button { justify-self: start; }
   .operations-totals, .operations-columns { grid-template-columns: 1fr; }
   .jobs-heading { gap: 1.5rem; align-items: start; }
   .jobs-heading h1 { font-size: clamp(2.7rem, 15vw, 4.5rem); }
   .jobs-layout { gap: 3rem; }
+  .media-page__submission { position: static; }
   .job-detail__heading { display: grid; }
   .status-stamp { justify-self: start; }
   .job-facts { grid-template-columns: 1fr; }

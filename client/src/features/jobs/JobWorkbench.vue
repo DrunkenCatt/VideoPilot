@@ -6,8 +6,6 @@ import { ApiClientError } from '../../api/session'
 import { createJobsApi } from '../../api/jobs'
 import { createOperationsApi, type OperationsApi } from '../../api/operations'
 import { createMediaApi, type MediaApi } from '../../api/media'
-import MediaUploadPanel from '../media/MediaUploadPanel.vue'
-import MediaLibrary from '../media/MediaLibrary.vue'
 import JobDetail from './JobDetail.vue'
 import ReliabilityPanel from './ReliabilityPanel.vue'
 import { statusLabel } from './jobPresentation'
@@ -26,28 +24,19 @@ const operationsApi = props.operationsApi ?? createOperationsApi()
 const jobs = ref<AnalysisJob[]>([])
 const selected = ref<AnalysisJob | null>(null)
 const events = ref<JobEvent[]>([])
-const selectedMedia = ref<MediaAsset | null>(null)
 const jobMedia = ref<MediaAsset | null>(null)
 const jobMediaUnavailable = ref(false)
-const uploadedMedia = ref<MediaAsset | null>(null)
-const goal = ref('')
 const loading = ref(true)
-const submitting = ref(false)
 const canceling = ref(false)
 const replaying = ref(false)
 const errorMessage = ref('')
 const reliabilitySummary = ref<ReliabilitySummary | null>(null)
 const reliabilityLoading = ref(true)
 const reliabilityError = ref('')
-let idempotencyKey: string | null = null
 let eventController: globalThis.AbortController | null = null
 let mediaRevision = 0
 let openRevision = 0
 let mounted = false
-
-watch([() => selectedMedia.value?.mediaId, goal], () => {
-  idempotencyKey = null
-})
 
 function safeMessage(error: unknown): string {
   if (!(error instanceof ApiClientError)) return '无法连接本地服务，请确认后端已启动。'
@@ -127,41 +116,6 @@ async function loadJobMedia(job: AnalysisJob) {
       handleError(error)
     }
   }
-}
-
-async function submit() {
-  if (!selectedMedia.value) return
-  const media = selectedMedia.value
-  errorMessage.value = ''
-  submitting.value = true
-  idempotencyKey ??= globalThis.crypto.randomUUID()
-  try {
-    const job = await api.submit(
-      { mediaId: media.mediaId, goal: goal.value.trim(), mode: 'STANDARD' },
-      idempotencyKey,
-      props.session.csrfToken,
-    )
-    idempotencyKey = null
-    replaceJob(job)
-    jobMedia.value = media
-    jobMediaUnavailable.value = false
-    mediaRevision += 1
-    emit('select-job', job.jobId)
-    events.value = []
-    void follow(job)
-  } catch (error) {
-    handleError(error)
-  } finally {
-    submitting.value = false
-  }
-}
-
-function selectMedia(media: MediaAsset) {
-  selectedMedia.value = media
-}
-
-function uploaded(media: MediaAsset) {
-  uploadedMedia.value = media
 }
 
 async function cancel() {
@@ -289,69 +243,11 @@ onBeforeUnmount(() => eventController?.abort())
       @refresh="loadReliability"
     />
 
-    <MediaUploadPanel
-      :session="session"
-      @uploaded="uploaded"
-      @unauthenticated="emit('unauthenticated')"
-    />
-
-    <MediaLibrary
-      :session="session"
-      :uploaded="uploadedMedia"
-      :selected-id="selectedMedia?.mediaId"
-      @select="selectMedia"
-      @unauthenticated="emit('unauthenticated')"
-    />
-
     <div class="jobs-layout">
       <aside
         class="jobs-rail"
-        aria-label="提交和最近任务"
+        aria-label="最近任务"
       >
-        <section
-          class="submission-panel"
-          aria-labelledby="submission-title"
-        >
-          <p class="section-index">
-            READY MEDIA
-          </p>
-          <h2 id="submission-title">
-            提交分析
-          </h2>
-          <p>从媒体资源中选择一条已通过服务端校验的资源，再填写分析目标。</p>
-          <form
-            data-test="submit-job"
-            @submit.prevent="submit"
-          >
-            <div
-              class="selected-media"
-              data-test="selected-media"
-            >
-              <span>已选媒体</span>
-              <template v-if="selectedMedia">
-                <strong>{{ selectedMedia.originalFilename }}</strong>
-                <small>{{ selectedMedia.mediaId }}</small>
-              </template>
-              <p v-else>
-                请先在媒体资源中选择一条“可分析”资源。
-              </p>
-            </div>
-            <label for="analysis-goal"><span>分析目标</span><textarea
-              id="analysis-goal"
-              v-model="goal"
-              required
-              maxlength="4000"
-              rows="4"
-            /></label>
-            <button
-              type="submit"
-              :disabled="submitting || !selectedMedia"
-            >
-              <span>{{ submitting ? '正在提交…' : '创建分析任务' }}</span><span aria-hidden="true">→</span>
-            </button>
-          </form>
-        </section>
-
         <section
           class="recent-jobs"
           aria-labelledby="recent-jobs-title"

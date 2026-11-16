@@ -29,4 +29,12 @@ describe('application routes', () => {
       '系统设置',
     ])
   })
+
+  it('routes the media library to its own page instead of the transitional job workbench', () => {
+    const library = appRoutes.find((route) => route.name === 'library')
+    const analysis = appRoutes.find((route) => route.name === 'analysis')
+
+    expect(library?.component).toBeTruthy()
+    expect(library?.component).not.toBe(analysis?.component)
+  })
 })

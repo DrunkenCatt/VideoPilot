@@ -74,14 +74,8 @@ function mountWorkbench(mediaGet = vi.fn().mockResolvedValue(readyMedia), jobId?
     props: { session, jobId, mediaApi: { get: mediaGet }, operationsApi: { get: vi.fn().mockResolvedValue(reliabilitySummary) } },
     global: {
       stubs: {
-        MediaUploadPanel: { template: '<div data-test="upload-stub" />' },
         VideoContextTimeline: { template: '<div data-test="context-stub" />' },
         AnswerWorkspace: { template: '<div data-test="answer-stub" />' },
-        MediaLibrary: {
-          emits: ['select'],
-          setup: () => ({ readyMedia }),
-          template: '<button data-test="choose-ready" @click="$emit(\'select\', readyMedia)">选择媒体</button>',
-        },
       },
     },
   })
@@ -101,43 +95,6 @@ describe('JobWorkbench', () => {
 
     expect(wrapper.get('h1').text()).toContain('视频分析工作台')
     expect(wrapper.get('[data-test="jobs-empty"]').text()).toContain('还没有分析任务')
-    expect(wrapper.get('[data-test="selected-media"]').text()).toContain('请先在媒体资源中选择')
-  })
-
-  it('submits one intent and navigates with the self link returned by the server', async () => {
-    const readyEvent: JobEvent = {
-      jobId: job.jobId,
-      sequence: 6,
-      eventType: 'JOB_READY',
-      status: 'READY',
-      stage: 'INDEXING',
-      message: 'Analysis job ready.',
-      occurredAt: '2026-11-02T08:00:06Z',
-      terminal: true,
-    }
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse(200, emptyPage))
-      .mockResolvedValueOnce(jsonResponse(202, job))
-      .mockResolvedValueOnce(terminalStream(readyEvent))
-      .mockResolvedValueOnce(jsonResponse(200, { ...job, status: 'READY', currentStage: 'INDEXING', version: 6 }))
-    vi.stubGlobal('fetch', fetchMock)
-    const wrapper = mountWorkbench()
-    await flushPromises()
-
-    await wrapper.get('[data-test="choose-ready"]').trigger('click')
-    await wrapper.get('#analysis-goal').setValue(job.goal)
-    await wrapper.get('[data-test="submit-job"]').trigger('submit')
-    await flushPromises()
-
-    expect(wrapper.emitted('select-job')?.at(-1)).toEqual([job.jobId])
-    expect(window.location.hash).toBe('')
-    expect(wrapper.get('[data-test="job-status"]').text()).toContain('已就绪')
-    expect(wrapper.get('[data-test="job-events"]').text()).toContain('Analysis job ready.')
-    expect(wrapper.get('[data-test="job-media-facts"]').text()).toContain('lecture.mp4')
-    const submitHeaders = fetchMock.mock.calls[1]?.[1]?.headers as Record<string, string>
-    expect(submitHeaders['Idempotency-Key']).toBeTruthy()
-    expect(submitHeaders['X-CSRF-Token']).toBe(session.csrfToken)
   })
 
   it('cancels through the server link and announces the resulting state', async () => {

@@ -2,6 +2,7 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
 import EvaluationWorkbench from './features/evaluation/EvaluationWorkbench.vue'
 import JobWorkbench from './features/jobs/JobWorkbench.vue'
+import MediaLibraryPage from './features/media/MediaLibraryPage.vue'
 import SystemSettingsOverview from './features/settings/SystemSettingsOverview.vue'
 
 export type NavigationItem = {
@@ -32,7 +33,7 @@ export const appRoutes: RouteRecordRaw[] = [
   {
     path: '/library',
     name: 'library',
-    component: JobWorkbench,
+    component: MediaLibraryPage,
     meta: { ...videoRouteMeta, title: '媒体资料库' },
   },
   {
