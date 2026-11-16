@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import type { AnalysisJob, CitedEvidence, Session } from '../../api/contracts'
 import { createJobsApi } from '../../api/jobs'
 import { ApiClientError } from '../../api/session'
+import ProductPageHeader from '../../components/ProductPageHeader.vue'
 import { statusLabel } from '../jobs/jobPresentation'
 import AnswerWorkspace from './AnswerWorkspace.vue'
 
@@ -82,20 +83,17 @@ watch(() => props.jobId, (jobId) => void load(jobId), { immediate: true })
 </script>
 
 <template>
-  <main class="context-page answers-page">
-    <header class="context-page__heading">
-      <div>
-        <p class="kicker">
-          EVIDENCE ANSWERS
-        </p>
-        <h1>证据问答</h1>
-      </div>
-      <p>问题、历史与引用只属于 URL 中的当前视频任务。点击引用可回到同一视频的精确时间段。</p>
-    </header>
+  <main class="product-page answer-product-page">
+    <ProductPageHeader
+      eyebrow="EVIDENCE Q&A"
+      title="证据问答"
+      description="每条事实结论都绑定可核验的视频证据，证据不足时明确拒答。"
+      :status="job ? statusLabel(job.status) : '等待选择视频'"
+    />
 
     <p
       v-if="!jobId"
-      class="context-page__state"
+      class="workspace-product-state product-surface"
       data-test="answers-empty"
       role="status"
     >
@@ -103,34 +101,20 @@ watch(() => props.jobId, (jobId) => void load(jobId), { immediate: true })
     </p>
     <p
       v-else-if="loading"
-      class="context-page__state"
+      class="workspace-product-state product-surface"
       aria-live="polite"
     >
       正在读取当前任务…
     </p>
     <p
       v-else-if="errorMessage"
-      class="context-page__state context-page__state--error"
+      class="workspace-product-state workspace-product-state--error product-surface"
       role="alert"
     >
       {{ errorMessage }}
     </p>
 
     <template v-else-if="job">
-      <section
-        class="context-page__job"
-        aria-labelledby="current-answer-job"
-      >
-        <div>
-          <p class="section-index">
-            CURRENT JOB
-          </p>
-          <h2 id="current-answer-job">
-            {{ job.goal }}
-          </h2>
-        </div>
-        <span :data-status="job.status">{{ statusLabel(job.status) }}</span>
-      </section>
       <AnswerWorkspace
         :job="job"
         :csrf-token="session.csrfToken"

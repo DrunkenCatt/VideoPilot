@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
 import { createAgentsApi, type AgentsApi } from '../../api/agents'
 import { createAnswersApi, type AnswersApi } from '../../api/answers'
@@ -40,6 +40,7 @@ const emit = defineEmits<{
 }>()
 
 const answers = ref<AnswerResponse[]>([])
+const selectedAnswerId = ref<AnswerResponse['answerId'] | null>(null)
 const question = ref('')
 const loading = ref(false)
 const submitting = ref(false)
@@ -89,6 +90,9 @@ const degradationLabels: Record<DegradedChannel, string> = {
 }
 
 const modelActions = new Set(['PLAN', 'CRITIQUE', 'GENERATE_AND_VERIFY'])
+const selectedAnswer = computed(() => (
+  answers.value.find((candidate) => candidate.answerId === selectedAnswerId.value) ?? answers.value[0] ?? null
+))
 
 function modelCallCount(run: AgentRun): number {
   return run.steps.filter((step) => modelActions.has(step.action)).length
@@ -183,11 +187,19 @@ function publish(answer: AnswerResponse) {
   const existing = answers.value.findIndex((candidate) => candidate.answerId === answer.answerId)
   if (existing >= 0) answers.value.splice(existing, 1, answer)
   else answers.value.unshift(answer)
+  selectedAnswerId.value = answer.answerId
 }
 
 function withoutGoalAnswer(values: AnswerResponse[]): AnswerResponse[] {
   const goalAnswerId = goalAnalysis.value?.answer?.answerId
   return goalAnswerId ? values.filter((answer) => answer.answerId !== goalAnswerId) : values
+}
+
+function applyAnswers(values: AnswerResponse[]) {
+  answers.value = withoutGoalAnswer(values)
+  if (!answers.value.some((answer) => answer.answerId === selectedAnswerId.value)) {
+    selectedAnswerId.value = answers.value[0]?.answerId ?? null
+  }
 }
 
 function waitForPoll(): Promise<void> {
@@ -222,7 +234,7 @@ function forgetAgentRun() {
 
 async function restoreAnswers(currentRevision: number, jobId: AnalysisJob['jobId']) {
   const page = await props.api.list(jobId)
-  if (currentRevision === revision && props.job.jobId === jobId) answers.value = withoutGoalAnswer(page.data)
+  if (currentRevision === revision && props.job.jobId === jobId) applyAnswers(page.data)
 }
 
 async function restoreGoalAnalysis(currentRevision: number, jobId: AnalysisJob['jobId']) {
@@ -230,14 +242,14 @@ async function restoreGoalAnalysis(currentRevision: number, jobId: AnalysisJob['
   let current = await props.agentApi.getGoalAnalysisResult(jobId)
   if (currentRevision !== revision || props.job.jobId !== jobId) return
   goalAnalysis.value = current
-  answers.value = withoutGoalAnswer(answers.value)
+  applyAnswers(answers.value)
   while (!terminalGoalStates.has(current.state)) {
     await waitForGoalPoll()
     if (currentRevision !== revision || props.job.jobId !== jobId) return
     current = await props.agentApi.getGoalAnalysisResult(jobId)
     if (currentRevision !== revision || props.job.jobId !== jobId) return
     goalAnalysis.value = current
-    answers.value = withoutGoalAnswer(answers.value)
+    applyAnswers(answers.value)
   }
 }
 
@@ -267,6 +279,7 @@ async function load() {
   if (goalPollTimer !== null) globalThis.clearTimeout(goalPollTimer)
   goalPollTimer = null
   answers.value = []
+  selectedAnswerId.value = null
   agentRun.value = null
   goalAnalysis.value = null
   useAgent.value = false
@@ -279,7 +292,7 @@ async function load() {
   loading.value = true
   try {
     const page = await props.api.list(props.job.jobId)
-    if (currentRevision === revision) answers.value = page.data
+    if (currentRevision === revision) applyAnswers(page.data)
     await restoreGoalAnalysis(currentRevision, props.job.jobId)
     const runId = props.agentAvailable ? rememberedAgentRunId() : null
     if (runId && currentRevision === revision) {
@@ -351,18 +364,6 @@ onBeforeUnmount(() => {
     class="answer-workspace"
     aria-labelledby="answer-title"
   >
-    <header class="answer-heading">
-      <div>
-        <p class="section-index">
-          VERIFIED ANSWERS
-        </p>
-        <h3 id="answer-title">
-          证据问答
-        </h3>
-      </div>
-      <span>每条结论都必须绑定时间戳</span>
-    </header>
-
     <p
       v-if="job.status !== 'READY'"
       class="answer-state"
@@ -371,296 +372,329 @@ onBeforeUnmount(() => {
       视频索引尚未就绪，暂时不能提问。
     </p>
     <template v-else>
-      <section
-        v-if="goalAnalysisAvailable && goalAnalysis"
-        class="goal-analysis"
-        data-test="goal-analysis-result"
-        aria-labelledby="goal-analysis-title"
+      <div
+        class="answer-product-grid"
+        data-test="answer-product-grid"
       >
-        <header>
-          <div>
-            <p class="section-index">
-              ANALYSIS GOAL
-            </p>
-            <h4 id="goal-analysis-title">
-              目标分析结果
-            </h4>
-          </div>
-          <strong :data-status="goalAnalysis.state">{{ goalAnalysis.state }}</strong>
-        </header>
-        <p class="goal-analysis__goal">
-          {{ job.goal }}
-        </p>
-        <p
-          v-if="goalAnalysis.state === 'DISABLED'"
-          class="answer-state"
+        <aside
+          class="answer-history-panel product-surface"
+          data-test="answer-history-panel"
         >
-          未启用自动目标分析。
-        </p>
-        <p
-          v-else-if="goalAnalysis.state === 'PENDING'"
-          class="answer-state"
-        >
-          等待后台创建目标分析运行…
-        </p>
-        <p
-          v-else-if="goalAnalysis.state === 'REQUESTED' || goalAnalysis.state === 'RUNNING'"
-          class="answer-state"
-        >
-          正在基于视频证据生成目标分析结果…
-        </p>
-        <p
-          v-else-if="goalAnalysis.state === 'REFUSED'"
-          class="answer-refusal"
-          role="status"
-        >
-          {{ terminationLabels[goalAnalysis.run?.terminationReason ?? 'NO_SUFFICIENT_EVIDENCE'] ?? '目标分析未产生可发布答案。' }}
-        </p>
-        <p
-          v-else-if="goalAnalysis.state === 'FAILED'"
-          class="answer-state answer-state--error"
-          role="alert"
-        >
-          {{ terminationLabels[goalAnalysis.run?.terminationReason ?? 'FAILED'] ?? `目标分析失败：${goalAnalysis.run?.terminationReason ?? 'FAILED'}` }}
-        </p>
-        <template v-else-if="goalAnalysis.answer?.status === 'ANSWERED' || goalAnalysis.answer?.status === 'PARTIALLY_ANSWERED'">
-          <h5
-            v-if="goalAnalysis.answer.status === 'PARTIALLY_ANSWERED'"
-            class="answer-coverage-title"
-          >
-            视频可以确认
-          </h5>
-          <ol class="claim-list">
-            <li
-              v-for="(claim, claimIndex) in goalAnalysis.answer.claims"
-              :key="claim.claimId"
-            >
-              <div class="claim-copy">
-                <span>{{ String(claimIndex + 1).padStart(2, '0') }}</span>
-                <p>{{ claim.text }}</p>
-              </div>
-              <div class="citation-list">
-                <button
-                  v-for="evidence in claim.citations"
-                  :key="evidence.citationId"
-                  type="button"
-                  data-test="goal-cited-evidence"
-                  @click="emit('cite', evidence)"
-                >
-                  <span class="citation-meta">{{ evidence.channel }} · {{ formatTime(evidence.startMs) }}–{{ formatTime(evidence.endMs) }}</span>
-                  <q>{{ evidence.quote }}</q>
-                  <span class="citation-action">跳到视频证据 →</span>
-                </button>
-              </div>
-            </li>
-          </ol>
-          <section
-            v-if="goalAnalysis.answer.status === 'PARTIALLY_ANSWERED'"
-            class="answer-partial"
-            data-test="goal-answer-partial"
-          >
-            <strong>视频证据不足以确认</strong>
-            <ul>
-              <li
-                v-for="gap in goalAnalysis.answer.missingRequirements"
-                :key="gap"
-              >
-                {{ gap }}
-              </li>
-            </ul>
-          </section>
-        </template>
-      </section>
-
-      <form
-        class="answer-form"
-        data-test="ask-form"
-        @submit.prevent="submit"
-      >
-        <label for="answer-question">
-          <span>围绕当前视频提问</span>
-          <textarea
-            id="answer-question"
-            v-model="question"
-            data-test="answer-question"
-            rows="3"
-            maxlength="1000"
-            required
-            placeholder="例如：Redis 的 String 能保存哪些类型的数据？"
-          />
-        </label>
-        <div class="answer-form__actions">
-          <div>
-            <small>{{ question.trim().length }} / 1000</small>
-            <label
-              v-if="agentAvailable"
-              class="agent-toggle"
-            >
-              <input
-                v-model="useAgent"
-                data-test="agent-toggle"
-                type="checkbox"
-                :disabled="submitting"
-              >
-              实验 Agent（默认关闭）
-            </label>
-          </div>
-          <button
-            data-test="ask-submit"
-            type="submit"
-            :disabled="submitting || !question.trim()"
-          >
-            {{ submitting ? '正在核验…' : useAgent ? '启动 Agent' : '提交问题' }}
-          </button>
-        </div>
-      </form>
-
-      <section
-        v-if="agentRun"
-        class="agent-run"
-        data-test="agent-run"
-        aria-labelledby="agent-run-title"
-      >
-        <header>
-          <div>
-            <p class="section-index">
-              EXPERIMENTAL TRACE
-            </p>
-            <h4 id="agent-run-title">
-              Agent 运行回放
-            </h4>
-          </div>
-          <strong :data-status="agentRun.status">{{ agentRun.status }}</strong>
-        </header>
-        <p
-          v-if="agentRun.terminationReason"
-          class="agent-termination"
-          data-test="agent-termination"
-        >
-          {{ terminationLabels[agentRun.terminationReason] ?? `运行已终止：${agentRun.terminationReason}` }}
-        </p>
-        <dl
-          class="agent-budget"
-          data-test="agent-budget"
-        >
-          <div><dt>步骤</dt><dd>{{ agentRun.usage.steps }} / {{ agentRun.budget.maxSteps }}</dd></div>
-          <div><dt>答案尝试</dt><dd>{{ agentRun.usage.answerAttempts }} / {{ agentRun.budget.maxAnswerAttempts }}</dd></div>
-          <div><dt>Token</dt><dd>{{ agentRun.usage.inputTokens + agentRun.usage.outputTokens }}</dd></div>
-          <div><dt>模型调用</dt><dd>{{ modelCallCount(agentRun) }} 次</dd></div>
-          <div><dt>已知费用</dt><dd>¥{{ Number(agentRun.usage.knownCost).toFixed(4) }}</dd></div>
-          <div><dt>费用完整性</dt><dd>{{ agentRun.usage.unknownCostCalls > 0 ? `未知费用调用 ${agentRun.usage.unknownCostCalls} 次` : '无未知费用' }}</dd></div>
-        </dl>
-        <details
-          v-if="agentRun.steps.length || agentRun.toolCalls.length"
-          data-test="agent-trace"
-        >
-          <summary>查看去敏执行轨迹</summary>
-          <ol>
-            <li
-              v-for="(step, index) in agentRun.steps"
-              :key="step.stepNumber"
-            >
-              <strong>{{ String(step.stepNumber).padStart(2, '0') }} · {{ step.action }}</strong>
-              <span>{{ traceSummary(step, index) }}</span>
-            </li>
-          </ol>
+          <header>
+            <div>
+              <h2 id="answer-title">
+                问答记录
+              </h2><p>仅显示当前视频任务</p>
+            </div><span>{{ answers.length }} 条</span>
+          </header>
           <p
-            v-if="agentRun.toolCalls.some((call) => call.status === 'UNKNOWN')"
-            class="agent-unknown"
+            v-if="loading"
+            class="answer-state"
+            aria-live="polite"
           >
-            检测到 UNKNOWN 调用；系统不会自动重放该高成本步骤。
+            正在恢复已发布问答…
           </p>
-        </details>
-      </section>
+          <p
+            v-else-if="answers.length === 0"
+            class="answer-empty"
+            role="status"
+          >
+            还没有已发布问答。答案通过证据硬门后会出现在这里。
+          </p>
+          <ol v-else>
+            <li
+              v-for="(historyAnswer, answerIndex) in answers"
+              :key="historyAnswer.answerId"
+            >
+              <button
+                type="button"
+                :data-test="`answer-history-item-${historyAnswer.answerId}`"
+                :aria-current="selectedAnswer?.answerId === historyAnswer.answerId ? 'true' : undefined"
+                @click="selectedAnswerId = historyAnswer.answerId"
+              >
+                <span>Q{{ String(answers.length - answerIndex).padStart(2, '0') }}</span>
+                <span><strong>{{ historyAnswer.question }}</strong><small>{{ new Date(historyAnswer.createdAt).toLocaleString('zh-CN') }} · {{ historyAnswer.status }}</small></span>
+              </button>
+            </li>
+          </ol>
+        </aside>
 
-      <p
-        v-if="submitting"
-        class="answer-state answer-state--pending"
-        data-test="answer-pending"
-        role="status"
-        aria-live="polite"
-      >
-        正在检索并核验证据。完成前不会显示未经验证的模型文本。
-      </p>
-      <p
-        v-if="errorMessage"
-        class="answer-state answer-state--error"
-        data-test="answer-error"
-        role="alert"
-      >
-        {{ errorMessage }}
-      </p>
-      <p
-        v-if="loading"
-        class="answer-state"
-        aria-live="polite"
-      >
-        正在恢复已发布问答…
-      </p>
-      <p
-        v-else-if="answers.length === 0 && !submitting && !errorMessage"
-        class="answer-empty"
-        role="status"
-      >
-        还没有已发布问答。答案会在通过证据硬门后出现在这里。
-      </p>
-
-      <ol
-        v-else
-        class="answer-list"
-        aria-label="已发布问答"
-      >
-        <li
-          v-for="(answer, answerIndex) in answers"
-          :key="answer.answerId"
-          class="answer-card"
-          :data-status="answer.status"
+        <section
+          class="answer-reader-panel product-surface"
+          data-test="answer-reader-panel"
         >
-          <article>
-            <header class="answer-card__header">
-              <span>Q{{ String(answers.length - answerIndex).padStart(2, '0') }}</span>
+          <header class="answer-reader-panel__header">
+            <div><h2>带证据的回答</h2><p>引用可跳转至原视频时间段</p></div><span>引用已校验</span>
+          </header>
+          <section
+            v-if="goalAnalysisAvailable && goalAnalysis"
+            class="goal-analysis"
+            data-test="goal-analysis-result"
+            aria-labelledby="goal-analysis-title"
+          >
+            <header>
               <div>
-                <h4>{{ answer.question }}</h4>
-                <time :datetime="answer.createdAt">{{ new Date(answer.createdAt).toLocaleString('zh-CN') }}</time>
+                <p class="section-index">
+                  ANALYSIS GOAL
+                </p>
+                <h4 id="goal-analysis-title">
+                  目标分析结果
+                </h4>
+              </div>
+              <strong :data-status="goalAnalysis.state">{{ goalAnalysis.state }}</strong>
+            </header>
+            <p class="goal-analysis__goal">
+              {{ job.goal }}
+            </p>
+            <p
+              v-if="goalAnalysis.state === 'DISABLED'"
+              class="answer-state"
+            >
+              未启用自动目标分析。
+            </p>
+            <p
+              v-else-if="goalAnalysis.state === 'PENDING'"
+              class="answer-state"
+            >
+              等待后台创建目标分析运行…
+            </p>
+            <p
+              v-else-if="goalAnalysis.state === 'REQUESTED' || goalAnalysis.state === 'RUNNING'"
+              class="answer-state"
+            >
+              正在基于视频证据生成目标分析结果…
+            </p>
+            <p
+              v-else-if="goalAnalysis.state === 'REFUSED'"
+              class="answer-refusal"
+              role="status"
+            >
+              {{ terminationLabels[goalAnalysis.run?.terminationReason ?? 'NO_SUFFICIENT_EVIDENCE'] ?? '目标分析未产生可发布答案。' }}
+            </p>
+            <p
+              v-else-if="goalAnalysis.state === 'FAILED'"
+              class="answer-state answer-state--error"
+              role="alert"
+            >
+              {{ terminationLabels[goalAnalysis.run?.terminationReason ?? 'FAILED'] ?? `目标分析失败：${goalAnalysis.run?.terminationReason ?? 'FAILED'}` }}
+            </p>
+            <template v-else-if="goalAnalysis.answer?.status === 'ANSWERED' || goalAnalysis.answer?.status === 'PARTIALLY_ANSWERED'">
+              <h5
+                v-if="goalAnalysis.answer.status === 'PARTIALLY_ANSWERED'"
+                class="answer-coverage-title"
+              >
+                视频可以确认
+              </h5>
+              <ol class="claim-list">
+                <li
+                  v-for="(claim, claimIndex) in goalAnalysis.answer.claims"
+                  :key="claim.claimId"
+                >
+                  <div class="claim-copy">
+                    <span>{{ String(claimIndex + 1).padStart(2, '0') }}</span>
+                    <p>{{ claim.text }}</p>
+                  </div>
+                  <div class="citation-list">
+                    <button
+                      v-for="evidence in claim.citations"
+                      :key="evidence.citationId"
+                      type="button"
+                      data-test="goal-cited-evidence"
+                      @click="emit('cite', evidence)"
+                    >
+                      <span class="citation-meta">{{ evidence.channel }} · {{ formatTime(evidence.startMs) }}–{{ formatTime(evidence.endMs) }}</span>
+                      <q>{{ evidence.quote }}</q>
+                      <span class="citation-action">跳到视频证据 →</span>
+                    </button>
+                  </div>
+                </li>
+              </ol>
+              <section
+                v-if="goalAnalysis.answer.status === 'PARTIALLY_ANSWERED'"
+                class="answer-partial"
+                data-test="goal-answer-partial"
+              >
+                <strong>视频证据不足以确认</strong>
+                <ul>
+                  <li
+                    v-for="gap in goalAnalysis.answer.missingRequirements"
+                    :key="gap"
+                  >
+                    {{ gap }}
+                  </li>
+                </ul>
+              </section>
+            </template>
+          </section>
+
+          <form
+            class="answer-form"
+            data-test="ask-form"
+            @submit.prevent="submit"
+          >
+            <label for="answer-question">
+              <span>围绕当前视频提问</span>
+              <textarea
+                id="answer-question"
+                v-model="question"
+                data-test="answer-question"
+                rows="3"
+                maxlength="1000"
+                required
+                placeholder="例如：Redis 的 String 能保存哪些类型的数据？"
+              />
+            </label>
+            <div class="answer-form__actions">
+              <div>
+                <small>{{ question.trim().length }} / 1000</small>
+                <label
+                  v-if="agentAvailable"
+                  class="agent-toggle"
+                >
+                  <input
+                    v-model="useAgent"
+                    data-test="agent-toggle"
+                    type="checkbox"
+                    :disabled="submitting"
+                  >
+                  实验 Agent（默认关闭）
+                </label>
+              </div>
+              <button
+                data-test="ask-submit"
+                type="submit"
+                :disabled="submitting || !question.trim()"
+              >
+                {{ submitting ? '正在核验…' : useAgent ? '启动 Agent' : '提交问题' }}
+              </button>
+            </div>
+          </form>
+
+          <section
+            v-if="agentRun"
+            class="agent-run"
+            data-test="agent-run"
+            aria-labelledby="agent-run-title"
+          >
+            <header>
+              <div>
+                <p class="section-index">
+                  EXPERIMENTAL TRACE
+                </p>
+                <h4 id="agent-run-title">
+                  Agent 运行回放
+                </h4>
+              </div>
+              <strong :data-status="agentRun.status">{{ agentRun.status }}</strong>
+            </header>
+            <p
+              v-if="agentRun.terminationReason"
+              class="agent-termination"
+              data-test="agent-termination"
+            >
+              {{ terminationLabels[agentRun.terminationReason] ?? `运行已终止：${agentRun.terminationReason}` }}
+            </p>
+            <dl
+              class="agent-budget"
+              data-test="agent-budget"
+            >
+              <div><dt>步骤</dt><dd>{{ agentRun.usage.steps }} / {{ agentRun.budget.maxSteps }}</dd></div>
+              <div><dt>答案尝试</dt><dd>{{ agentRun.usage.answerAttempts }} / {{ agentRun.budget.maxAnswerAttempts }}</dd></div>
+              <div><dt>Token</dt><dd>{{ agentRun.usage.inputTokens + agentRun.usage.outputTokens }}</dd></div>
+              <div><dt>模型调用</dt><dd>{{ modelCallCount(agentRun) }} 次</dd></div>
+              <div><dt>已知费用</dt><dd>¥{{ Number(agentRun.usage.knownCost).toFixed(4) }}</dd></div>
+              <div><dt>费用完整性</dt><dd>{{ agentRun.usage.unknownCostCalls > 0 ? `未知费用调用 ${agentRun.usage.unknownCostCalls} 次` : '无未知费用' }}</dd></div>
+            </dl>
+            <details
+              v-if="agentRun.steps.length || agentRun.toolCalls.length"
+              data-test="agent-trace"
+            >
+              <summary>查看去敏执行轨迹</summary>
+              <ol>
+                <li
+                  v-for="(step, index) in agentRun.steps"
+                  :key="step.stepNumber"
+                >
+                  <strong>{{ String(step.stepNumber).padStart(2, '0') }} · {{ step.action }}</strong>
+                  <span>{{ traceSummary(step, index) }}</span>
+                </li>
+              </ol>
+              <p
+                v-if="agentRun.toolCalls.some((call) => call.status === 'UNKNOWN')"
+                class="agent-unknown"
+              >
+                检测到 UNKNOWN 调用；系统不会自动重放该高成本步骤。
+              </p>
+            </details>
+          </section>
+
+          <p
+            v-if="submitting"
+            class="answer-state answer-state--pending"
+            data-test="answer-pending"
+            role="status"
+            aria-live="polite"
+          >
+            正在检索并核验证据。完成前不会显示未经验证的模型文本。
+          </p>
+          <p
+            v-if="errorMessage"
+            class="answer-state answer-state--error"
+            data-test="answer-error"
+            role="alert"
+          >
+            {{ errorMessage }}
+          </p>
+          <article
+            v-if="selectedAnswer"
+            class="answer-reader-entry"
+            data-test="answer-reader-entry"
+            :data-status="selectedAnswer.status"
+          >
+            <header class="answer-card__header">
+              <span>{{ selectedAnswer.status }}</span>
+              <div>
+                <h4>{{ selectedAnswer.question }}</h4>
+                <time :datetime="selectedAnswer.createdAt">{{ new Date(selectedAnswer.createdAt).toLocaleString('zh-CN') }}</time>
               </div>
             </header>
 
             <div
-              v-if="answer.degradedChannels.length"
+              v-if="selectedAnswer.degradedChannels.length"
               class="answer-degraded"
               data-test="answer-degraded"
               role="status"
             >
               <strong>降级完成</strong>
               <span
-                v-for="channel in answer.degradedChannels"
+                v-for="channel in selectedAnswer.degradedChannels"
                 :key="channel"
               >{{ degradationLabels[channel] }}</span>
             </div>
 
             <p
-              v-if="answer.status === 'REFUSED'"
+              v-if="selectedAnswer.status === 'REFUSED'"
               class="answer-refusal"
               data-test="answer-refused"
               role="status"
             >
               <strong>明确拒答</strong>
-              <span>{{ refusalLabels[answer.refusalReason] }}</span>
+              <span>{{ refusalLabels[selectedAnswer.refusalReason] }}</span>
             </p>
 
             <h5
-              v-if="answer.status === 'PARTIALLY_ANSWERED'"
+              v-if="selectedAnswer.status === 'PARTIALLY_ANSWERED'"
               class="answer-coverage-title"
             >
               视频可以确认
             </h5>
 
             <ol
-              v-if="answer.status !== 'REFUSED'"
+              v-if="selectedAnswer.status !== 'REFUSED'"
               class="claim-list"
             >
               <li
-                v-for="(claim, claimIndex) in answer.claims"
+                v-for="(claim, claimIndex) in selectedAnswer.claims"
                 :key="claim.claimId"
                 data-test="answer-claim"
               >
@@ -685,14 +719,14 @@ onBeforeUnmount(() => {
             </ol>
 
             <section
-              v-if="answer.status === 'PARTIALLY_ANSWERED'"
+              v-if="selectedAnswer.status === 'PARTIALLY_ANSWERED'"
               class="answer-partial"
               data-test="answer-partial"
             >
               <strong>视频证据不足以确认</strong>
               <ul>
                 <li
-                  v-for="gap in answer.missingRequirements"
+                  v-for="gap in selectedAnswer.missingRequirements"
                   :key="gap"
                 >
                   {{ gap }}
@@ -700,8 +734,14 @@ onBeforeUnmount(() => {
               </ul>
             </section>
           </article>
-        </li>
-      </ol>
+          <p
+            v-else-if="!loading"
+            class="answer-reader-empty"
+          >
+            从这里开始围绕当前视频提问；已发布答案会保留在左侧记录中。
+          </p>
+        </section>
+      </div>
     </template>
   </section>
 </template>

@@ -70,6 +70,8 @@ describe('AnswerPage', () => {
     await flushPromises()
 
     expect(get).toHaveBeenCalledWith(`/api/v1/analysis-jobs/${job.jobId}`)
+    expect(wrapper.get('main').classes()).toContain('answer-product-page')
+    expect(wrapper.get('main').classes()).not.toContain('context-page')
     expect(wrapper.get('[data-test="answer-workspace-stub"]').text()).toContain(`${job.jobId} · READY · ${session.csrfToken}`)
   })
 
