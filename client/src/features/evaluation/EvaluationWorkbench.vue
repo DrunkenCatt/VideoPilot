@@ -11,6 +11,7 @@ import type {
   Session,
 } from '../../api/contracts'
 import { ApiClientError } from '../../api/session'
+import ProductPageHeader from '../../components/ProductPageHeader.vue'
 import {
   compareEvaluationReports,
   createEvaluationApi,
@@ -172,25 +173,24 @@ onMounted(async () => {
 
 <template>
   <main
-    class="evaluation-shell"
-    aria-labelledby="evaluation-title"
+    class="product-page evaluation-product-page"
   >
-    <header class="evaluation-heading">
-      <div>
-        <p class="section-index">
-          M5 / EVALUATION
-        </p><h1 id="evaluation-title">
-          评测工作台
-        </h1>
-      </div>
-      <button
-        class="text-button"
-        :disabled="busy"
-        @click="refresh"
-      >
-        {{ busy ? '读取中…' : '刷新' }}
-      </button>
-    </header>
+    <ProductPageHeader
+      eyebrow="EVALUATION"
+      title="评测中心"
+      description="以冻结数据集比较检索、回答质量、延迟与成本，并由 Java 硬门决定是否可晋级。"
+      :status="selected ? `${selected.dataVersion} · ${selected.status}` : '等待数据集'"
+    >
+      <template #actions>
+        <button
+          class="evaluation-refresh"
+          :disabled="busy"
+          @click="refresh"
+        >
+          {{ busy ? '读取中…' : '刷新数据' }}
+        </button>
+      </template>
+    </ProductPageHeader>
     <p
       v-if="error"
       role="alert"
@@ -230,6 +230,24 @@ onMounted(async () => {
         v-if="selected"
         class="evaluation-grid"
       >
+        <section
+          class="evaluation-metric-band"
+          data-test="evaluation-metric-band"
+          aria-label="当前评测关键指标"
+        >
+          <template v-if="report">
+            <div
+              v-for="metric in report.metrics"
+              :key="metric.name"
+              class="evaluation-metric"
+            >
+              <span>{{ metric.name }}</span><strong>{{ metric.value === null ? '—' : metric.value.toFixed(3) }}</strong><small>{{ metric.numerator }} / {{ metric.denominator }}</small>
+            </div>
+          </template>
+          <p v-else>
+            选择已完成运行后显示真实报告指标；运行中不会预填示例数字。
+          </p>
+        </section>
         <article class="evaluation-card dataset-card">
           <p class="section-index">
             DATASET
@@ -325,6 +343,7 @@ onMounted(async () => {
         <article
           v-if="report"
           class="evaluation-card report-card"
+          data-test="evaluation-report-panel"
         >
           <p class="section-index">
             REPORT
@@ -335,14 +354,6 @@ onMounted(async () => {
             >
               导出 JSON
             </button>
-          </div>
-          <div class="metric-grid">
-            <div
-              v-for="metric in report.metrics"
-              :key="metric.name"
-            >
-              <span>{{ metric.name }}</span><strong>{{ metric.value === null ? '—' : metric.value.toFixed(3) }}</strong><small>{{ metric.numerator }} / {{ metric.denominator }}</small>
-            </div>
           </div>
           <dl>
             <div>
@@ -381,10 +392,13 @@ onMounted(async () => {
             </dl>
           </details>
         </article>
-        <article class="evaluation-card compare-card">
+        <article
+          class="evaluation-card compare-card"
+          data-test="evaluation-gate-panel"
+        >
           <p class="section-index">
-            COMPARE
-          </p><h2>运行差值</h2>
+            RELEASE GATES
+          </p><h2>发布硬门</h2>
           <p v-if="completedBaselines.length === 0 || completedCandidates.length === 0">
             需要同一冻结数据集上的已完成基线与 Agent 候选。
           </p>
@@ -433,11 +447,59 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.evaluation-shell{width:min(1220px,calc(100% - 48px));margin:0 auto;padding:42px 0 64px}.evaluation-heading,.card-title{display:flex;align-items:center;justify-content:space-between;gap:20px}.evaluation-heading h1{margin:4px 0 0;font-size:clamp(2rem,5vw,4.6rem);letter-spacing:-.055em}.dataset-rail{display:flex;gap:10px;overflow-x:auto;padding:18px 0 22px}.dataset-rail button{min-width:210px;text-align:left;background:#f4f0e6;color:#1c2823;border:1px solid #c9c0ad;padding:14px}.dataset-rail button.active{background:#173d30;color:#fff;border-color:#173d30}.dataset-rail span,.dataset-rail small{display:block;margin-top:5px}.evaluation-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px}.evaluation-card{min-width:0;background:#f7f3e9;border:1px solid #cec5b2;padding:22px}.dataset-card,.runs-card,.trace-card{grid-column:span 5}.run-card,.report-card,.compare-card{grid-column:span 7}.evaluation-card h2{margin:4px 0 18px;font-size:1.45rem}.evaluation-card dl{margin:0}.evaluation-card dl div{display:grid;grid-template-columns:120px minmax(0,1fr);gap:12px;padding:8px 0;border-top:1px solid #ddd4c2}.evaluation-card dt{color:#647069}.evaluation-card dd{margin:0;overflow-wrap:anywhere}.mono{font-family:"IBM Plex Mono","Courier New",monospace;font-size:.75rem}.version-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.version-grid label,.compare-card label{display:grid;gap:5px}.version-grid input,.compare-card select{width:100%;box-sizing:border-box}.guard-note{min-height:2.8em;color:#625f55}.run-row{display:grid;width:100%;gap:5px;margin:8px 0;text-align:left}.run-row span:nth-child(2){font-variant-numeric:tabular-nums}.fingerprint{overflow-wrap:anywhere}details{border-top:1px solid #ddd4c2;padding:10px 0}summary{display:flex;justify-content:space-between;gap:12px;cursor:pointer}.metric-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.metric-grid div{display:grid;background:#e7eadf;padding:12px}.metric-grid strong{font-size:1.5rem}.comparison{margin-top:16px}.comparison p{display:flex;justify-content:space-between;border-top:1px solid #ddd4c2;padding:8px 0;margin:0}.evaluation-empty{border:1px dashed #928c7d;padding:36px}.section-index{font-family:"IBM Plex Mono","Courier New",monospace;letter-spacing:.12em;font-size:.72rem}
-.dataset-rail{min-width:0;max-width:100%}
-.comparison p>*{min-width:0;overflow-wrap:anywhere}.comparison strong{text-align:right}
-.candidate-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}.candidate-controls label{display:grid;gap:5px}.candidate-controls input,.candidate-controls select{width:100%;box-sizing:border-box}
-@media(max-width:900px){.evaluation-card{grid-column:1/-1}.evaluation-shell{width:min(100% - 32px,760px)}.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:480px){.evaluation-shell{width:calc(100% - 24px);padding-top:24px}.evaluation-heading{align-items:flex-start}.version-grid,.metric-grid{grid-template-columns:1fr}.evaluation-card{padding:16px}.evaluation-card dl div{grid-template-columns:1fr}.dataset-rail button{min-width:180px}}
-@media(max-width:480px){.candidate-controls{grid-template-columns:1fr}}
+.evaluation-product-page { min-width: 0; }
+.evaluation-refresh { min-height: 2.5rem; padding: 0 0.9rem; border: 1px solid var(--color-border); border-radius: var(--radius-control); color: var(--color-text); background: var(--color-surface); cursor: pointer; }
+.dataset-rail { display: flex; min-width: 0; max-width: 100%; gap: 0.5rem; overflow-x: auto; padding: 0 0 1rem; }
+.dataset-rail button { min-width: 12rem; padding: 0.75rem; border: 1px solid var(--color-border); border-radius: 0.65rem; color: var(--color-text); background: var(--color-surface); text-align: left; cursor: pointer; }
+.dataset-rail button.active { border-color: #b9cff1; background: var(--color-surface-selected); }
+.dataset-rail span, .dataset-rail small { display: block; margin-top: 0.25rem; color: var(--color-text-muted); font-size: 0.62rem; }
+.evaluation-grid { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(18rem, 0.9fr); grid-template-areas: 'metrics metrics' 'report gate' 'runs gate' 'trace dataset' 'trace setup'; gap: 1rem; }
+.evaluation-metric-band { display: grid; grid-area: metrics; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.75rem; }
+.evaluation-metric-band > p { grid-column: 1 / -1; margin: 0; padding: 1.25rem; border: 1px solid var(--color-border); border-radius: var(--radius-card); color: var(--color-text-muted); background: var(--color-surface); }
+.evaluation-metric { display: grid; gap: 0.4rem; padding: 1rem; border: 1px solid var(--color-border); border-radius: var(--radius-card); background: var(--color-surface); box-shadow: var(--shadow-card); }
+.evaluation-metric span, .evaluation-metric small { color: var(--color-text-muted); font-size: 0.62rem; }
+.evaluation-metric strong { font-size: 1.55rem; }
+.evaluation-card { min-width: 0; padding: 1rem; border: 1px solid var(--color-border); border-radius: var(--radius-card); background: var(--color-surface); box-shadow: var(--shadow-card); }
+.dataset-card { grid-area: dataset; }
+.run-card { grid-area: setup; }
+.runs-card { grid-area: runs; }
+.trace-card { grid-area: trace; }
+.report-card { grid-area: report; }
+.compare-card { grid-area: gate; align-self: start; }
+.evaluation-card h2 { margin: 0.2rem 0 1rem; font-size: 1rem; }
+.section-index { margin: 0; color: var(--color-primary); font-size: 0.58rem; font-weight: 750; letter-spacing: 0.08em; }
+.evaluation-card dl { margin: 0; }
+.evaluation-card dl div { display: grid; grid-template-columns: 7rem minmax(0, 1fr); gap: 0.75rem; padding: 0.55rem 0; border-top: 1px solid var(--color-border); }
+.evaluation-card dt { color: var(--color-text-muted); }
+.evaluation-card dd { margin: 0; overflow-wrap: anywhere; }
+.mono { font-family: 'IBM Plex Mono', 'Cascadia Mono', monospace; font-size: 0.68rem; }
+.card-title { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.version-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+.version-grid label, .compare-card label, .candidate-controls label { display: grid; gap: 0.25rem; color: var(--color-text-muted); font-size: 0.64rem; }
+.version-grid input, .compare-card select, .candidate-controls input, .candidate-controls select { width: 100%; min-height: 2.35rem; border: 1px solid var(--color-border); border-radius: 0.45rem; background: #fff; }
+.candidate-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; margin-top: 0.75rem; }
+.guard-note { min-height: 2.8em; color: var(--color-text-muted); font-size: 0.68rem; }
+.run-row { display: grid; width: 100%; grid-template-columns: minmax(0, 1fr) auto; gap: 0.35rem 1rem; margin: 0.5rem 0; padding: 0.75rem; border: 1px solid var(--color-border); border-radius: 0.6rem; color: var(--color-text); background: #fff; text-align: left; cursor: pointer; }
+.run-row small { grid-column: 1 / -1; color: var(--color-text-muted); }
+.fingerprint { overflow-wrap: anywhere; }
+details { padding: 0.65rem 0; border-top: 1px solid var(--color-border); }
+summary { display: flex; justify-content: space-between; gap: 0.75rem; cursor: pointer; }
+.comparison { margin-top: 1rem; }
+.comparison p { display: flex; justify-content: space-between; gap: 0.75rem; margin: 0; padding: 0.55rem 0; border-top: 1px solid var(--color-border); }
+.comparison p > * { min-width: 0; overflow-wrap: anywhere; }
+.comparison strong { text-align: right; }
+.evaluation-empty { padding: 2rem; border: 1px dashed var(--color-border-strong); border-radius: var(--radius-card); background: var(--color-surface); }
+.text-button { border: 0; color: var(--color-primary); background: transparent; cursor: pointer; }
+
+@media (max-width: 64rem) {
+  .evaluation-grid { grid-template-columns: 1fr; grid-template-areas: 'metrics' 'report' 'gate' 'runs' 'trace' 'dataset' 'setup'; }
+  .evaluation-metric-band { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 36rem) {
+  .evaluation-metric-band, .version-grid, .candidate-controls { grid-template-columns: 1fr; }
+  .evaluation-card { padding: 0.8rem; }
+  .evaluation-card dl div { grid-template-columns: 1fr; gap: 0.25rem; }
+  .dataset-rail button { min-width: 10rem; }
+}
 </style>
