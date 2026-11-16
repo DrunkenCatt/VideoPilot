@@ -62,4 +62,12 @@ describe('application routes', () => {
     expect(answers?.component).toBeTruthy()
     expect(answers?.component).not.toBe(workspace?.component)
   })
+
+  it('routes the video workspace to an aggregate page instead of the analysis task page', () => {
+    const workspace = appRoutes.find((route) => route.name === 'workspace')
+    const analysis = appRoutes.find((route) => route.name === 'analysis')
+
+    expect(workspace?.component).toBeTruthy()
+    expect(workspace?.component).not.toBe(analysis?.component)
+  })
 })

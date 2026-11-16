@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 import type { AnalysisJob, CitedEvidence, Session } from '../../api/contracts'
 import { createJobsApi } from '../../api/jobs'
@@ -17,11 +17,16 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ unauthenticated: [] }>()
 const jobsApi = props.jobsApi ?? createJobsApi()
+const route = useRoute()
 const router = useRouter()
 const job = ref<AnalysisJob | null>(null)
 const loading = ref(false)
 const errorMessage = ref('')
 let revision = 0
+const initialQuestion = computed(() => {
+  const value = typeof route.query.question === 'string' ? route.query.question : ''
+  return value.slice(0, 1_000)
+})
 
 function validJobId(value: string): boolean {
   return /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value)
@@ -129,6 +134,7 @@ watch(() => props.jobId, (jobId) => void load(jobId), { immediate: true })
       <AnswerWorkspace
         :job="job"
         :csrf-token="session.csrfToken"
+        :initial-question="initialQuestion"
         @cite="openCitation"
         @unauthenticated="emit('unauthenticated')"
       />

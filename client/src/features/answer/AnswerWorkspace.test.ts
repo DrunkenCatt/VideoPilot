@@ -119,6 +119,20 @@ afterEach(() => {
 })
 
 describe('AnswerWorkspace', () => {
+  it('prefills a question handed off by the current video workspace', async () => {
+    const wrapper = mount(AnswerWorkspace, {
+      props: {
+        job,
+        csrfToken: session.csrfToken,
+        initialQuestion: 'MySQL 为什么是真源？',
+        api: answersApi(),
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.get<HTMLTextAreaElement>('[data-test="answer-question"]').element.value).toBe('MySQL 为什么是真源？')
+  })
+
   it('keeps the experimental Agent entry absent by default', async () => {
     const wrapper = mount(AnswerWorkspace, { props: { job, csrfToken: session.csrfToken, api: answersApi() } })
     await flushPromises()

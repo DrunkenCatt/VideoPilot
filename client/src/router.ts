@@ -4,9 +4,9 @@ import AnswerPage from './features/answer/AnswerPage.vue'
 import VideoContextPage from './features/context/VideoContextPage.vue'
 import EvaluationWorkbench from './features/evaluation/EvaluationWorkbench.vue'
 import AnalysisJobsPage from './features/jobs/AnalysisJobsPage.vue'
-import JobWorkbench from './features/jobs/JobWorkbench.vue'
 import MediaLibraryPage from './features/media/MediaLibraryPage.vue'
 import SystemSettingsOverview from './features/settings/SystemSettingsOverview.vue'
+import VideoWorkspacePage from './features/workspace/VideoWorkspacePage.vue'
 
 export type NavigationItem = {
   name: string
@@ -30,7 +30,7 @@ export const appRoutes: RouteRecordRaw[] = [
   {
     path: '/workspace/:jobId?',
     name: 'workspace',
-    component: JobWorkbench,
+    component: VideoWorkspacePage,
     meta: { ...videoRouteMeta, title: '视频工作台' },
   },
   {

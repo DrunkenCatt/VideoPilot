@@ -617,6 +617,21 @@ button:disabled { cursor: wait; opacity: 0.65; }
 .context-page__job h2 { margin: 0; font-size: clamp(1.5rem, 3vw, 2.4rem); }
 .context-page__job > span { flex: none; padding: 0.45rem 0.65rem; border: 1px solid currentcolor; color: var(--accent-dark); font-size: 0.72rem; font-weight: 700; }
 
+.workspace-dashboard { display: grid; grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.34fr); gap: 1.25rem; align-items: start; }
+.workspace-dashboard > .context-workbench { margin: 0; }
+.workspace-dashboard__rail { display: grid; gap: 1rem; position: sticky; top: 6rem; }
+.workspace-dashboard__rail > section, .workspace-dashboard__rail > form { padding: 1rem; border: 1px solid var(--ink); background: #fffdf7; }
+.workspace-dashboard__rail h3 { margin: 0.35rem 0 0.65rem; font-family: 'Noto Serif SC', 'Songti SC', serif; font-size: 1.1rem; }
+.workspace-dashboard__rail p:not(.section-index) { margin: 0; color: var(--muted); font-size: 0.78rem; line-height: 1.65; }
+.workspace-dashboard__rail a { display: inline-block; margin-top: 0.85rem; color: var(--accent-dark); font-size: 0.75rem; font-weight: 700; }
+.workspace-dashboard__rail form { display: grid; gap: 0.75rem; }
+.workspace-dashboard__rail label { font-size: 0.78rem; font-weight: 700; }
+.workspace-dashboard__rail textarea { min-height: 7rem; resize: vertical; }
+.workspace-dashboard__rail button { min-height: 2.75rem; border: 1px solid var(--accent); color: #fff; background: var(--accent); cursor: pointer; }
+.workspace-dashboard__rail button:disabled { color: var(--muted); border-color: var(--line); background: var(--paper-deep); }
+.workspace-empty__actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1rem; }
+.workspace-empty__actions a { padding: 0.65rem 0.8rem; border: 1px solid var(--accent); color: var(--accent-dark); font-size: 0.75rem; font-weight: 700; }
+
 .upload-panel {
   display: grid;
   grid-template-columns: minmax(15rem, 0.75fr) minmax(16rem, 0.7fr) minmax(18rem, 1fr);
@@ -992,6 +1007,8 @@ button:disabled { cursor: wait; opacity: 0.65; }
   .login-panel, .readiness { padding: 1.5rem; box-shadow: 0.45rem 0.45rem 0 var(--paper-deep); }
 
   .jobs-heading, .media-page__heading, .context-page__heading, .jobs-layout, .media-page__workspace { grid-template-columns: 1fr; }
+  .workspace-dashboard { grid-template-columns: 1fr; }
+  .workspace-dashboard__rail { position: static; }
   .operations-heading { display: grid; }
   .operations-heading button { justify-self: start; }
   .operations-totals, .operations-columns { grid-template-columns: 1fr; }

@@ -24,6 +24,7 @@ const props = withDefaults(defineProps<{
   goalAnalysisAvailable?: boolean
   agentPollMs?: number
   timeoutMs?: number
+  initialQuestion?: string
 }>(), {
   api: () => createAnswersApi(),
   agentApi: () => createAgentsApi(),
@@ -31,6 +32,7 @@ const props = withDefaults(defineProps<{
   goalAnalysisAvailable: import.meta.env.VITE_GOAL_ANALYSIS_ENABLED === 'true',
   agentPollMs: 1_000,
   timeoutMs: 35_000,
+  initialQuestion: '',
 })
 const emit = defineEmits<{
   cite: [citation: CitedEvidence]
@@ -268,7 +270,7 @@ async function load() {
   agentRun.value = null
   goalAnalysis.value = null
   useAgent.value = false
-  question.value = ''
+  question.value = props.initialQuestion
   idempotencyKey = null
   errorMessage.value = ''
   submitting.value = false
@@ -332,6 +334,9 @@ async function submit() {
 
 watch(question, () => {
   if (!submitting.value) idempotencyKey = null
+})
+watch(() => props.initialQuestion, (value) => {
+  if (!submitting.value && !question.value.trim()) question.value = value
 })
 watch(() => [props.job.jobId, props.job.status] as const, load, { immediate: true })
 onBeforeUnmount(() => {

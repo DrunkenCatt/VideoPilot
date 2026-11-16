@@ -38,9 +38,9 @@ async function mountPage(get = vi.fn().mockResolvedValue(job), jobId?: string) {
       plugins: [router],
       stubs: {
         AnswerWorkspace: {
-          props: ['job', 'csrfToken'],
+          props: ['job', 'csrfToken', 'initialQuestion'],
           emits: ['cite', 'unauthenticated'],
-          template: '<section data-test="answer-workspace-stub">{{ job.jobId }} · {{ job.status }} · {{ csrfToken }}<button data-test="cite" @click="$emit(\'cite\', citation)">引用</button></section>',
+          template: '<section data-test="answer-workspace-stub">{{ job.jobId }} · {{ job.status }} · {{ csrfToken }} · {{ initialQuestion }}<button data-test="cite" @click="$emit(\'cite\', citation)">引用</button></section>',
           data: () => ({ citation }),
         },
       },
@@ -71,6 +71,15 @@ describe('AnswerPage', () => {
 
     expect(get).toHaveBeenCalledWith(`/api/v1/analysis-jobs/${job.jobId}`)
     expect(wrapper.get('[data-test="answer-workspace-stub"]').text()).toContain(`${job.jobId} · READY · ${session.csrfToken}`)
+  })
+
+  it('passes a workspace question from the URL without submitting it automatically', async () => {
+    const { wrapper, router } = await mountPage(vi.fn().mockResolvedValue(job), job.jobId)
+    await flushPromises()
+    await router.push(`/answers/${job.jobId}?question=${encodeURIComponent('MySQL 为什么是真源？')}`)
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="answer-workspace-stub"]').text()).toContain('MySQL 为什么是真源？')
   })
 
   it('ignores a late job response after the route switches', async () => {

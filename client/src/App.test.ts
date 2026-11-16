@@ -28,7 +28,7 @@ async function mountApp(path = '/workspace') {
     global: {
       plugins: [router],
       stubs: {
-        JobWorkbench: {
+        VideoWorkspacePage: {
           props: ['session'],
           emits: ['unauthenticated', 'select-job'],
           template: '<main><h1>假任务工作台</h1><button data-test="expire" @click="$emit(\'unauthenticated\')">模拟过期</button><button data-test="select-job" @click="$emit(\'select-job\', \'10000000-0000-0000-0000-000000000099\')">切换任务</button></main>',
