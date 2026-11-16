@@ -37,4 +37,13 @@ describe('application routes', () => {
     expect(library?.component).toBeTruthy()
     expect(library?.component).not.toBe(analysis?.component)
   })
+
+  it('routes analysis to a dedicated page without changing transitional workspace routes', () => {
+    const analysis = appRoutes.find((route) => route.name === 'analysis')
+    const detail = appRoutes.find((route) => route.name === 'analysis-detail')
+    const workspace = appRoutes.find((route) => route.name === 'workspace')
+
+    expect(analysis?.component).toBe(detail?.component)
+    expect(analysis?.component).not.toBe(workspace?.component)
+  })
 })

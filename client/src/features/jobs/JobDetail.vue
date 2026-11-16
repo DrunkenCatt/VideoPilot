@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 
-import type { AnalysisJob, CitedEvidence, JobEvent, MediaAsset } from '../../api/contracts'
-import AnswerWorkspace from '../answer/AnswerWorkspace.vue'
-import VideoContextTimeline from '../context/VideoContextTimeline.vue'
+import type { AnalysisJob, JobEvent, MediaAsset } from '../../api/contracts'
 import { mediaDurationLabel, mediaStatusLabel } from '../media/mediaPresentation'
 import { canCancel, stageLabel, statusLabel } from './jobPresentation'
 
@@ -13,12 +11,14 @@ const props = defineProps<{
   mediaUnavailable: boolean
   events: JobEvent[]
   actionBusy: boolean
-  csrfToken: string
 }>()
 
-defineEmits<{ cancel: [], replay: [reason: string], unauthenticated: [] }>()
+defineEmits<{
+  cancel: []
+  replay: [reason: string]
+  'open-workspace': [jobId: AnalysisJob['jobId']]
+}>()
 
-const seekTarget = ref<CitedEvidence | null>(null)
 const replayOpen = ref(false)
 const replayReason = ref('')
 
@@ -27,9 +27,6 @@ watch(() => props.job.jobId, () => {
   replayReason.value = ''
 })
 
-function cite(citation: CitedEvidence) {
-  seekTarget.value = { ...citation }
-}
 </script>
 
 <template>
@@ -67,6 +64,16 @@ function cite(citation: CitedEvidence) {
       <div><dt>执行尝试</dt><dd>{{ job.attempt + 1 }}</dd></div>
       <div><dt>持久化版本</dt><dd>v{{ job.version }}</dd></div>
     </dl>
+
+    <button
+      v-if="job.status === 'READY'"
+      class="text-button"
+      data-test="open-workspace"
+      type="button"
+      @click="$emit('open-workspace', job.jobId)"
+    >
+      打开视频工作台
+    </button>
 
     <dl
       v-if="media"
@@ -161,20 +168,6 @@ function cite(citation: CitedEvidence) {
       <strong>{{ job.failure.retryable ? '可重试故障' : '任务终止' }}</strong>
       <p>{{ job.failure.summary }}</p>
       <small>{{ job.failure.code }}</small>
-    </div>
-
-    <div class="evidence-answer-layout">
-      <VideoContextTimeline
-        :job="job"
-        :seek-target="seekTarget"
-        @unauthenticated="$emit('unauthenticated')"
-      />
-      <AnswerWorkspace
-        :job="job"
-        :csrf-token="csrfToken"
-        @cite="cite"
-        @unauthenticated="$emit('unauthenticated')"
-      />
     </div>
 
     <div class="timeline-heading">

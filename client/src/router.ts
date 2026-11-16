@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
 import EvaluationWorkbench from './features/evaluation/EvaluationWorkbench.vue'
+import AnalysisJobsPage from './features/jobs/AnalysisJobsPage.vue'
 import JobWorkbench from './features/jobs/JobWorkbench.vue'
 import MediaLibraryPage from './features/media/MediaLibraryPage.vue'
 import SystemSettingsOverview from './features/settings/SystemSettingsOverview.vue'
@@ -39,13 +40,13 @@ export const appRoutes: RouteRecordRaw[] = [
   {
     path: '/analysis',
     name: 'analysis',
-    component: JobWorkbench,
+    component: AnalysisJobsPage,
     meta: { ...videoRouteMeta, title: '解析任务' },
   },
   {
     path: '/analysis/:jobId',
     name: 'analysis-detail',
-    component: JobWorkbench,
+    component: AnalysisJobsPage,
     meta: { ...videoRouteMeta, title: '解析任务', navigationName: 'analysis' },
   },
   {
