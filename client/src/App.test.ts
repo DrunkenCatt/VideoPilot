@@ -119,9 +119,9 @@ describe('App session flow', () => {
     expect(wrapper.get('[aria-current="page"]').text()).toContain('评测中心')
   })
 
-  it('keeps the current page when the workbench selects another job', async () => {
+  it('keeps the workspace page when the workbench selects another job', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, activeSession)))
-    const wrapper = await mountApp('/context/10000000-0000-0000-0000-000000000008')
+    const wrapper = await mountApp('/workspace/10000000-0000-0000-0000-000000000008')
     await flushPromises()
 
     await wrapper.get('[data-test="select-job"]').trigger('click')

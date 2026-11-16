@@ -1,6 +1,6 @@
 # VideoPilot 前端重构任务清单
 
-> 状态：F0-F5 已完成，Checkpoint A 已确认，尚未进入 F6。任务按薄切片顺序执行，前驱退出门未通过时不得进入后续任务。
+> 状态：F0-F6 已完成，Checkpoint A 已确认，尚未进入 F7。任务按薄切片顺序执行，前驱退出门未通过时不得进入后续任务。
 
 ## F0：冻结页面、路由和视觉验收合同
 
@@ -114,14 +114,14 @@
 **描述：** 将 VideoContextTimeline 独立为当前 Job 的上下文阅读页，突出 ASR/OCR/关键帧和时间定位。
 
 **验收标准：**
-- [ ] 只读取路由中的当前 `jobId`，切换 Job 时取消/忽略旧响应。
-- [ ] 播放、Segment 点击定位、关键帧临时链接续期和降级通道状态保持可用。
-- [ ] Job 未 READY 时显示解析状态和正确下一步，不发起无效问答请求。
+- [x] 只读取路由中的当前 `jobId`，切换 Job 时取消/忽略旧响应。
+- [x] 播放、Segment 点击定位、关键帧临时链接续期和降级通道状态保持可用。
+- [x] Job 未 READY 时显示解析状态和正确下一步，不发起无效问答请求。
 
 **验证：**
-- [ ] VideoContextTimeline 测试覆盖切换竞态、续期和降级。
-- [ ] `client\npm.cmd run check` 通过。
-- [ ] 浏览器验证播放、时间跳转、签名链接续期和 320px 布局。
+- [x] VideoContextTimeline 测试覆盖切换竞态、续期和降级。
+- [x] `client\npm.cmd run check` 通过（27 个测试文件、162 项测试；生产构建成功）。
+- [x] 浏览器使用真实上传并进入 READY 后验证播放、Segment 时间定位、播放/关键帧短链访问、刷新恢复和 320px 布局；Console 无 error/warning。证据截图：`tmp/f6-context-desktop.png`、`tmp/f6-context-mobile.png`。
 
 **依赖：** F3
 **预计范围：** M，约 3-5 个生产文件及测试。

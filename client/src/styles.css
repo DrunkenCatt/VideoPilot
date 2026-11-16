@@ -593,6 +593,30 @@ button:disabled { cursor: wait; opacity: 0.65; }
 .media-page__workspace .media-library { margin-top: 0; }
 .media-page__submission { position: sticky; top: 6rem; }
 
+.context-page {
+  width: min(100% - 3rem, 82rem);
+  margin: 0 auto;
+  padding: clamp(2.5rem, 5vw, 5rem) 0 6rem;
+}
+
+.context-page__heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(18rem, 0.7fr);
+  gap: 3rem;
+  align-items: end;
+  padding-bottom: 2.5rem;
+  border-bottom: 1px solid var(--ink);
+}
+
+.context-page__heading h1 { max-width: none; font-size: clamp(3rem, 6vw, 6.5rem); }
+.context-page__heading > p { margin: 0 0 0.45rem; color: var(--muted); line-height: 1.8; }
+.context-page__state { margin: 2.5rem 0 0; padding: 1rem 1.25rem; border-left: 3px solid var(--accent); background: var(--paper-deep); }
+.context-page__state--error { color: var(--danger); border-color: var(--danger); }
+.context-page__job { display: flex; align-items: flex-start; justify-content: space-between; gap: 2rem; margin: 2.5rem 0 1rem; }
+.context-page__job .section-index { margin-bottom: 0.5rem; }
+.context-page__job h2 { margin: 0; font-size: clamp(1.5rem, 3vw, 2.4rem); }
+.context-page__job > span { flex: none; padding: 0.45rem 0.65rem; border: 1px solid currentcolor; color: var(--accent-dark); font-size: 0.72rem; font-weight: 700; }
+
 .upload-panel {
   display: grid;
   grid-template-columns: minmax(15rem, 0.75fr) minmax(16rem, 0.7fr) minmax(18rem, 1fr);
@@ -953,7 +977,7 @@ button:disabled { cursor: wait; opacity: 0.65; }
 }
 
 @media (max-width: 800px) {
-  .brand-bar, .app-frame > footer, .login-shell, .workspace-shell, .jobs-shell, .media-page, .app-alert { width: min(100% - 2rem, 42rem); }
+  .brand-bar, .app-frame > footer, .login-shell, .workspace-shell, .jobs-shell, .media-page, .context-page, .app-alert { width: min(100% - 2rem, 42rem); }
   .environment, .app-frame > footer span:last-child, .principle-list { display: none; }
 
   .login-shell, .workspace-shell {
@@ -967,7 +991,7 @@ button:disabled { cursor: wait; opacity: 0.65; }
   .intro { margin-bottom: 0; }
   .login-panel, .readiness { padding: 1.5rem; box-shadow: 0.45rem 0.45rem 0 var(--paper-deep); }
 
-  .jobs-heading, .media-page__heading, .jobs-layout, .media-page__workspace { grid-template-columns: 1fr; }
+  .jobs-heading, .media-page__heading, .context-page__heading, .jobs-layout, .media-page__workspace { grid-template-columns: 1fr; }
   .operations-heading { display: grid; }
   .operations-heading button { justify-self: start; }
   .operations-totals, .operations-columns { grid-template-columns: 1fr; }

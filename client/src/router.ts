@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
+import VideoContextPage from './features/context/VideoContextPage.vue'
 import EvaluationWorkbench from './features/evaluation/EvaluationWorkbench.vue'
 import AnalysisJobsPage from './features/jobs/AnalysisJobsPage.vue'
 import JobWorkbench from './features/jobs/JobWorkbench.vue'
@@ -52,7 +53,7 @@ export const appRoutes: RouteRecordRaw[] = [
   {
     path: '/context/:jobId?',
     name: 'context',
-    component: JobWorkbench,
+    component: VideoContextPage,
     meta: { ...videoRouteMeta, title: '视频上下文' },
   },
   {

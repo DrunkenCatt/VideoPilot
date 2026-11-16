@@ -46,4 +46,12 @@ describe('application routes', () => {
     expect(analysis?.component).toBe(detail?.component)
     expect(analysis?.component).not.toBe(workspace?.component)
   })
+
+  it('routes video context to its own current-job page', () => {
+    const context = appRoutes.find((route) => route.name === 'context')
+    const workspace = appRoutes.find((route) => route.name === 'workspace')
+
+    expect(context?.component).toBeTruthy()
+    expect(context?.component).not.toBe(workspace?.component)
+  })
 })
