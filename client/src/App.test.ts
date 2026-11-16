@@ -38,6 +38,10 @@ async function mountApp(path = '/workspace') {
           emits: ['unauthenticated'],
           template: '<main><h1>假评测工作台</h1></main>',
         },
+        VideoContextPage: {
+          props: ['jobId', 'seekTarget'],
+          template: '<main><h1>假视频上下文</h1><p data-test="context-route-props">{{ jobId }} · {{ seekTarget?.segmentId }} · {{ seekTarget?.startMs }} · {{ seekTarget?.endMs }}</p></main>',
+        },
         WorkspaceSwitcher: { template: '<button data-test="workspace-switcher-stub">切换视频</button>' },
       },
     },
@@ -129,6 +133,14 @@ describe('App session flow', () => {
 
     expect(wrapper.find('a[href="/context/10000000-0000-0000-0000-000000000099"]').exists()).toBe(true)
     expect(wrapper.find('a[href="/answers/10000000-0000-0000-0000-000000000099"]').exists()).toBe(true)
+  })
+
+  it('restores a valid citation seek target from the context URL', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, activeSession)))
+    const wrapper = await mountApp('/context/10000000-0000-0000-0000-000000000008?segmentId=40000000-0000-0000-0000-000000000008&fromMs=72000&toMs=89000')
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="context-route-props"]').text()).toContain('40000000-0000-0000-0000-000000000008 · 72000 · 89000')
   })
 
   it('uses a generic message and clears the password after invalid credentials', async () => {

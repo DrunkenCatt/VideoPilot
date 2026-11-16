@@ -54,4 +54,12 @@ describe('application routes', () => {
     expect(context?.component).toBeTruthy()
     expect(context?.component).not.toBe(workspace?.component)
   })
+
+  it('routes evidence answers to a dedicated current-job page', () => {
+    const answers = appRoutes.find((route) => route.name === 'answers')
+    const workspace = appRoutes.find((route) => route.name === 'workspace')
+
+    expect(answers?.component).toBeTruthy()
+    expect(answers?.component).not.toBe(workspace?.component)
+  })
 })

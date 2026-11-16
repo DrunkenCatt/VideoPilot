@@ -6,10 +6,12 @@ import { createContextApi, type ContextApi } from '../../api/context'
 import { ApiClientError } from '../../api/session'
 import { stageLabel } from '../jobs/jobPresentation'
 
+type CitationTarget = Pick<CitedEvidence, 'segmentId' | 'startMs' | 'endMs'>
+
 const props = withDefaults(defineProps<{
   job: AnalysisJob
   api?: ContextApi
-  seekTarget?: CitedEvidence | null
+  seekTarget?: CitationTarget | null
 }>(), {
   api: () => createContextApi(),
   seekTarget: null,
@@ -114,7 +116,7 @@ async function load() {
   }
 }
 
-async function seekToCitation(citation: CitedEvidence, expectedRevision = revision) {
+async function seekToCitation(citation: CitationTarget, expectedRevision = revision) {
   const loadedContext = context.value
   if (!loadedContext) return
   if (!segments.value.some((segment) => segment.segmentId === citation.segmentId)) {

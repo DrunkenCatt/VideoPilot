@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 
-import type { LoginRequest, Session } from './api/contracts'
+import type { CitedEvidence, LoginRequest, Session } from './api/contracts'
 import { ApiClientError, createSessionApi } from './api/session'
 import LoginDialog from './features/session/LoginDialog.vue'
 import AppShell from './layout/AppShell.vue'
@@ -15,6 +15,16 @@ const sessionEpoch = ref(0)
 const route = useRoute()
 const router = useRouter()
 const pageTitle = computed(() => String(route.meta.title ?? '视频工作台'))
+const citationSeekTarget = computed<Pick<CitedEvidence, 'segmentId' | 'startMs' | 'endMs'> | null>(() => {
+  if (route.name !== 'context') return null
+  const segmentId = typeof route.query.segmentId === 'string' ? route.query.segmentId : ''
+  const startMs = typeof route.query.fromMs === 'string' ? Number(route.query.fromMs) : Number.NaN
+  const endMs = typeof route.query.toMs === 'string' ? Number(route.query.toMs) : Number.NaN
+  if (!segmentId || !Number.isSafeInteger(startMs) || !Number.isSafeInteger(endMs) || startMs < 0 || endMs < startMs) {
+    return null
+  }
+  return { segmentId: segmentId as CitedEvidence['segmentId'], startMs, endMs }
+})
 
 function messageFor(error: unknown): string {
   if (!(error instanceof ApiClientError)) return '无法连接本地服务，请确认后端已启动。'
@@ -115,6 +125,7 @@ async function selectJob(jobId: string) {
             :key="`${session.userId}:${sessionEpoch}`"
             :session="session"
             :job-id="typeof route.params.jobId === 'string' ? route.params.jobId : undefined"
+            :seek-target="citationSeekTarget"
             @select-job="selectJob"
             @unauthenticated="sessionExpired"
           />

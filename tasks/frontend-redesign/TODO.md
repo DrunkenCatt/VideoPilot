@@ -1,6 +1,6 @@
 # VideoPilot 前端重构任务清单
 
-> 状态：F0-F6 已完成，Checkpoint A 已确认，尚未进入 F7。任务按薄切片顺序执行，前驱退出门未通过时不得进入后续任务。
+> 状态：F0-F7 已完成，Checkpoint A 已确认，尚未进入 F8。任务按薄切片顺序执行，前驱退出门未通过时不得进入后续任务。
 
 ## F0：冻结页面、路由和视觉验收合同
 
@@ -131,14 +131,14 @@
 **描述：** 将 AnswerWorkspace 独立成当前 Job 的问答页，不新增跨视频历史；保留证据门、部分回答、拒答和实验 Trace。
 
 **验收标准：**
-- [ ] 历史、提问和答案请求全部绑定当前 `jobId`。
-- [ ] ANSWERED、PARTIALLY_ANSWERED、REFUSED 与引用跳转展示完整。
-- [ ] Agent 实验入口继续受原 feature flag 控制，默认关闭且不展示敏感 Trace。
+- [x] 历史、提问和答案请求全部绑定当前 `jobId`。
+- [x] ANSWERED、PARTIALLY_ANSWERED、REFUSED 与引用跳转展示完整。
+- [x] Agent 实验入口继续受原 feature flag 控制，默认关闭且不展示敏感 Trace。
 
 **验证：**
-- [ ] AnswerWorkspace 现有测试迁移并通过。
-- [ ] `client\npm.cmd run check` 通过。
-- [ ] 浏览器验证普通回答、部分回答、拒答、刷新恢复和引用跳转。
+- [x] AnswerWorkspace 现有测试与当前 Job 页面编排测试通过。
+- [x] `client\npm.cmd run check` 通过（28 个测试文件、170 项测试；生产构建成功）。
+- [x] 浏览器基于真实 READY 视频验证 ANSWERED、PARTIALLY_ANSWERED、REFUSED、3 条历史刷新恢复和带时间范围的引用回跳；Agent 入口默认隐藏，320px 无横向溢出，Console 无 error/warning。证据截图：`tmp/f7-answers-desktop.png`、`tmp/f7-answers-mobile.png`。
 
 **依赖：** F3
 **预计范围：** M，约 3-5 个生产文件及测试。

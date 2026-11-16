@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 
-import type { AnalysisJob } from '../../api/contracts'
+import type { AnalysisJob, CitedEvidence } from '../../api/contracts'
 import { ApiClientError } from '../../api/session'
 import VideoContextPage from './VideoContextPage.vue'
 
@@ -20,8 +20,8 @@ function mountPage(get = vi.fn().mockResolvedValue(job), jobId?: string) {
       stubs: {
         VideoContextTimeline: {
           name: 'VideoContextTimeline',
-          props: ['job'],
-          template: '<section data-test="timeline">{{ job.jobId }} · {{ job.status }}</section>',
+          props: ['job', 'seekTarget'],
+          template: '<section data-test="timeline">{{ job.jobId }} · {{ job.status }} · {{ seekTarget?.segmentId }} · {{ seekTarget?.startMs }}</section>',
         },
       },
     },
@@ -50,6 +50,28 @@ describe('VideoContextPage', () => {
 
     expect(get).toHaveBeenCalledWith(job.links?.self ?? `/api/v1/analysis-jobs/${job.jobId}`)
     expect(wrapper.get('[data-test="timeline"]').text()).toContain(`${job.jobId} · READY`)
+  })
+
+  it('forwards a citation seek target to the current video timeline', async () => {
+    const seekTarget = {
+      segmentId: '40000000-0000-0000-0000-000000000008' as CitedEvidence['segmentId'],
+      startMs: 72_000,
+      endMs: 89_000,
+    }
+    const wrapper = mount(VideoContextPage, {
+      props: { jobId: job.jobId, jobsApi: { get: vi.fn().mockResolvedValue(job) }, seekTarget },
+      global: {
+        stubs: {
+          VideoContextTimeline: {
+            props: ['job', 'seekTarget'],
+            template: '<section data-test="timeline">{{ seekTarget.segmentId }} · {{ seekTarget.startMs }}</section>',
+          },
+        },
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="timeline"]').text()).toContain(`${seekTarget.segmentId} · 72000`)
   })
 
   it('ignores a late response after the route switches to another job', async () => {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 
-import type { AnalysisJob } from '../../api/contracts'
+import type { AnalysisJob, CitedEvidence } from '../../api/contracts'
 import { createJobsApi } from '../../api/jobs'
 import { ApiClientError } from '../../api/session'
 import { statusLabel } from '../jobs/jobPresentation'
@@ -12,6 +12,7 @@ type JobsApi = Pick<ReturnType<typeof createJobsApi>, 'get'>
 const props = defineProps<{
   jobId?: AnalysisJob['jobId'] | string
   jobsApi?: JobsApi
+  seekTarget?: Pick<CitedEvidence, 'segmentId' | 'startMs' | 'endMs'> | null
 }>()
 const emit = defineEmits<{ unauthenticated: [] }>()
 const jobsApi = props.jobsApi ?? createJobsApi()
@@ -112,6 +113,7 @@ watch(() => props.jobId, (jobId) => void load(jobId), { immediate: true })
       </section>
       <VideoContextTimeline
         :job="job"
+        :seek-target="seekTarget"
         @unauthenticated="emit('unauthenticated')"
       />
     </template>
