@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import type { MediaAsset, MediaId, Session } from '../../api/contracts'
 import { createMediaApi, type MediaApi } from '../../api/media'
@@ -26,9 +26,19 @@ const totalPages = ref(0)
 const totalItems = ref(0)
 const loading = ref(true)
 const errorMessage = ref('')
+const search = ref('')
+const statusFilter = ref('ALL')
 let pollTimer: ReturnType<typeof globalThis.setTimeout> | null = null
 let disposed = false
 let viewRevision = 0
+
+const filteredMedia = computed(() => {
+  const query = search.value.trim().toLocaleLowerCase()
+  return media.value.filter((asset) => (
+    (statusFilter.value === 'ALL' || asset.status === statusFilter.value)
+    && (!query || asset.originalFilename.toLocaleLowerCase().includes(query))
+  ))
+})
 
 function isPending(asset: MediaAsset) {
   return asset.status === 'UPLOADED' || asset.status === 'PROBING'
@@ -39,6 +49,15 @@ function bytes(value: number) {
   if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KiB`
   if (value < 1024 ** 3) return `${(value / 1024 ** 2).toFixed(1)} MiB`
   return `${(value / 1024 ** 3).toFixed(2)} GiB`
+}
+
+function updatedLabel(value: string) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value))
 }
 
 function handleError(error: unknown) {
@@ -123,24 +142,39 @@ onBeforeUnmount(() => {
 
 <template>
   <section
-    class="media-library"
+    class="media-product-library"
     :aria-label="`${session.username} 的媒体资源`"
   >
-    <div class="media-library__heading">
-      <div>
-        <p class="section-index">
-          MEDIA LIBRARY
-        </p>
-        <h2>媒体资源</h2>
-        <p>状态、时长和失败原因均来自服务端可信记录。</p>
-      </div>
+    <div class="media-product-toolbar">
+      <label>
+        <span class="sr-only">搜索媒体</span>
+        <input
+          v-model="search"
+          data-test="media-search"
+          type="search"
+          placeholder="搜索视频名称"
+        >
+      </label>
+      <label>
+        <span class="sr-only">媒体状态</span>
+        <select
+          v-model="statusFilter"
+          data-test="media-status-filter"
+        >
+          <option value="ALL">全部状态</option>
+          <option value="READY">可分析</option>
+          <option value="UPLOADED">等待校验</option>
+          <option value="PROBING">正在校验</option>
+          <option value="FAILED">校验失败</option>
+        </select>
+      </label>
       <button
-        class="text-button"
+        class="media-product-toolbar__refresh"
         data-test="refresh-media"
         :disabled="loading"
         @click="load()"
       >
-        刷新
+        {{ loading ? '正在刷新…' : '刷新列表' }}
       </button>
     </div>
 
@@ -165,48 +199,71 @@ onBeforeUnmount(() => {
     >
       还没有已上传的媒体。完成一次上传后，它会出现在这里。
     </p>
-    <ul
-      v-else
-      class="media-grid"
+    <p
+      v-else-if="filteredMedia.length === 0"
+      class="empty-copy product-surface"
+      data-test="media-filter-empty"
     >
-      <li
-        v-for="asset in media"
-        :key="asset.mediaId"
-        :data-status="asset.status"
+      没有匹配当前筛选条件的媒体。
+    </p>
+    <template v-else>
+      <ul
+        class="media-feature-grid"
+        data-test="media-feature-grid"
       >
-        <div class="media-card__topline">
-          <span class="media-status">{{ mediaStatusLabel(asset.status) }}</span>
-          <span>{{ bytes(asset.contentLength) }}</span>
+        <li
+          v-for="(asset, index) in filteredMedia.slice(0, 3)"
+          :key="asset.mediaId"
+          class="product-surface"
+          :data-status="asset.status"
+        >
+          <div
+            class="media-feature-card__cover"
+            :data-cover="index % 3"
+          >
+            <span>{{ mediaDurationLabel(asset.durationMs) }}</span>
+          </div>
+          <div class="media-feature-card__body">
+            <div><h2>{{ asset.originalFilename }}</h2><span>{{ mediaStatusLabel(asset.status) }}</span></div>
+            <p v-if="asset.failure">
+              {{ asset.failure.summary }}
+            </p>
+            <p v-else>
+              {{ bytes(asset.contentLength) }} · 更新于 {{ updatedLabel(asset.updatedAt) }}
+            </p>
+            <button
+              v-if="asset.status === 'READY'"
+              data-test="select-media"
+              :aria-pressed="selectedId === asset.mediaId"
+              @click="emit('select', asset)"
+            >
+              {{ selectedId === asset.mediaId ? '已选用于分析' : '创建解析任务' }}
+            </button>
+          </div>
+        </li>
+      </ul>
+
+      <section class="media-recent product-surface">
+        <header><h2>最近上传</h2><span>当前页 {{ filteredMedia.length }} 项</span></header>
+        <div class="media-recent__scroll">
+          <table data-test="media-table">
+            <thead><tr><th>媒体</th><th>状态</th><th>大小</th><th>可信时长</th><th>最近更新</th></tr></thead>
+            <tbody>
+              <tr
+                v-for="asset in filteredMedia"
+                :key="asset.mediaId"
+              >
+                <td><strong>{{ asset.originalFilename }}</strong><small>{{ asset.mediaId }}</small></td>
+                <td><span :data-status="asset.status">{{ mediaStatusLabel(asset.status) }}</span></td>
+                <td>{{ bytes(asset.contentLength) }}</td>
+                <td>{{ mediaDurationLabel(asset.durationMs) }}</td>
+                <td>{{ updatedLabel(asset.updatedAt) }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-        <h3>{{ asset.originalFilename }}</h3>
-        <dl>
-          <div><dt>可信时长</dt><dd>{{ mediaDurationLabel(asset.durationMs) }}</dd></div>
-          <div><dt>媒体 ID</dt><dd>{{ asset.mediaId }}</dd></div>
-        </dl>
-        <p
-          v-if="asset.failure"
-          class="media-failure"
-          role="status"
-        >
-          {{ asset.failure.summary }}
-        </p>
-        <p
-          v-else-if="isPending(asset)"
-          class="media-pending"
-          aria-live="polite"
-        >
-          页面会有限频率读取当前可见资源，直到校验结束。
-        </p>
-        <button
-          v-if="asset.status === 'READY'"
-          data-test="select-media"
-          :aria-pressed="selectedId === asset.mediaId"
-          @click="emit('select', asset)"
-        >
-          {{ selectedId === asset.mediaId ? '已选用于分析' : '选择用于分析' }}
-        </button>
-      </li>
-    </ul>
+      </section>
+    </template>
 
     <nav
       v-if="totalPages > 1"

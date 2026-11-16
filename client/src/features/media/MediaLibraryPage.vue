@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import type { MediaAsset, Session } from '../../api/contracts'
 import { createJobsApi } from '../../api/jobs'
 import { ApiClientError } from '../../api/session'
+import ProductPageHeader from '../../components/ProductPageHeader.vue'
 import MediaLibrary from './MediaLibrary.vue'
 import MediaUploadPanel from './MediaUploadPanel.vue'
 
@@ -22,6 +23,8 @@ const selectedMedia = ref<MediaAsset | null>(null)
 const goal = ref('')
 const submitting = ref(false)
 const errorMessage = ref('')
+const uploadOpen = ref(false)
+const analysisOpen = ref(false)
 let idempotencyKey: string | null = null
 
 watch([() => selectedMedia.value?.mediaId, goal], () => {
@@ -38,11 +41,13 @@ function messageFor(error: unknown): string {
 
 function uploaded(media: MediaAsset) {
   uploadedMedia.value = media
+  uploadOpen.value = false
 }
 
 function selectMedia(media: MediaAsset) {
   selectedMedia.value = media
   errorMessage.value = ''
+  analysisOpen.value = true
 }
 
 async function submit() {
@@ -71,42 +76,94 @@ async function submit() {
 </script>
 
 <template>
-  <main class="media-page">
-    <header class="media-page__heading">
-      <div>
-        <p class="kicker">
-          MEDIA LIBRARY
-        </p>
-        <h1>媒体资料库</h1>
-      </div>
-      <p>上传本地教学视频，等待服务端完成可信校验，再为已就绪媒体创建独立解析任务。</p>
-    </header>
+  <main class="product-page media-product-page">
+    <ProductPageHeader
+      eyebrow="MEDIA LIBRARY"
+      title="媒体资料库"
+      description="管理本地上传的视频、媒体状态和可复用的分析入口。"
+      status="媒体状态来自服务端"
+    >
+      <template #actions>
+        <button
+          class="product-primary-action"
+          data-test="open-upload"
+          type="button"
+          @click="uploadOpen = true"
+        >
+          + 上传视频
+        </button>
+      </template>
+    </ProductPageHeader>
 
-    <MediaUploadPanel
+    <MediaLibrary
       :session="session"
-      @uploaded="uploaded"
+      :uploaded="uploadedMedia"
+      :selected-id="selectedMedia?.mediaId"
+      @select="selectMedia"
       @unauthenticated="emit('unauthenticated')"
     />
 
-    <div class="media-page__workspace">
-      <MediaLibrary
-        :session="session"
-        :uploaded="uploadedMedia"
-        :selected-id="selectedMedia?.mediaId"
-        @select="selectMedia"
-        @unauthenticated="emit('unauthenticated')"
-      />
+    <div
+      v-if="uploadOpen"
+      class="product-modal-backdrop"
+      data-test="upload-dialog"
+      role="presentation"
+      @click.self="uploadOpen = false"
+    >
+      <section
+        class="product-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="upload-dialog-title"
+      >
+        <header>
+          <div>
+            <p>UPLOAD VIDEO</p><h2 id="upload-dialog-title">
+              上传本地视频
+            </h2>
+          </div><button
+            type="button"
+            aria-label="关闭上传"
+            @click="uploadOpen = false"
+          >
+            ×
+          </button>
+        </header>
+        <MediaUploadPanel
+          :session="session"
+          compact
+          @uploaded="uploaded"
+          @unauthenticated="emit('unauthenticated')"
+        />
+      </section>
+    </div>
 
+    <div
+      v-if="analysisOpen"
+      class="product-modal-backdrop"
+      data-test="analysis-dialog"
+      role="presentation"
+      @click.self="analysisOpen = false"
+    >
       <aside
-        class="submission-panel media-page__submission"
+        class="product-modal analysis-setup-dialog"
+        role="dialog"
+        aria-modal="true"
         aria-labelledby="submission-title"
       >
-        <p class="section-index">
-          READY MEDIA
-        </p>
-        <h2 id="submission-title">
-          创建解析任务
-        </h2>
+        <header>
+          <div>
+            <p>ANALYSIS SETUP</p><h2 id="submission-title">
+              创建解析任务
+            </h2>
+          </div><button
+            type="button"
+            aria-label="关闭任务创建"
+            @click="analysisOpen = false"
+          >
+            ×
+          </button>
+        </header>
         <p>只有通过服务端校验的媒体可以创建任务。媒体就绪不代表已经可以问答。</p>
         <form
           data-test="submit-job"

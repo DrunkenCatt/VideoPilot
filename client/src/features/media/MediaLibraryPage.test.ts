@@ -83,11 +83,14 @@ describe('MediaLibraryPage', () => {
   it('keeps uploaded media in the page and only enables analysis after READY selection', async () => {
     const { wrapper } = await mountPage()
 
-    expect(wrapper.get('[data-test="create-job"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="upload-dialog"]').exists()).toBe(false)
+    await wrapper.get('[data-test="open-upload"]').trigger('click')
+    expect(wrapper.get('[data-test="upload-dialog"]')).toBeTruthy()
     await wrapper.get('[data-test="finish-upload"]').trigger('click')
     expect(wrapper.getComponent({ name: 'MediaLibrary' }).props('uploaded')).toEqual(readyMedia)
 
     await wrapper.get('[data-test="choose-ready"]').trigger('click')
+    expect(wrapper.get('[data-test="analysis-dialog"]')).toBeTruthy()
     expect(wrapper.get('[data-test="selected-media"]').text()).toContain('lecture.mp4')
     expect(wrapper.get('[data-test="create-job"]').attributes('disabled')).toBeUndefined()
   })
