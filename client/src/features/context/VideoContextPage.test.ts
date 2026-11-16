@@ -49,6 +49,8 @@ describe('VideoContextPage', () => {
     await flushPromises()
 
     expect(get).toHaveBeenCalledWith(job.links?.self ?? `/api/v1/analysis-jobs/${job.jobId}`)
+    expect(wrapper.get('main').classes()).toContain('context-product-page')
+    expect(wrapper.get('main').classes()).not.toContain('context-page')
     expect(wrapper.get('[data-test="timeline"]').text()).toContain(`${job.jobId} · READY`)
   })
 

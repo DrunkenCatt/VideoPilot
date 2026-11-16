@@ -4,6 +4,7 @@ import { ref, watch } from 'vue'
 import type { AnalysisJob, CitedEvidence } from '../../api/contracts'
 import { createJobsApi } from '../../api/jobs'
 import { ApiClientError } from '../../api/session'
+import ProductPageHeader from '../../components/ProductPageHeader.vue'
 import { statusLabel } from '../jobs/jobPresentation'
 import VideoContextTimeline from './VideoContextTimeline.vue'
 
@@ -62,20 +63,17 @@ watch(() => props.jobId, (jobId) => void load(jobId), { immediate: true })
 </script>
 
 <template>
-  <main class="context-page">
-    <header class="context-page__heading">
-      <div>
-        <p class="kicker">
-          VIDEO CONTEXT
-        </p>
-        <h1>视频上下文</h1>
-      </div>
-      <p>按时间阅读 ASR、OCR 与关键帧事实。所有片段都绑定当前 URL 中的解析任务。</p>
-    </header>
+  <main class="product-page context-product-page">
+    <ProductPageHeader
+      eyebrow="VIDEO CONTEXT"
+      title="视频上下文"
+      description="检查 ASR、OCR 与关键帧在同一时间轴上的对齐结果。"
+      :status="job ? statusLabel(job.status) : '等待选择视频'"
+    />
 
     <p
       v-if="!jobId"
-      class="context-page__state"
+      class="workspace-product-state product-surface"
       data-test="context-empty"
       role="status"
     >
@@ -83,34 +81,20 @@ watch(() => props.jobId, (jobId) => void load(jobId), { immediate: true })
     </p>
     <p
       v-else-if="loading"
-      class="context-page__state"
+      class="workspace-product-state product-surface"
       aria-live="polite"
     >
       正在读取当前任务…
     </p>
     <p
       v-else-if="errorMessage"
-      class="context-page__state context-page__state--error"
+      class="workspace-product-state workspace-product-state--error product-surface"
       role="alert"
     >
       {{ errorMessage }}
     </p>
 
     <template v-else-if="job">
-      <section
-        class="context-page__job"
-        aria-labelledby="current-context-job"
-      >
-        <div>
-          <p class="section-index">
-            CURRENT JOB
-          </p>
-          <h2 id="current-context-job">
-            {{ job.goal }}
-          </h2>
-        </div>
-        <span :data-status="job.status">{{ statusLabel(job.status) }}</span>
-      </section>
       <VideoContextTimeline
         :job="job"
         :seek-target="seekTarget"

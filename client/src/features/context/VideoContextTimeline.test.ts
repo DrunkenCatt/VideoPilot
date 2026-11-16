@@ -81,10 +81,42 @@ describe('VideoContextTimeline', () => {
     await flushPromises()
 
     expect(wrapper.get('[data-test="context-player"]').attributes('src')).toBe(playback.url)
+    expect(wrapper.get('[data-test="context-product-grid"]')).toBeTruthy()
+    expect(wrapper.get('[data-test="context-summary-panel"]').text()).toContain('VideoSegment')
+    expect(wrapper.get('[data-test="current-segment-panel"]').text()).toContain('欢迎来到第一节')
     expect(wrapper.get('[data-test="channel-warning"]').text()).toContain('OCR 已降级')
     expect(wrapper.get('[data-test="asr-layer"]').text()).toContain('欢迎来到第一节')
     expect(wrapper.get('[data-test="ocr-layer"]').text()).toContain('第一章')
     expect(wrapper.get('[data-test="keyframe-layer"]').text()).toContain('00:15')
+  })
+
+  it('keeps an ASR-degraded visual-only segment explicit instead of inventing transcript evidence', async () => {
+    const visualOnly = {
+      ...segments[0]!,
+      asrText: null,
+      ocr: [{ text: '缓存命中率', confidence: 0.88 }],
+      keyframes: [],
+    }
+    const degradedContext = {
+      ...context,
+      asrState: 'DEGRADED' as const,
+      ocrState: 'AVAILABLE' as const,
+      segmentCount: 1,
+    }
+    const api = contextApi({
+      get: vi.fn().mockResolvedValue(degradedContext),
+      segments: vi.fn().mockResolvedValue({ data: [visualOnly], nextCursor: null, hasMore: false }),
+    })
+    const wrapper = mount(VideoContextTimeline, { props: { job, api } })
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="segment-0"]').text()).toContain('仅包含视觉证据的片段')
+    expect(wrapper.get('[data-test="segment-0"]').text()).toContain('ASR 缺失')
+    expect(wrapper.get('[data-test="context-summary-panel"]').text()).toContain('ASR 字符0')
+    expect(wrapper.get('[data-test="asr-layer"]').text()).toContain('没有可用语音文本')
+    expect(wrapper.get('[data-test="ocr-layer"]').text()).toContain('缓存命中率 · 88%')
+    expect(wrapper.get('[data-test="keyframe-layer"]').text()).toContain('没有关键帧')
+    expect(wrapper.find('[data-test="channel-warning"]').exists()).toBe(false)
   })
 
   it('seeks from keyboard-operable entries and only changes the active segment on time updates', async () => {

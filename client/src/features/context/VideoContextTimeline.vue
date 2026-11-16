@@ -45,6 +45,12 @@ const currentOrdinal = computed(() => {
   ))?.ordinal
 })
 
+const selectedSegment = computed(() => (
+  segments.value.find((segment) => segment.ordinal === currentOrdinal.value) ?? segments.value[0] ?? null
+))
+const asrCharacterCount = computed(() => segments.value.reduce((total, segment) => total + (segment.asrText?.length ?? 0), 0))
+const ocrObservationCount = computed(() => segments.value.reduce((total, segment) => total + segment.ocr.length, 0))
+
 function formatTime(milliseconds: number): string {
   const totalSeconds = Math.max(0, Math.floor(milliseconds / 1_000))
   const hours = Math.floor(totalSeconds / 3_600)
@@ -233,29 +239,12 @@ watch(() => props.seekTarget, (citation) => {
 
 <template>
   <section
-    class="context-workbench"
+    class="context-product-workbench"
     aria-labelledby="context-title"
   >
-    <div class="context-heading">
-      <div>
-        <p class="section-index">
-          VIDEO CONTEXT
-        </p>
-        <h3 id="context-title">
-          播放器与统一时间轴
-        </h3>
-      </div>
-      <p
-        v-if="context"
-        class="context-count"
-      >
-        {{ segments.length }} / {{ context.segmentCount }} SEGMENTS
-      </p>
-    </div>
-
     <p
       v-if="job.status !== 'READY'"
-      class="context-state"
+      class="workspace-product-state product-surface"
       data-test="context-processing"
       role="status"
     >
@@ -263,14 +252,14 @@ watch(() => props.seekTarget, (citation) => {
     </p>
     <p
       v-else-if="loading"
-      class="context-state"
+      class="workspace-product-state product-surface"
       aria-live="polite"
     >
       正在从服务端恢复视频上下文…
     </p>
     <p
       v-else-if="errorMessage"
-      class="context-state context-state--error"
+      class="workspace-product-state workspace-product-state--error product-surface"
       data-test="context-error"
       role="alert"
     >
@@ -278,136 +267,140 @@ watch(() => props.seekTarget, (citation) => {
     </p>
 
     <template v-else-if="context">
-      <div class="context-player-frame">
-        <video
-          ref="player"
-          data-test="context-player"
-          :src="playbackUrl || undefined"
-          controls
-          preload="metadata"
-          title="教学视频播放器"
-          @timeupdate="updateTime"
-          @loadedmetadata="playbackLoaded"
-          @error="handlePlaybackError"
-        >
-          当前浏览器不支持原生视频播放。
-        </video>
-        <div class="context-player-meta">
-          <span>{{ formatTime(currentTimeMs) }} / {{ formatTime(context.durationMs) }}</span>
-          <button
-            type="button"
-            :disabled="!context"
-            @click="renewPlayback()"
-          >
-            续签播放链接
-          </button>
-        </div>
-        <p
-          v-if="playbackError"
-          class="context-inline-error"
-          role="alert"
-        >
-          {{ playbackError }}
-        </p>
-      </div>
-
       <div
-        v-if="context.ocrState === 'DEGRADED'"
-        class="channel-warning"
-        data-test="channel-warning"
-        role="status"
+        class="context-product-grid"
+        data-test="context-product-grid"
       >
-        <strong>OCR 已降级</strong>
-        <span>语音时间轴仍可使用；缺失的画面文字不会伪装为已完成。</span>
-      </div>
-
-      <ol class="segment-list">
-        <li
-          v-for="segment in segments"
-          :key="segment.segmentId"
-          class="segment-card"
-          :class="{ 'segment-card--active': currentOrdinal === segment.ordinal }"
-        >
-          <button
-            class="segment-time"
-            :data-test="`segment-${segment.ordinal}`"
-            :aria-current="currentOrdinal === segment.ordinal ? 'true' : undefined"
-            type="button"
-            @click="seek(segment.startMs)"
+        <section class="context-timeline product-surface">
+          <header>
+            <div>
+              <h2 id="context-title">
+                多模态时间轴
+              </h2><p>{{ job.goal }}</p>
+            </div>
+            <div><span>ASR {{ context.asrState === 'AVAILABLE' ? '正常' : '降级' }}</span><span>OCR {{ context.ocrState === 'AVAILABLE' ? '正常' : '降级' }}</span></div>
+          </header>
+          <div
+            v-if="context.ocrState === 'DEGRADED'"
+            class="channel-warning"
+            data-test="channel-warning"
+            role="status"
           >
-            <span>{{ formatTime(segment.startMs) }}</span>
-            <small>— {{ formatTime(segment.endMs) }}</small>
+            <strong>OCR 已降级</strong><span>语音时间轴仍可使用；缺失的画面文字不会伪装为已完成。</span>
+          </div>
+          <ol>
+            <li
+              v-for="segment in segments"
+              :key="segment.segmentId"
+            >
+              <button
+                class="context-timeline__item"
+                :data-test="`segment-${segment.ordinal}`"
+                :aria-current="currentOrdinal === segment.ordinal ? 'true' : undefined"
+                type="button"
+                @click="seek(segment.startMs)"
+              >
+                <span>{{ formatTime(segment.startMs) }}–{{ formatTime(segment.endMs) }}</span>
+                <span><strong>{{ segment.asrText || '仅包含视觉证据的片段' }}</strong><small>ASR {{ segment.asrText ? '可用' : '缺失' }} · OCR {{ segment.ocr.length }} 条 · 关键帧 {{ segment.keyframes.length }} 张</small></span>
+              </button>
+            </li>
+          </ol>
+          <button
+            v-if="hasMore"
+            class="load-more-segments"
+            data-test="load-more-segments"
+            type="button"
+            :disabled="loadingMore"
+            @click="loadMore"
+          >
+            {{ loadingMore ? '正在读取…' : '读取后续时间轴' }}
           </button>
+          <p
+            v-if="pageError"
+            class="context-inline-error"
+            role="alert"
+          >
+            {{ pageError }}
+          </p>
+        </section>
 
-          <div class="segment-layers">
+        <aside class="context-product-rail">
+          <section
+            class="context-summary product-surface"
+            data-test="context-summary-panel"
+          >
+            <header><h2>上下文概况</h2><span>{{ context.status }}</span></header>
+            <dl>
+              <div><dt>视频时长</dt><dd>{{ formatTime(context.durationMs) }}</dd></div>
+              <div><dt>VideoSegment</dt><dd>{{ context.segmentCount }}</dd></div>
+              <div><dt>ASR 字符</dt><dd>{{ asrCharacterCount }}</dd></div>
+              <div><dt>OCR 观察</dt><dd>{{ ocrObservationCount }}</dd></div>
+            </dl>
+          </section>
+
+          <section
+            v-if="selectedSegment"
+            class="current-segment product-surface"
+            data-test="current-segment-panel"
+          >
+            <header><h2>当前片段详情</h2><span>{{ formatTime(selectedSegment.startMs) }}–{{ formatTime(selectedSegment.endMs) }}</span></header>
+            <video
+              ref="player"
+              data-test="context-player"
+              :src="playbackUrl || undefined"
+              controls
+              preload="metadata"
+              title="教学视频播放器"
+              @timeupdate="updateTime"
+              @loadedmetadata="playbackLoaded"
+              @error="handlePlaybackError"
+            >当前浏览器不支持原生视频播放。</video>
+            <div class="context-player-meta">
+              <span>{{ formatTime(currentTimeMs) }} / {{ formatTime(context.durationMs) }}</span><button
+                type="button"
+                @click="renewPlayback()"
+              >
+                续签链接
+              </button>
+            </div>
+            <p
+              v-if="playbackError"
+              class="context-inline-error"
+              role="alert"
+            >
+              {{ playbackError }}
+            </p>
             <section data-test="asr-layer">
-              <h4>ASR · 语音</h4>
-              <button
-                v-if="segment.asrText"
-                type="button"
-                @click="seek(segment.startMs)"
-              >
-                {{ segment.asrText }}
-              </button>
-              <p v-else>
-                此时间窗没有可用语音文本。
-              </p>
+              <h3>ASR · 语音</h3><p>{{ selectedSegment.asrText || '此时间窗没有可用语音文本。' }}</p>
             </section>
-
             <section data-test="ocr-layer">
-              <h4>OCR · 画面</h4>
-              <button
-                v-for="(observation, index) in segment.ocr"
-                :key="`${segment.segmentId}-ocr-${index}`"
-                type="button"
-                @click="seek(segment.startMs)"
+              <h3>OCR · 画面</h3><p
+                v-for="(observation, index) in selectedSegment.ocr"
+                :key="index"
               >
-                {{ observation.text }}
-                <small>{{ Math.round(observation.confidence * 100) }}%</small>
-              </button>
-              <p v-if="segment.ocr.length === 0">
+                {{ observation.text }} · {{ Math.round(observation.confidence * 100) }}%
+              </p><p v-if="selectedSegment.ocr.length === 0">
                 无已持久化画面文字。
               </p>
             </section>
-
             <section data-test="keyframe-layer">
-              <h4>FRAME · 关键帧</h4>
-              <div class="keyframe-buttons">
+              <h3>FRAME · 关键帧</h3><div class="keyframe-buttons">
                 <button
-                  v-for="(frame, index) in segment.keyframes"
+                  v-for="(frame, index) in selectedSegment.keyframes"
                   :key="frame.keyframeId"
-                  :data-test="`keyframe-${segment.ordinal}-${index}`"
+                  :data-test="`keyframe-${selectedSegment.ordinal}-${index}`"
                   type="button"
                   @click="openKeyframe(frame)"
                 >
                   {{ formatTime(frame.timestampMs) }}
                 </button>
-              </div>
-              <p v-if="segment.keyframes.length === 0">
+              </div><p v-if="selectedSegment.keyframes.length === 0">
                 此时间窗没有关键帧。
               </p>
             </section>
-          </div>
-        </li>
-      </ol>
-
-      <button
-        v-if="hasMore"
-        class="load-more-segments"
-        data-test="load-more-segments"
-        type="button"
-        :disabled="loadingMore"
-        @click="loadMore"
-      >
-        {{ loadingMore ? '正在读取…' : '读取后续时间轴' }}
-      </button>
-      <p
-        v-if="pageError"
-        class="context-inline-error"
-        role="alert"
-      >
-        {{ pageError }}
-      </p>
+          </section>
+        </aside>
+      </div>
 
       <aside
         v-if="selectedKeyframe"
@@ -417,8 +410,7 @@ watch(() => props.seekTarget, (citation) => {
         <div>
           <p class="section-index">
             KEYFRAME · {{ formatTime(selectedKeyframe.timestampMs) }}
-          </p>
-          <button
+          </p><button
             type="button"
             @click="selectedKeyframe = null"
           >
