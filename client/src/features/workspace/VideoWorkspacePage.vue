@@ -5,8 +5,9 @@ import { useRouter } from 'vue-router'
 import type { AnalysisJob, Session } from '../../api/contracts'
 import { createJobsApi } from '../../api/jobs'
 import { ApiClientError } from '../../api/session'
-import VideoContextTimeline from '../context/VideoContextTimeline.vue'
+import ProductPageHeader from '../../components/ProductPageHeader.vue'
 import { stageLabel, statusLabel } from '../jobs/jobPresentation'
+import WorkspaceContextPanel from './WorkspaceContextPanel.vue'
 
 type JobsApi = Pick<ReturnType<typeof createJobsApi>, 'get'>
 
@@ -84,25 +85,19 @@ watch(() => props.jobId, (jobId) => void load(jobId), { immediate: true })
 </script>
 
 <template>
-  <main class="context-page workspace-page">
-    <header class="context-page__heading">
-      <div>
-        <p class="kicker">
-          VIDEO WORKSPACE
-        </p>
-        <h1>视频工作台</h1>
-      </div>
-      <p>播放器、时间片、分析目标与问答入口始终绑定 URL 中的当前任务，不跨视频拼接内容。</p>
-    </header>
+  <main class="product-page workspace-product-page">
+    <ProductPageHeader
+      eyebrow="VIDEO WORKSPACE"
+      title="视频工作台"
+      description="围绕当前视频内容，开展可定位、可核验的分析与问答。"
+      :status="job ? statusLabel(job.status) : '等待选择视频'"
+    />
 
     <section
       v-if="!jobId"
-      class="job-placeholder"
+      class="workspace-product-empty product-surface"
       data-test="workspace-empty"
     >
-      <p class="section-index">
-        NO CURRENT VIDEO
-      </p>
       <h2>选择一个视频，开始可追溯分析</h2>
       <p>先从媒体资料库上传或选择视频；已有任务也可以从解析任务页继续。</p>
       <div class="workspace-empty__actions">
@@ -116,88 +111,92 @@ watch(() => props.jobId, (jobId) => void load(jobId), { immediate: true })
     </section>
     <p
       v-else-if="loading"
-      class="context-page__state"
+      class="workspace-product-state product-surface"
       aria-live="polite"
     >
       正在读取当前视频工作区…
     </p>
     <p
       v-else-if="errorMessage"
-      class="context-page__state context-page__state--error"
+      class="workspace-product-state workspace-product-state--error product-surface"
       role="alert"
     >
       {{ errorMessage }}
     </p>
 
     <template v-else-if="job">
-      <section
-        class="context-page__job"
-        aria-labelledby="workspace-current-job"
+      <div
+        class="workspace-product-grid"
+        data-test="workspace-product-grid"
       >
-        <div>
-          <p class="section-index">
-            CURRENT VIDEO JOB
-          </p>
-          <h2 id="workspace-current-job">
-            {{ job.goal }}
-          </h2>
-        </div>
-        <span :data-status="job.status">{{ statusLabel(job.status) }}</span>
-      </section>
-
-      <div class="workspace-dashboard">
-        <VideoContextTimeline
+        <WorkspaceContextPanel
           :job="job"
           @unauthenticated="emit('unauthenticated')"
         />
 
-        <aside
-          class="workspace-dashboard__rail"
-          aria-label="当前视频操作"
+        <section
+          class="workspace-question-card product-surface"
+          data-test="workspace-question-card"
+          aria-labelledby="workspace-question-title"
         >
-          <section data-test="workspace-goal">
-            <p class="section-index">
-              ANALYSIS GOAL
-            </p>
-            <h3>当前分析目标</h3>
-            <p>{{ job.goal }}</p>
-          </section>
-
-          <section>
-            <p class="section-index">
-              SERVER STATUS
-            </p>
-            <h3>真实处理状态</h3>
-            <p data-test="workspace-status">
-              {{ statusMessage(job) }}
-            </p>
-            <RouterLink :to="{ name: 'analysis-detail', params: { jobId: job.jobId } }">
-              查看任务事件
-            </RouterLink>
-          </section>
-
+          <div>
+            <h2 id="workspace-question-title">
+              询问这段视频
+            </h2>
+            <p>回答仅使用当前视频的可定位证据；信息不足时会明确说明。</p>
+          </div>
           <form
             data-test="workspace-question-form"
             @submit.prevent="ask"
           >
-            <label for="workspace-question">围绕当前视频提问</label>
-            <textarea
+            <label
+              class="sr-only"
+              for="workspace-question"
+            >围绕当前视频提问</label>
+            <input
               id="workspace-question"
               v-model="question"
               data-test="workspace-question"
               maxlength="1000"
               :disabled="job.status !== 'READY'"
               placeholder="例如：视频为什么把 MySQL 作为任务真源？"
-            />
+            >
             <button
               type="submit"
               data-test="workspace-ask"
               :disabled="job.status !== 'READY' || !normalizedQuestion"
             >
-              前往证据问答
+              发送 →
             </button>
           </form>
-        </aside>
+          <p
+            class="workspace-question-card__goal"
+            data-test="workspace-goal"
+          >
+            当前目标：{{ job.goal }}
+          </p>
+        </section>
+
+        <section
+          class="workspace-progress-card product-surface"
+          data-test="workspace-progress-card"
+          aria-labelledby="workspace-progress-title"
+        >
+          <div>
+            <p>分析任务</p>
+            <h2 id="workspace-progress-title">
+              {{ statusLabel(job.status) }}
+            </h2>
+          </div>
+          <strong>{{ job.status === 'READY' ? '100%' : stageLabel(job.currentStage) }}</strong>
+          <p data-test="workspace-status">
+            {{ statusMessage(job) }}
+          </p>
+          <span class="workspace-progress-card__track"><i :style="{ width: job.status === 'READY' ? '100%' : '42%' }" /></span>
+          <RouterLink :to="{ name: 'analysis-detail', params: { jobId: job.jobId } }">
+            查看任务事件 →
+          </RouterLink>
+        </section>
       </div>
     </template>
   </main>

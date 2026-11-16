@@ -34,9 +34,10 @@ async function mountPage(jobId?: string, get = vi.fn().mockResolvedValue(readyJo
     global: {
       plugins: [router],
       stubs: {
-        VideoContextTimeline: {
+        ProductPageHeader: true,
+        WorkspaceContextPanel: {
           props: ['job'],
-          template: '<section data-test="workspace-timeline">{{ job.jobId }} · {{ job.status }}</section>',
+          template: '<section data-test="workspace-context-panel"><div data-test="workspace-player-panel">{{ job.jobId }}</div><div data-test="workspace-evidence-panel">{{ job.status }}</div></section>',
         },
       },
     },
@@ -61,7 +62,11 @@ describe('VideoWorkspacePage', () => {
     await flushPromises()
 
     expect(get).toHaveBeenCalledWith(`/api/v1/analysis-jobs/${readyJob.jobId}`)
-    expect(wrapper.get('[data-test="workspace-timeline"]').text()).toContain(`${readyJob.jobId} · READY`)
+    expect(wrapper.get('[data-test="workspace-product-grid"]')).toBeTruthy()
+    expect(wrapper.get('[data-test="workspace-player-panel"]').text()).toContain(readyJob.jobId)
+    expect(wrapper.get('[data-test="workspace-evidence-panel"]').text()).toContain('READY')
+    expect(wrapper.get('[data-test="workspace-question-card"]')).toBeTruthy()
+    expect(wrapper.get('[data-test="workspace-progress-card"]')).toBeTruthy()
     expect(wrapper.get('[data-test="workspace-goal"]').text()).toContain(readyJob.goal)
 
     await wrapper.get('[data-test="workspace-question"]').setValue('MySQL 为什么是真源？')
@@ -83,7 +88,7 @@ describe('VideoWorkspacePage', () => {
 
     expect(wrapper.get('[data-test="workspace-status"]').text()).toContain(expected)
     expect(wrapper.get<HTMLButtonElement>('[data-test="workspace-ask"]').element.disabled).toBe(true)
-    expect(wrapper.get('[data-test="workspace-timeline"]').text()).toContain(status)
+    expect(wrapper.get('[data-test="workspace-evidence-panel"]').text()).toContain(status)
   })
 
   it('ignores a late response and clears stale workspace data on authentication expiry', async () => {
@@ -99,7 +104,7 @@ describe('VideoWorkspacePage', () => {
     resolveFirst(readyJob)
     await flushPromises()
 
-    expect(wrapper.find('[data-test="workspace-timeline"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="workspace-context-panel"]').exists()).toBe(false)
     expect(wrapper.emitted('unauthenticated')).toHaveLength(1)
   })
 })
