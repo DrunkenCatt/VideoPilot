@@ -5,6 +5,7 @@ import { RouterLink, useRoute } from 'vue-router'
 import type { Session } from '../api/contracts'
 import StorageSummaryCard from '../features/media/StorageSummaryCard.vue'
 import WorkspaceSwitcher from '../features/workspace/WorkspaceSwitcher.vue'
+import { useModalFocus } from '../composables/useModalFocus'
 import { navigationItems } from '../router'
 
 const props = withDefaults(defineProps<{
@@ -23,6 +24,7 @@ defineEmits<{ logout: []; login: []; unauthenticated: [] }>()
 
 const route = useRoute()
 const drawerOpen = ref(false)
+const sidebar = ref<globalThis.HTMLElement | null>(null)
 const accountMenuOpen = ref(false)
 const activeName = computed(() => String(route.meta.navigationName ?? route.name ?? ''))
 const jobScopedRoutes = new Set(['workspace', 'context', 'answers'])
@@ -44,6 +46,16 @@ const toolbarAction = computed(() => {
   }
   return null
 })
+
+function closeDrawer() {
+  drawerOpen.value = false
+}
+
+function toggleDrawer() {
+  drawerOpen.value = !drawerOpen.value
+}
+
+const { handleKeydown: handleDrawerKeydown } = useModalFocus(drawerOpen, sidebar, closeDrawer)
 
 function navigationTarget(name: string) {
   if (activeWorkspaceJobId.value && jobScopedRoutes.has(name)) {
@@ -70,14 +82,16 @@ watch(() => route.fullPath, () => {
       data-test="sidebar-backdrop"
       type="button"
       aria-label="关闭主导航"
-      @click="drawerOpen = false"
+      @click="closeDrawer"
     />
 
     <aside
       id="app-sidebar"
+      ref="sidebar"
       class="app-sidebar"
       data-test="app-sidebar"
       :data-open="String(drawerOpen)"
+      @keydown="handleDrawerKeydown"
     >
       <RouterLink
         class="app-brand"
@@ -101,7 +115,7 @@ watch(() => route.fullPath, () => {
           :key="item.name"
           :to="navigationTarget(item.name)"
           :aria-current="activeName === item.name ? 'page' : undefined"
-          @click="drawerOpen = false"
+          @click="closeDrawer"
         >
           <span aria-hidden="true">{{ item.index }}</span>{{ item.label }}
         </RouterLink>
@@ -111,7 +125,7 @@ watch(() => route.fullPath, () => {
           :key="item.name"
           :to="navigationTarget(item.name)"
           :aria-current="activeName === item.name ? 'page' : undefined"
-          @click="drawerOpen = false"
+          @click="closeDrawer"
         >
           <span aria-hidden="true">{{ item.index }}</span>{{ item.label }}
         </RouterLink>
@@ -184,7 +198,7 @@ watch(() => route.fullPath, () => {
           :aria-expanded="drawerOpen"
           aria-controls="app-sidebar"
           aria-label="打开主导航"
-          @click="drawerOpen = !drawerOpen"
+          @click="toggleDrawer"
         >
           <span aria-hidden="true" />
           <span aria-hidden="true" />

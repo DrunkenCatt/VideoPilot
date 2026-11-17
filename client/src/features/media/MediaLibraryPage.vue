@@ -8,6 +8,7 @@ import { ApiClientError } from '../../api/session'
 import ProductPageHeader from '../../components/ProductPageHeader.vue'
 import MediaLibrary from './MediaLibrary.vue'
 import MediaUploadPanel from './MediaUploadPanel.vue'
+import { useModalFocus } from '../../composables/useModalFocus'
 
 type JobsApi = Pick<ReturnType<typeof createJobsApi>, 'submit'>
 
@@ -26,6 +27,8 @@ const submitting = ref(false)
 const errorMessage = ref('')
 const uploadOpen = ref(false)
 const analysisOpen = ref(false)
+const uploadDialog = ref<globalThis.HTMLElement | null>(null)
+const analysisDialog = ref<globalThis.HTMLElement | null>(null)
 let idempotencyKey: string | null = null
 
 watch([() => selectedMedia.value?.mediaId, goal], () => {
@@ -50,8 +53,19 @@ function messageFor(error: unknown): string {
 
 function uploaded(media: MediaAsset) {
   uploadedMedia.value = media
+  closeUpload()
+}
+
+function closeUpload() {
   uploadOpen.value = false
 }
+
+function closeAnalysis() {
+  analysisOpen.value = false
+}
+
+const { handleKeydown: handleUploadKeydown } = useModalFocus(uploadOpen, uploadDialog, closeUpload)
+const { handleKeydown: handleAnalysisKeydown } = useModalFocus(analysisOpen, analysisDialog, closeAnalysis)
 
 function selectMedia(media: MediaAsset) {
   selectedMedia.value = media
@@ -106,13 +120,15 @@ async function submit() {
       class="product-modal-backdrop"
       data-test="upload-dialog"
       role="presentation"
-      @click.self="uploadOpen = false"
+      @click.self="closeUpload"
     >
       <section
+        ref="uploadDialog"
         class="product-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="upload-dialog-title"
+        @keydown="handleUploadKeydown"
       >
         <header>
           <div>
@@ -122,7 +138,7 @@ async function submit() {
           </div><button
             type="button"
             aria-label="关闭上传"
-            @click="uploadOpen = false"
+            @click="closeUpload"
           >
             ×
           </button>
@@ -141,13 +157,15 @@ async function submit() {
       class="product-modal-backdrop"
       data-test="analysis-dialog"
       role="presentation"
-      @click.self="analysisOpen = false"
+      @click.self="closeAnalysis"
     >
       <aside
+        ref="analysisDialog"
         class="product-modal analysis-setup-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="submission-title"
+        @keydown="handleAnalysisKeydown"
       >
         <header>
           <div>
@@ -157,7 +175,7 @@ async function submit() {
           </div><button
             type="button"
             aria-label="关闭任务创建"
-            @click="analysisOpen = false"
+            @click="closeAnalysis"
           >
             ×
           </button>

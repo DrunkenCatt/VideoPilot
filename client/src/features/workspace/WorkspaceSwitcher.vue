@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import type { AnalysisJob, MediaAsset, PageResponse } from '../../api/contracts'
@@ -7,6 +7,7 @@ import { createJobsApi } from '../../api/jobs'
 import { createMediaApi } from '../../api/media'
 import { ApiClientError } from '../../api/session'
 import { statusLabel } from '../jobs/jobPresentation'
+import { useModalFocus } from '../../composables/useModalFocus'
 
 type JobsQuery = Pick<ReturnType<typeof createJobsApi>, 'list' | 'get'>
 type MediaQuery = Pick<ReturnType<typeof createMediaApi>, 'list' | 'get'>
@@ -124,15 +125,15 @@ async function load() {
   }
 }
 
-async function openDialog() {
+function openDialog() {
   open.value = true
-  await nextTick()
-  dialog.value?.querySelector<globalThis.HTMLElement>('button')?.focus()
 }
 
 function closeDialog() {
   open.value = false
 }
+
+const { handleKeydown } = useModalFocus(open, dialog, closeDialog)
 
 async function select(job: AnalysisJob) {
   const name = jobScopedRoutes.has(String(route.name)) ? route.name : 'workspace'
@@ -178,7 +179,7 @@ onMounted(load)
           role="dialog"
           aria-modal="true"
           aria-labelledby="workspace-dialog-title"
-          @keydown.esc="closeDialog"
+          @keydown="handleKeydown"
         >
           <header>
             <div>

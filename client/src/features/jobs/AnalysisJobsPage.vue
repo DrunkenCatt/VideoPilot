@@ -11,6 +11,7 @@ import ProductPageHeader from '../../components/ProductPageHeader.vue'
 import JobDetail from './JobDetail.vue'
 import ReliabilityPanel from './ReliabilityPanel.vue'
 import { stageLabel, statusLabel } from './jobPresentation'
+import { useModalFocus } from '../../composables/useModalFocus'
 
 const props = defineProps<{
   session: Session
@@ -39,6 +40,8 @@ const reliabilityError = ref('')
 const search = ref('')
 const statusFilter = ref('ALL')
 const reliabilityOpen = ref(false)
+const detailDialog = ref<globalThis.HTMLElement | null>(null)
+const reliabilityDialog = ref<globalThis.HTMLElement | null>(null)
 let eventController: globalThis.AbortController | null = null
 let mediaRevision = 0
 let openRevision = 0
@@ -214,6 +217,14 @@ async function closeDetail() {
   events.value = []
   await router.push({ name: 'analysis' })
 }
+
+function closeReliability() {
+  reliabilityOpen.value = false
+}
+
+const detailOpen = computed(() => selected.value !== null)
+const { handleKeydown: handleDetailKeydown } = useModalFocus(detailOpen, detailDialog, closeDetail)
+const { handleKeydown: handleReliabilityKeydown } = useModalFocus(reliabilityOpen, reliabilityDialog, closeReliability)
 
 async function loadReliability() {
   reliabilityLoading.value = true
@@ -399,10 +410,12 @@ onBeforeUnmount(() => eventController?.abort())
       @click.self="closeDetail"
     >
       <aside
+        ref="detailDialog"
         class="job-drawer"
         role="dialog"
         aria-modal="true"
         aria-label="任务详情"
+        @keydown="handleDetailKeydown"
       >
         <header>
           <span>任务详情</span><button
@@ -430,19 +443,21 @@ onBeforeUnmount(() => eventController?.abort())
       v-if="reliabilityOpen"
       class="product-modal-backdrop"
       role="presentation"
-      @click.self="reliabilityOpen = false"
+      @click.self="closeReliability"
     >
       <section
+        ref="reliabilityDialog"
         class="product-modal reliability-dialog"
         role="dialog"
         aria-modal="true"
         aria-label="可靠性面板"
+        @keydown="handleReliabilityKeydown"
       >
         <header>
           <div><p>RELIABILITY</p><h2>可靠性面板</h2></div><button
             type="button"
             aria-label="关闭可靠性面板"
-            @click="reliabilityOpen = false"
+            @click="closeReliability"
           >
             ×
           </button>

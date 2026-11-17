@@ -45,12 +45,18 @@ describe('AppShell', () => {
 
   it('opens and closes the navigation drawer for narrow screens', async () => {
     const wrapper = await mountShell()
+    document.body.appendChild(wrapper.element)
+    const toggle = wrapper.get<HTMLButtonElement>('[data-test="menu-toggle"]')
+    toggle.element.focus()
 
     expect(wrapper.get('[data-test="app-sidebar"]').attributes('data-open')).toBe('false')
-    await wrapper.get('[data-test="menu-toggle"]').trigger('click')
+    await toggle.trigger('click')
     expect(wrapper.get('[data-test="app-sidebar"]').attributes('data-open')).toBe('true')
-    await wrapper.get('[data-test="sidebar-backdrop"]').trigger('click')
+    expect(document.activeElement).toBe(wrapper.get('.app-brand').element)
+    await wrapper.get('[data-test="app-sidebar"]').trigger('keydown', { key: 'Escape' })
     expect(wrapper.get('[data-test="app-sidebar"]').attributes('data-open')).toBe('false')
+    expect(document.activeElement).toBe(toggle.element)
+    wrapper.unmount()
   })
 
   it('closes the navigation drawer after a route change', async () => {

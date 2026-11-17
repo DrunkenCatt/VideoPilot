@@ -9,11 +9,11 @@
   --color-surface-muted: #f7f8fa;
   --color-surface-selected: #edf4ff;
   --color-text: #18202b;
-  --color-text-muted: #6f7885;
+  --color-text-muted: #697380;
   --color-border: #e2e6eb;
-  --color-primary: #347ce8;
+  --color-primary: #2d68d2;
   --color-primary-hover: #2568cd;
-  --color-success: #1f8b64;
+  --color-success: #197657;
   --color-warning: #a96716;
   --color-danger: #bd4545;
   --space-1: 0.25rem;
@@ -48,11 +48,11 @@ body {
   background: var(--color-canvas);
 }
 
-button, input, textarea { font: inherit; }
-button, a, input, textarea { -webkit-tap-highlight-color: transparent; }
+button, input, select, textarea { font: inherit; }
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 
-button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible {
-  outline: 3px solid rgb(47 111 237 / 30%);
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 3px solid var(--color-primary);
   outline-offset: 3px;
 }
 
@@ -727,6 +727,7 @@ h1 {
 }
 
 @media (max-width: 36rem) {
+  .app-toolbar > div:first-of-type { display: none; }
   .product-page-header { display: grid; }
   .product-page-header__aside { width: 100%; justify-items: start; }
   .workspace-player { padding: var(--space-2); }
@@ -1519,7 +1520,7 @@ button:disabled { cursor: wait; opacity: 0.65; }
 .answer-reader-panel > .answer-form { order: 10; margin: auto var(--space-4) var(--space-4); padding: var(--space-3); border: 1px solid var(--color-border-strong); border-radius: 0.75rem; background: #fff; box-shadow: 0 0.75rem 1.8rem rgb(36 49 62 / 8%); }
 .answer-reader-panel > .answer-form label > span { color: var(--color-text-muted); font-size: 0.64rem; }
 .answer-reader-panel > .answer-form textarea { min-height: 3.8rem; padding: var(--space-2) 0; border: 0; background: transparent; resize: vertical; }
-.answer-reader-panel > .answer-form textarea:focus { outline: 0; box-shadow: none; }
+.answer-reader-panel > .answer-form textarea:focus { box-shadow: none; }
 .answer-reader-panel > .answer-form button { border: 0; border-radius: 0.55rem; color: #fff; background: var(--color-primary); }
 
 @media (max-width: 52rem) {
