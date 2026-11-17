@@ -1,6 +1,6 @@
 # VideoPilot 前端重构任务清单
 
-> 状态：F0-F10 已完成，F8R0-F8R8 的产品结构修正已完成，Checkpoint A、B 已确认；下一项为 F11。任务按薄切片顺序执行，前驱退出门未通过时不得进入后续任务。
+> 状态：F0-F11 已完成，F8R0-F8R8 的产品结构修正已完成，Checkpoint A、B 已确认；下一项为 F12。任务按薄切片顺序执行，前驱退出门未通过时不得进入后续任务。
 
 ## F0：冻结页面、路由和视觉验收合同
 
@@ -358,14 +358,14 @@
 **描述：** 将现有 EvaluationWorkbench 纳入路由；系统设置只提供安全的本地界面偏好、只读版本信息和退出入口。
 
 **验收标准：**
-- [ ] 评测中心功能、数据集冻结和报告语义保持不变。
-- [ ] 设置页不读取或展示 API Key、Prompt 原文、模型原始响应和内部预算硬门编辑器。
-- [ ] 用户偏好不成为业务状态真源，退出后按定义清理用户相关项。
+- [x] 评测中心功能、数据集冻结和报告语义保持不变。
+- [x] 设置页不读取或展示 API Key、Prompt 原文、模型原始响应和内部预算硬门编辑器。
+- [x] 用户偏好不成为业务状态真源，退出后按定义清理用户相关项。
 
 **验证：**
-- [ ] Evaluation/App/Settings 组件测试通过。
-- [ ] `client\npm.cmd run check` 通过。
-- [ ] 浏览器验证导航、刷新、权限和键盘操作。
+- [x] Evaluation/App/Settings 与 owner-scoped 偏好存储测试通过；错误条件变异证明跨 owner 清理测试可拦截共享 Key 回归。
+- [x] `client\npm.cmd run check` 通过（34 个测试文件、223 项测试，Statements 87.36%、Branches 80.96%、Functions 88.54%、Lines 92.34%，生产构建成功）；官方 registry `npm audit --audit-level=high` 通过，Gitleaks 扫描 163 个提交无泄漏。
+- [x] 真实浏览器验证评测/设置导航、评测空态、键盘切换密度、刷新恢复和登录权限边界；Console warning/error 为 0。证据截图：`tmp/f11-settings.png`。
 
 **依赖：** F3
 **预计范围：** M，约 3-5 个生产文件及测试。
