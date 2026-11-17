@@ -22,8 +22,8 @@ interface PlaybackProgressMapper {
             INSERT INTO media_playback_progress (owner_id, media_id, position_ms, updated_at)
             VALUES (#{ownerId}, #{mediaId}, #{positionMs}, #{updatedAt})
             ON DUPLICATE KEY UPDATE
-                position_ms = VALUES(position_ms),
-                updated_at = VALUES(updated_at)
+                updated_at = IF(position_ms <> VALUES(position_ms), VALUES(updated_at), updated_at),
+                position_ms = VALUES(position_ms)
             """)
     int upsert(
             @Param("ownerId") String ownerId,

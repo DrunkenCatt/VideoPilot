@@ -65,8 +65,15 @@ class PlaybackProgressIT {
 
         progress.save(OWNER, MEDIA_ID, 2_000);
         progress.save(OWNER, MEDIA_ID, 4_000);
+        Instant firstUpdatedAt = NOW.minusSeconds(30);
+        jdbc.sql("UPDATE media_playback_progress SET updated_at = :updatedAt WHERE media_id = :mediaId")
+                .param("updatedAt", firstUpdatedAt)
+                .param("mediaId", MEDIA_ID.toString())
+                .update();
+        progress.save(OWNER, MEDIA_ID, 4_000);
 
         assertThat(progress.get(OWNER, MEDIA_ID).positionMs()).isEqualTo(4_000);
+        assertThat(storedUpdatedAt()).isEqualTo(firstUpdatedAt);
         assertThat(jdbc.sql("SELECT COUNT(*) FROM media_playback_progress WHERE media_id = :mediaId")
                 .param("mediaId", MEDIA_ID.toString())
                 .query(Long.class).single()).isEqualTo(1L);
@@ -74,6 +81,13 @@ class PlaybackProgressIT {
                 .isInstanceOf(PlaybackProgressException.class)
                 .extracting(exception -> ((PlaybackProgressException) exception).reason())
                 .isEqualTo(PlaybackProgressException.Reason.NOT_FOUND);
+    }
+
+    private Instant storedUpdatedAt() {
+        return jdbc.sql("SELECT updated_at FROM media_playback_progress WHERE media_id = :mediaId")
+                .param("mediaId", MEDIA_ID.toString())
+                .query(Instant.class)
+                .single();
     }
 
     private void clean() {
