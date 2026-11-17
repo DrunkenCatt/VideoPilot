@@ -1,6 +1,6 @@
 # VideoPilot 前端重构任务清单
 
-> 状态：F0-F8 的功能迁移和 F8R0-F8R8 的产品结构修正已完成，Checkpoint A、B 已确认；当前按顺序执行 F9。任务按薄切片顺序执行，前驱退出门未通过时不得进入后续任务。
+> 状态：F0-F9 已完成，F8R0-F8R8 的产品结构修正已完成，Checkpoint A、B 已确认；下一项为 F10。任务按薄切片顺序执行，前驱退出门未通过时不得进入后续任务。
 
 ## F0：冻结页面、路由和视觉验收合同
 
@@ -324,14 +324,14 @@
 **描述：** 增加 owner-scoped 存储汇总 application query 和只读 API，在侧栏展示真实用量与配置容量；不依赖 Redis，不统计其他 owner。
 
 **验收标准：**
-- [ ] 总量基于 MySQL 中 owner 的有效媒体记录确定性聚合，分页不影响结果。
-- [ ] 容量来源于服务端配置，未知容量显示“未配置”而不是假百分比。
-- [ ] API 通过 application service 和 Port/Adapter，Controller 不直连 Mapper。
+- [x] 总量基于 MySQL 中 owner 的有效媒体记录确定性聚合，分页不影响结果。
+- [x] 容量来源于服务端配置，未知容量显示“未配置”而不是假百分比。
+- [x] API 通过 application service 和 Port/Adapter，Controller 不直连 Mapper。
 
 **验证：**
-- [ ] 后端 owner 隔离、空库、并发上传状态和聚合测试通过。
-- [ ] `server\mvnw.cmd test` 与 `client\npm.cmd run check` 通过。
-- [ ] 合并前执行相关集成测试和真实浏览器 Network 检查。
+- [x] 后端 owner 隔离、空库、并发上传状态和聚合测试通过。
+- [x] `server\mvnw.cmd test` 与 `client\npm.cmd run check` 通过。
+- [x] 相关集成测试和真实浏览器 API/Console/视觉检查通过；隔离环境已清理。
 
 **依赖：** F4
 **预计范围：** M；后端合同与前端卡片分两个薄提交。

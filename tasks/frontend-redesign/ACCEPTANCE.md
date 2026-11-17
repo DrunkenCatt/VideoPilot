@@ -232,3 +232,50 @@
 - [x] 四档响应式、14 张截图、Console 与真实流程复验通过。
 - [x] 前端完整质量门与覆盖率门通过。
 - [x] 项目负责人于 2026-11-17 确认继续执行，Checkpoint B 通过。
+
+## F9：真实存储空间汇总
+
+日期：2026-11-17
+
+结论：通过，允许按顺序进入 F10。
+
+### 后端合同与数据边界
+
+- 新增 `GET /api/v1/media-assets/storage-summary`，身份只来自已认证会话，不接收客户端 `ownerId`；响应为 `usedBytes`、可空的 `capacityBytes` 和 `mediaCount`。
+- application service 通过 query port 获取汇总，MySQL adapter 使用单条 owner-scoped 聚合查询；Controller 未直接访问 Mapper、Redis 或对象存储。
+- 汇总统计 `UPLOADED`、`PROBING`、`READY`、`FAILED` 的已落盘媒体，不统计尚未形成源对象的 `UPLOAD_PENDING`；分页参数不会影响汇总。
+- 容量来自服务端 `MEDIA_STORAGE_CAPACITY`，支持 `30GB` 等 `DataSize` 值；空配置映射为 `null`，前端明确显示“容量未配置”且不渲染百分比。
+
+### 前端与交互
+
+- 登录后侧栏在账号区上方加载真实存储卡片；配置容量时展示用量、容量、媒体数和可访问的 `meter`，未知容量不伪造进度。
+- 加载失败显示可重试状态，401 通知应用恢复登录边界；未登录时不挂载存储查询。
+- 768-1023px 的折叠侧栏隐藏完整文字卡片，桌面和移动抽屉保留完整信息，避免窄栏挤压。
+
+### 自动化与运行证据
+
+| 检查 | 结果 |
+| --- | --- |
+| 后端聚焦测试 | 23/23 通过，覆盖 owner 隔离、空库、分页独立、状态集合和容量解析 |
+| `server\mvnw.cmd test` | 通过；501 项测试，0 failures、0 errors、1 skipped，ArchUnit 通过 |
+| 隔离集成测试 | 临时库完成 23 个 Flyway 迁移，`MediaAssetQueryIT` 3/3 通过；测试库随后删除 |
+| 回归敏感性 | 临时将 `usedBytes` 变为固定 0 后 application 测试按预期失败；恢复后 5/5 通过 |
+| 前端聚焦测试 | API、存储卡片、AppShell 和 App 会话流 30/30 通过 |
+| `client\npm.cmd run check` | 通过；31 个测试文件、207 项测试，零 warning lint、类型检查和生产构建成功 |
+| 覆盖率 | Statements 87.15%、Branches 81.06%、Functions 89.02%、Lines 91.94%，满足 `CONSTRAINTS.md` |
+
+### 真实浏览器检查与环境边界
+
+- 使用临时数据库和独立的 `18081/15173` 后端、前端端口完成真实登录；侧栏通过真实汇总请求显示 `0 B / 30 GiB`、`0%` 和 `0 个视频`，媒体空库状态正常。
+- 浏览器 DOM 确认存储区语义为“本地存储” region，进度为带名称和上下界的 meter；浏览器 Console warning/error 为 0。
+- 1280×720 视口截图确认卡片位于账号区上方，未改变产品图壳层和媒体页结构。
+- 共享 `videopilot` 数据库仍存在既有 Flyway V3 checksum mismatch；未执行 repair、未修改共享迁移历史。集成和浏览器验证均改用精确命名的临时库。
+- 验收结束后临时 Vite 进程、server 容器和数据库均已停止或删除；`15173` 端口关闭。真实 `.env` 仅用于启动隔离环境，未修改且未输出密钥。
+- `mynote/` 仍为用户未跟踪资料，未修改、未删除、未加入提交。
+
+### F9 退出门
+
+- [x] owner-scoped、分页无关且不依赖 Redis 的确定性汇总通过。
+- [x] 容量配置、未知容量、失败重试和会话过期状态通过。
+- [x] 后端、前端、集成、真实浏览器和五轴审查通过。
+- [x] 后端合同与前端卡片保持两个独立薄提交，未进入 F10 范围。
