@@ -91,18 +91,7 @@ async function submit() {
       title="媒体资料库"
       description="管理本地上传的视频、媒体状态和可复用的分析入口。"
       status="媒体状态来自服务端"
-    >
-      <template #actions>
-        <button
-          class="product-primary-action"
-          data-test="open-upload"
-          type="button"
-          @click="uploadOpen = true"
-        >
-          + 上传视频
-        </button>
-      </template>
-    </ProductPageHeader>
+    />
 
     <MediaLibrary
       :session="session"

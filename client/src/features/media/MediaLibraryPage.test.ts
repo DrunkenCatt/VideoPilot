@@ -85,14 +85,14 @@ describe('MediaLibraryPage', () => {
     await flushPromises()
 
     expect(wrapper.get('[data-test="upload-dialog"]')).toBeTruthy()
+    expect(wrapper.find('[data-test="open-upload"]').exists()).toBe(false)
     expect(router.currentRoute.value.query.action).toBeUndefined()
   })
 
   it('keeps uploaded media in the page and only enables analysis after READY selection', async () => {
-    const { wrapper } = await mountPage()
+    const { wrapper } = await mountPage(vi.fn().mockResolvedValue(job), '/library?action=upload')
+    await flushPromises()
 
-    expect(wrapper.find('[data-test="upload-dialog"]').exists()).toBe(false)
-    await wrapper.get('[data-test="open-upload"]').trigger('click')
     expect(wrapper.get('[data-test="upload-dialog"]')).toBeTruthy()
     await wrapper.get('[data-test="finish-upload"]').trigger('click')
     expect(wrapper.getComponent({ name: 'MediaLibrary' }).props('uploaded')).toEqual(readyMedia)
