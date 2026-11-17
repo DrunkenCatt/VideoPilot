@@ -3,6 +3,7 @@ import {
   type CompletedPart,
   type MediaAsset,
   type MediaId,
+  type MediaStorageSummary,
   type PageResponse,
   type UploadId,
   type UploadPartTarget,
@@ -52,6 +53,15 @@ export function createMediaApi(
       })
       if (!response.ok) throw await errorFrom(response)
       return (await response.json()) as MediaAsset
+    },
+
+    async storageSummary(): Promise<MediaStorageSummary> {
+      const response = await request(`${API.mediaAssets}/storage-summary`, {
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json' },
+      })
+      if (!response.ok) throw await errorFrom(response)
+      return (await response.json()) as MediaStorageSummary
     },
 
     async create(input: UploadSessionRequest, csrfToken: string): Promise<UploadSession> {

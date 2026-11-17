@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
 import type { Session } from '../api/contracts'
+import StorageSummaryCard from '../features/media/StorageSummaryCard.vue'
 import WorkspaceSwitcher from '../features/workspace/WorkspaceSwitcher.vue'
 import { navigationItems } from '../router'
 
@@ -115,6 +116,11 @@ watch(() => route.fullPath, () => {
           <span aria-hidden="true">{{ item.index }}</span>{{ item.label }}
         </RouterLink>
       </nav>
+
+      <StorageSummaryCard
+        v-if="session"
+        @unauthenticated="$emit('unauthenticated')"
+      />
 
       <div
         v-if="session"

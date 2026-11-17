@@ -43,6 +43,7 @@ async function mountApp(path = '/workspace') {
           template: '<main><h1>假视频上下文</h1><p data-test="context-route-props">{{ jobId }} · {{ seekTarget?.segmentId }} · {{ seekTarget?.startMs }} · {{ seekTarget?.endMs }}</p></main>',
         },
         WorkspaceSwitcher: { template: '<button data-test="workspace-switcher-stub">切换视频</button>' },
+        StorageSummaryCard: { template: '<section data-test="storage-summary-stub">本地存储</section>' },
       },
     },
   })

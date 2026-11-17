@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import type { MediaAsset, PageResponse, UploadSession } from './contracts'
+import type { MediaAsset, MediaStorageSummary, PageResponse, UploadSession } from './contracts'
 import { createMediaApi } from './media'
 import { ApiClientError } from './session'
 
@@ -78,6 +78,24 @@ describe('media API', () => {
 
     expect(request.mock.calls[0]?.[0]).toBe('/api/v1/media-assets?page=2&pageSize=10')
     expect(request.mock.calls[1]?.[0]).toBe(`/api/v1/media-assets/${media.mediaId}`)
+    expect(JSON.stringify(request.mock.calls)).not.toContain('ownerId')
+  })
+
+  it('reads the owner-scoped storage summary independently from media pagination', async () => {
+    const summary: MediaStorageSummary = {
+      usedBytes: 1_073_741_824,
+      capacityBytes: 32_212_254_720,
+      mediaCount: 4,
+    }
+    const request = vi.fn().mockResolvedValueOnce(jsonResponse(200, summary))
+    const api = createMediaApi(request)
+
+    await expect(api.storageSummary()).resolves.toEqual(summary)
+
+    expect(request).toHaveBeenCalledWith('/api/v1/media-assets/storage-summary', {
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json' },
+    })
     expect(JSON.stringify(request.mock.calls)).not.toContain('ownerId')
   })
 

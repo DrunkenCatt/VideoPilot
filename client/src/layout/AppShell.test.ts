@@ -20,7 +20,13 @@ async function mountShell(path = '/workspace', currentWorkspaceJobId?: string) {
   return mount(AppShell, {
     props: { session, pageTitle: '视频工作台', currentWorkspaceJobId },
     slots: { default: '<main><h1>真实内容</h1></main>' },
-    global: { plugins: [router], stubs: { WorkspaceSwitcher: { template: '<button data-test="workspace-switcher-stub">切换视频</button>' } } },
+    global: {
+      plugins: [router],
+      stubs: {
+        WorkspaceSwitcher: { template: '<button data-test="workspace-switcher-stub">切换视频</button>' },
+        StorageSummaryCard: { template: '<section data-test="storage-summary-stub">本地存储</section>' },
+      },
+    },
   })
 }
 
@@ -34,6 +40,7 @@ describe('AppShell', () => {
     expect(wrapper.text()).toContain('teacher')
     expect(wrapper.get('.system-status').text()).toBe('本地工作区')
     expect(wrapper.get('h1').text()).toBe('真实内容')
+    expect(wrapper.find('[data-test="storage-summary-stub"]').exists()).toBe(true)
   })
 
   it('opens and closes the navigation drawer for narrow screens', async () => {
@@ -113,12 +120,19 @@ describe('AppShell', () => {
     const wrapper = mount(AppShell, {
       props: { session: null, pageTitle: '视频工作台', contentBlocked: true },
       slots: { default: '<p data-test="public-shell-copy">请登录后继续</p>' },
-      global: { plugins: [router], stubs: { WorkspaceSwitcher: { template: '<button>切换视频</button>' } } },
+      global: {
+        plugins: [router],
+        stubs: {
+          WorkspaceSwitcher: { template: '<button>切换视频</button>' },
+          StorageSummaryCard: { template: '<section data-test="storage-summary-stub">本地存储</section>' },
+        },
+      },
     })
 
     expect(wrapper.get('[data-test="login-action"]').text()).toBe('登录')
     expect(wrapper.find('.sidebar-account__avatar').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('teacher')
     expect(wrapper.get('[data-test="shell-content"]').attributes('inert')).toBeDefined()
+    expect(wrapper.find('[data-test="storage-summary-stub"]').exists()).toBe(false)
   })
 })
