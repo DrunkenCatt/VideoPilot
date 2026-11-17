@@ -1,5 +1,5 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Session } from '../../api/contracts'
 import SystemSettingsOverview from './SystemSettingsOverview.vue'
@@ -12,6 +12,8 @@ const session: Session = {
 }
 
 describe('SystemSettingsOverview', () => {
+  beforeEach(() => localStorage.clear())
+
   it('shows safe session boundaries without exposing credentials', () => {
     const wrapper = mount(SystemSettingsOverview, { props: { session } })
 
@@ -32,5 +34,29 @@ describe('SystemSettingsOverview', () => {
     await wrapper.get('[data-test="settings-logout"]').trigger('click')
 
     expect(wrapper.emitted('logout')).toHaveLength(1)
+  })
+
+  it('restores and saves the owner-scoped density preference', async () => {
+    localStorage.setItem(`videopilot:ui-preferences:${session.userId}`, '{"density":"compact"}')
+    const wrapper = mount(SystemSettingsOverview, { props: { session } })
+
+    expect(wrapper.get('main').attributes('data-density')).toBe('compact')
+    await wrapper.get('input[value="comfortable"]').setValue()
+
+    expect(localStorage.getItem(`videopilot:ui-preferences:${session.userId}`))
+      .toBe('{"density":"comfortable"}')
+    expect(wrapper.get('[data-test="preference-status"]').text()).toContain('已保存')
+  })
+
+  it('keeps the preview usable and offers retry when local saving fails', async () => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('quota') })
+    const wrapper = mount(SystemSettingsOverview, { props: { session } })
+
+    await wrapper.get('input[value="compact"]').setValue()
+
+    expect(wrapper.get('main').attributes('data-density')).toBe('compact')
+    expect(wrapper.get('[role="alert"]').text()).toContain('无法保存')
+    expect(wrapper.get('[data-test="retry-preference"]').text()).toContain('重试')
+    setItem.mockRestore()
   })
 })

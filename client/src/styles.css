@@ -1473,6 +1473,9 @@ button:disabled { cursor: wait; opacity: 0.65; }
 .settings-product-card fieldset { display: flex; gap: var(--space-4); margin: var(--space-4); padding: var(--space-3); border: 1px solid var(--color-border); border-radius: 0.6rem; }
 .settings-product-card legend { padding: 0 var(--space-1); color: var(--color-text-muted); font-size: 0.6rem; }
 .settings-product-card fieldset label { font-size: 0.68rem; }
+.settings-preference-message { margin: 0 var(--space-4) var(--space-3); color: var(--color-success); font-size: 0.62rem; }
+.settings-preference-error { color: var(--color-danger); }
+.settings-preference-message button { margin-left: var(--space-2); padding: 0; border: 0; color: inherit; background: transparent; font: inherit; font-weight: 750; text-decoration: underline; cursor: pointer; }
 .settings-logout { min-height: 2.5rem; margin: 0 var(--space-4) var(--space-4); padding: 0 var(--space-3); border: 1px solid #e8c6c6; border-radius: var(--radius-control); color: var(--color-danger); background: #fffafa; cursor: pointer; }
 .settings-product-page[data-density='compact'] .settings-product-card li, .settings-product-page[data-density='compact'] .settings-product-card dl div { padding-top: var(--space-2); padding-bottom: var(--space-2); }
 

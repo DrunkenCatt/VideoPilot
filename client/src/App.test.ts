@@ -4,6 +4,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 
 import App from './App.vue'
 import type { Session } from './api/contracts'
+import { uiPreferencesKey } from './features/settings/uiPreferences'
 import { appRoutes } from './router'
 
 const activeSession: Session = {
@@ -52,6 +53,7 @@ async function mountApp(path = '/workspace') {
 describe('App session flow', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    localStorage.clear()
   })
 
   it('shows the login surface when there is no active session', async () => {
@@ -230,6 +232,7 @@ describe('App session flow', () => {
 
     const wrapper = await mountApp()
     await flushPromises()
+    localStorage.setItem(uiPreferencesKey(activeSession.userId), '{"density":"compact"}')
     expect(wrapper.get('.sidebar-account').text()).toContain('teacher')
 
     await wrapper.get('[data-test="account-menu"]').trigger('click')
@@ -245,6 +248,7 @@ describe('App session flow', () => {
       }),
     )
     expect(wrapper.get('button[type="submit"]').text()).toContain('登录')
+    expect(localStorage.getItem(uiPreferencesKey(activeSession.userId))).toBeNull()
     expect(wrapper.text()).not.toContain('假任务工作台')
   })
 

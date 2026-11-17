@@ -3,11 +3,15 @@ import { ref } from 'vue'
 
 import type { Session } from '../../api/contracts'
 import ProductPageHeader from '../../components/ProductPageHeader.vue'
+import { loadUiPreferences, saveUiDensity, type UiDensity } from './uiPreferences'
 
-defineProps<{ session: Session }>()
+const props = defineProps<{ session: Session }>()
 const emit = defineEmits<{ logout: [] }>()
 
-const density = ref<'comfortable' | 'compact'>('comfortable')
+const loadedPreferences = loadUiPreferences(props.session.userId)
+const density = ref<UiDensity>(loadedPreferences.density)
+const preferenceError = ref(loadedPreferences.failed ? '无法读取本地界面偏好，可重试保存当前选择。' : '')
+const preferenceStatus = ref('')
 const infrastructure = ['MySQL 8', 'Redis 7', 'RabbitMQ', 'MinIO', 'Qdrant']
 const models = [
   { role: '语言模型', provider: 'SiliconFlow', model: 'deepseek-ai/DeepSeek-V4-Flash' },
@@ -19,6 +23,17 @@ const experiments = [
   { name: 'Agent Loop', enabled: import.meta.env.VITE_AGENT_ENABLED === 'true' },
   { name: '自动目标分析', enabled: import.meta.env.VITE_GOAL_ANALYSIS_ENABLED === 'true' },
 ]
+
+function persistDensity(nextDensity = density.value) {
+  density.value = nextDensity
+  if (saveUiDensity(props.session.userId, density.value)) {
+    preferenceError.value = ''
+    preferenceStatus.value = '界面偏好已保存到此浏览器。'
+    return
+  }
+  preferenceStatus.value = ''
+  preferenceError.value = '无法保存本地界面偏好；当前预览仍然有效。'
+}
 </script>
 
 <template>
@@ -103,18 +118,42 @@ const experiments = [
           <div><dt>凭据策略</dt><dd>HttpOnly Cookie / 页面内存 CSRF</dd></div>
         </dl>
         <fieldset>
-          <legend>界面密度（当前页面预览）</legend>
+          <legend>界面密度（本地偏好）</legend>
           <label><input
-            v-model="density"
             type="radio"
             value="comfortable"
+            :checked="density === 'comfortable'"
+            @change="persistDensity('comfortable')"
           >舒适</label>
           <label><input
-            v-model="density"
             type="radio"
             value="compact"
+            :checked="density === 'compact'"
+            @change="persistDensity('compact')"
           >紧凑</label>
         </fieldset>
+        <p
+          v-if="preferenceError"
+          class="settings-preference-message settings-preference-error"
+          role="alert"
+        >
+          {{ preferenceError }}
+          <button
+            type="button"
+            data-test="retry-preference"
+            @click="persistDensity()"
+          >
+            重试保存
+          </button>
+        </p>
+        <p
+          v-else-if="preferenceStatus"
+          class="settings-preference-message"
+          data-test="preference-status"
+          role="status"
+        >
+          {{ preferenceStatus }}
+        </p>
         <button
           class="settings-logout"
           data-test="settings-logout"

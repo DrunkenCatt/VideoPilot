@@ -5,6 +5,7 @@ import { RouterView, useRoute, useRouter } from 'vue-router'
 import type { CitedEvidence, LoginRequest, Session } from './api/contracts'
 import { ApiClientError, createSessionApi } from './api/session'
 import LoginDialog from './features/session/LoginDialog.vue'
+import { clearUiPreferences } from './features/settings/uiPreferences'
 import AppShell from './layout/AppShell.vue'
 
 const sessionApi = createSessionApi()
@@ -74,6 +75,7 @@ async function logout() {
   status.value = 'submitting'
   try {
     await sessionApi.logout(session.value.csrfToken)
+    clearUiPreferences(session.value.userId)
     session.value = null
     currentWorkspaceJobId.value = ''
     sessionEpoch.value += 1
@@ -85,6 +87,7 @@ async function logout() {
 }
 
 function sessionExpired() {
+  if (session.value) clearUiPreferences(session.value.userId)
   session.value = null
   currentWorkspaceJobId.value = ''
   sessionEpoch.value += 1
