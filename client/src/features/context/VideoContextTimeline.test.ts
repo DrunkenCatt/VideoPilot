@@ -212,7 +212,8 @@ describe('VideoContextTimeline', () => {
     await wrapper.get('[data-test="load-more-segments"]').trigger('click')
     await flushPromises()
 
-    expect(wrapper.get('[data-test="segment-1"]').text()).toContain('01:00')
+    expect(wrapper.get('[data-test="segment-row-1"]').text()).toContain('01:00')
+    expect(wrapper.get('[data-test="segment-1"]').text()).toContain('继续讲解第二节')
     expect(pages).toHaveBeenNthCalledWith(2, context.links.segments, { cursor: 1, pageSize: 100 })
   })
 
@@ -245,7 +246,8 @@ describe('VideoContextTimeline', () => {
     await wrapper.get('[data-test="load-more-segments"]').trigger('click')
     await flushPromises()
 
-    expect(wrapper.get('[data-test="segment-0"]').text()).toContain('00:00')
+    expect(wrapper.get('[data-test="segment-row-0"]').text()).toContain('00:00')
+    expect(wrapper.get('[data-test="segment-0"]').text()).toContain('欢迎来到第一节')
     expect(wrapper.find('[data-test="segment-1"]').exists()).toBe(false)
     expect(wrapper.emitted('unauthenticated')).toHaveLength(1)
   })
@@ -354,5 +356,46 @@ describe('VideoContextTimeline', () => {
 
     expect(pages).toHaveBeenCalledTimes(1)
     expect(wrapper.get<HTMLVideoElement>('[data-test="context-player"]').element.currentTime).toBe(15)
+  })
+
+  it('applies an initial citation only after the player is rendered and exposes the cited timeline item', async () => {
+    const pages = vi.fn().mockResolvedValue({ data: segments, nextCursor: null, hasMore: false })
+    const wrapper = mount(VideoContextTimeline, {
+      props: {
+        job,
+        api: contextApi({ segments: pages }),
+        seekTarget: {
+          segmentId: segments[1]!.segmentId,
+          startMs: 72_000,
+          endMs: 89_000,
+        },
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.get<HTMLVideoElement>('[data-test="context-player"]').element.currentTime).toBe(72)
+    expect(wrapper.get('[data-test="segment-1"]').attributes('aria-current')).toBe('true')
+  })
+
+  it('renders timeline markers outside the segment card and contains long OCR in a collapsible scroll region', async () => {
+    const longOcr = Array.from({ length: 24 }, (_, index) => ({
+      text: `OCR observation ${index + 1}`,
+      confidence: index === 23 ? 96.5 : 0.9,
+    }))
+    const api = contextApi({
+      segments: vi.fn().mockResolvedValue({
+        data: [{ ...segments[0]!, ocr: longOcr }],
+        nextCursor: null,
+        hasMore: false,
+      }),
+    })
+    const wrapper = mount(VideoContextTimeline, { props: { job, api } })
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="segment-row-0"] > .context-timeline__marker')).toBeTruthy()
+    expect(wrapper.get('[data-test="ocr-layer"]').element.tagName).toBe('DETAILS')
+    expect(wrapper.get('[data-test="ocr-scroll"]').text()).toContain('OCR observation 24')
+    expect(wrapper.get('[data-test="ocr-scroll"]').text()).toContain('OCR observation 1 · 90%')
+    expect(wrapper.get('[data-test="ocr-scroll"]').text()).toContain('OCR observation 24 · 97%')
   })
 })

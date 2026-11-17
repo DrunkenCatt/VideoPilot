@@ -49,6 +49,8 @@ describe('WorkspaceContextPanel', () => {
     expect(wrapper.get('[data-test="workspace-player-panel"] video').attributes('src')).toBe('/media/video')
     expect(wrapper.findAll('[data-test="workspace-evidence-item"]')).toHaveLength(2)
     expect(wrapper.get('[data-test="workspace-context-summary"]').text()).toContain('2 个片段')
+    expect(wrapper.get('[data-test="workspace-goal-panel"]').text()).toContain(readyJob.goal)
+    expect(wrapper.find('.workspace-player__caption').exists()).toBe(false)
     expect(wrapper.text()).toContain('OCR 降级')
   })
 

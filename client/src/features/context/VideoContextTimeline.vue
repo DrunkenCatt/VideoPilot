@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 
 import type { AnalysisJob, CitedEvidence, KeyframeReference, VideoContext, VideoSegment } from '../../api/contracts'
 import { createContextApi, type ContextApi } from '../../api/context'
@@ -71,6 +71,11 @@ function formatTime(milliseconds: number): string {
   return hours > 0 ? `${String(hours).padStart(2, '0')}:${clock}` : clock
 }
 
+function formatConfidence(confidence: number): string {
+  const percentage = confidence <= 1 ? confidence * 100 : confidence
+  return `${Math.round(Math.min(100, Math.max(0, percentage)))}%`
+}
+
 function safeMessage(error: unknown): string {
   if (!(error instanceof ApiClientError)) return '无法读取视频上下文，请确认本地服务可用。'
   if (error.code === 'AUTHENTICATION_REQUIRED') return '会话已过期，请重新登录。'
@@ -99,6 +104,7 @@ async function renewPlayback(expectedContext = context.value) {
 
 async function load() {
   const currentRevision = ++revision
+  let initialCitation: CitationTarget | null = null
   await progress.flush().catch(() => undefined)
   progress.reset()
   context.value = null
@@ -128,11 +134,15 @@ async function load() {
     segments.value = page.data
     nextCursor.value = page.nextCursor
     hasMore.value = page.hasMore
-    if (props.seekTarget) await seekToCitation(props.seekTarget, currentRevision)
+    initialCitation = props.seekTarget
   } catch (error) {
     if (currentRevision === revision) handleError(error)
   } finally {
     if (currentRevision === revision) loading.value = false
+  }
+  if (currentRevision === revision && initialCitation && !errorMessage.value) {
+    await nextTick()
+    await seekToCitation(initialCitation, currentRevision)
   }
 }
 
@@ -157,7 +167,12 @@ async function seekToCitation(citation: CitationTarget, expectedRevision = revis
       return
     }
   }
-  if (expectedRevision === revision) seek(citation.startMs)
+  if (expectedRevision === revision) {
+    seek(citation.startMs)
+    await nextTick()
+    const row = globalThis.document.getElementById(`context-segment-${citation.segmentId}`)
+    row?.scrollIntoView?.({ block: 'center' })
+  }
 }
 
 async function loadMore() {
@@ -313,8 +328,18 @@ onBeforeUnmount(() => {
           <ol>
             <li
               v-for="segment in segments"
+              :id="`context-segment-${segment.segmentId}`"
               :key="segment.segmentId"
+              class="context-timeline__row"
+              :data-segment-id="segment.segmentId"
+              :data-test="`segment-row-${segment.ordinal}`"
             >
+              <span class="context-timeline__time">{{ formatTime(segment.startMs) }}–{{ formatTime(segment.endMs) }}</span>
+              <span
+                class="context-timeline__marker"
+                :class="{ 'context-timeline__marker--active': currentOrdinal === segment.ordinal }"
+                aria-hidden="true"
+              />
               <button
                 class="context-timeline__item"
                 :data-test="`segment-${segment.ordinal}`"
@@ -322,7 +347,6 @@ onBeforeUnmount(() => {
                 type="button"
                 @click="seek(segment.startMs)"
               >
-                <span>{{ formatTime(segment.startMs) }}–{{ formatTime(segment.endMs) }}</span>
                 <span><strong>{{ segment.asrText || '仅包含视觉证据的片段' }}</strong><small>ASR {{ segment.asrText ? '可用' : '缺失' }} · OCR {{ segment.ocr.length }} 条 · 关键帧 {{ segment.keyframes.length }} 张</small></span>
               </button>
             </li>
@@ -404,16 +428,25 @@ onBeforeUnmount(() => {
             <section data-test="asr-layer">
               <h3>ASR · 语音</h3><p>{{ selectedSegment.asrText || '此时间窗没有可用语音文本。' }}</p>
             </section>
-            <section data-test="ocr-layer">
-              <h3>OCR · 画面</h3><p
-                v-for="(observation, index) in selectedSegment.ocr"
-                :key="index"
+            <details
+              open
+              data-test="ocr-layer"
+            >
+              <summary><span>OCR · 画面</span><small>{{ selectedSegment.ocr.length }} 条</small></summary>
+              <div
+                class="current-segment__ocr-scroll"
+                data-test="ocr-scroll"
               >
-                {{ observation.text }} · {{ Math.round(observation.confidence * 100) }}%
-              </p><p v-if="selectedSegment.ocr.length === 0">
-                无已持久化画面文字。
-              </p>
-            </section>
+                <p
+                  v-for="(observation, index) in selectedSegment.ocr"
+                  :key="index"
+                >
+                  {{ observation.text }} · {{ formatConfidence(observation.confidence) }}
+                </p><p v-if="selectedSegment.ocr.length === 0">
+                  无已持久化画面文字。
+                </p>
+              </div>
+            </details>
             <section data-test="keyframe-layer">
               <h3>FRAME · 关键帧</h3><div class="keyframe-buttons">
                 <button

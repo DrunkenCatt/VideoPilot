@@ -179,7 +179,17 @@ onBeforeUnmount(() => {
       >
         {{ errorMessage || '当前视频暂时没有可用的播放链接。' }}
       </p>
-      <div class="workspace-player__caption">
+    </section>
+
+    <section
+      class="workspace-evidence product-surface"
+      data-test="workspace-evidence-panel"
+      aria-labelledby="workspace-evidence-title"
+    >
+      <div
+        class="workspace-goal-panel"
+        data-test="workspace-goal-panel"
+      >
         <span>当前分析目标</span>
         <strong>{{ job.goal }}</strong>
         <small
@@ -191,13 +201,6 @@ onBeforeUnmount(() => {
           role="status"
         >{{ progress.message.value }}</small>
       </div>
-    </section>
-
-    <section
-      class="workspace-evidence product-surface"
-      data-test="workspace-evidence-panel"
-      aria-labelledby="workspace-evidence-title"
-    >
       <header>
         <div>
           <h2 id="workspace-evidence-title">
