@@ -165,6 +165,12 @@ public final class M1ApiContracts {
             String summary) {
     }
 
+    public record MediaStorageSummaryResponse(
+            long usedBytes,
+            Long capacityBytes,
+            long mediaCount) {
+    }
+
     public record CreateAnalysisJobRequest(
             @NotNull UUID mediaId,
             @NotBlank @Size(max = 4_000) String goal,

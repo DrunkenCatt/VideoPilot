@@ -66,6 +66,27 @@ class MediaAssetQueryApplicationServiceTest {
                 .isEqualTo(MediaUploadException.Reason.RESOURCE_NOT_FOUND);
     }
 
+    @Test
+    void returnsOwnerScopedStorageUsageWithConfiguredCapacity() {
+        RecordingStore store = new RecordingStore();
+        store.storageUsage = new MediaAssetQueryStore.StorageUsage(3_072, 2);
+        MediaAssetQueryApplicationService service = new MediaAssetQueryApplicationService(store, 10_240L);
+
+        MediaStorageSummary summary = service.storageSummary(new OwnerContext(OWNER_ID));
+
+        assertThat(store.ownerId).isEqualTo(OWNER_ID);
+        assertThat(summary).isEqualTo(new MediaStorageSummary(3_072, 10_240L, 2));
+    }
+
+    @Test
+    void reportsUnknownCapacityWithoutInventingAQuota() {
+        RecordingStore store = new RecordingStore();
+        MediaAssetQueryApplicationService service = new MediaAssetQueryApplicationService(store, null);
+
+        assertThat(service.storageSummary(new OwnerContext(OWNER_ID)))
+                .isEqualTo(new MediaStorageSummary(0, null, 0));
+    }
+
     private MediaAsset asset() {
         return new MediaAsset(
                 MEDIA_ID, OWNER_ID, "a".repeat(64), "media/owner/source", "lecture.mp4",
@@ -84,6 +105,7 @@ class MediaAssetQueryApplicationServiceTest {
         private int pageSize;
         private AssetPage page = new AssetPage(List.of(), 0);
         private Optional<MediaAsset> asset = Optional.empty();
+        private StorageUsage storageUsage = new StorageUsage(0, 0);
 
         @Override
         public AssetPage findPage(OwnerId ownerId, int page, int pageSize) {
@@ -97,6 +119,12 @@ class MediaAssetQueryApplicationServiceTest {
         public Optional<MediaAsset> findById(OwnerId ownerId, UUID mediaId) {
             this.ownerId = ownerId;
             return asset;
+        }
+
+        @Override
+        public StorageUsage summarizeStorage(OwnerId ownerId) {
+            this.ownerId = ownerId;
+            return storageUsage;
         }
     }
 }

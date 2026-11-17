@@ -67,8 +67,9 @@ public class MediaUploadAutoConfiguration {
 
     @Bean
     MediaAssetQueryApplicationService mediaAssetQueryApplicationService(
-            MediaUploadPersistenceAdapter store) {
-        return new MediaAssetQueryApplicationService(store);
+            MediaUploadPersistenceAdapter store,
+            MediaStorageProperties properties) {
+        return new MediaAssetQueryApplicationService(store, properties.getCapacityBytes());
     }
 
     @Bean

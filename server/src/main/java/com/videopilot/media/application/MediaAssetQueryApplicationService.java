@@ -10,9 +10,18 @@ public final class MediaAssetQueryApplicationService {
     private static final int MAX_PAGE_SIZE = 100;
 
     private final MediaAssetQueryStore store;
+    private final Long capacityBytes;
 
     public MediaAssetQueryApplicationService(MediaAssetQueryStore store) {
+        this(store, null);
+    }
+
+    public MediaAssetQueryApplicationService(MediaAssetQueryStore store, Long capacityBytes) {
         this.store = store;
+        if (capacityBytes != null && capacityBytes <= 0) {
+            throw new IllegalArgumentException("capacityBytes must be positive when configured");
+        }
+        this.capacityBytes = capacityBytes;
     }
 
     public MediaAssetPage list(OwnerContext owner, int page, int pageSize) {
@@ -38,6 +47,11 @@ public final class MediaAssetQueryApplicationService {
         return store.findById(owner.ownerId(), mediaId)
                 .map(MediaAssetQueryApplicationService::toView)
                 .orElseThrow(() -> new MediaUploadException(MediaUploadException.Reason.RESOURCE_NOT_FOUND));
+    }
+
+    public MediaStorageSummary storageSummary(OwnerContext owner) {
+        MediaAssetQueryStore.StorageUsage usage = store.summarizeStorage(owner.ownerId());
+        return new MediaStorageSummary(usage.usedBytes(), capacityBytes, usage.mediaCount());
     }
 
     private static MediaAssetView toView(MediaAsset asset) {

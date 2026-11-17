@@ -18,6 +18,7 @@ import com.videopilot.infrastructure.security.IdentitySecurityConfiguration;
 import com.videopilot.media.application.MediaAssetView;
 import com.videopilot.media.application.MediaAssetPage;
 import com.videopilot.media.application.MediaAssetQueryApplicationService;
+import com.videopilot.media.application.MediaStorageSummary;
 import com.videopilot.media.application.MediaUploadApplicationService;
 import com.videopilot.media.application.UploadPartView;
 import com.videopilot.media.application.UploadSessionView;
@@ -134,6 +135,20 @@ class MediaUploadControllerTest {
         verify(mediaAssets).list(
                 eq(new com.videopilot.identity.application.OwnerContext(SESSION.ownerId())),
                 eq(2), eq(10));
+    }
+
+    @Test
+    void returnsStorageSummaryForTheAuthenticatedOwner() throws Exception {
+        when(mediaAssets.storageSummary(any()))
+                .thenReturn(new MediaStorageSummary(3_145_728L, 10_737_418_240L, 2));
+
+        mockMvc.perform(get("/api/v1/media-assets/storage-summary").cookie(cookie()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.usedBytes").value(3_145_728L))
+                .andExpect(jsonPath("$.capacityBytes").value(10_737_418_240L))
+                .andExpect(jsonPath("$.mediaCount").value(2));
+        verify(mediaAssets).storageSummary(
+                eq(new com.videopilot.identity.application.OwnerContext(SESSION.ownerId())));
     }
 
     @Test

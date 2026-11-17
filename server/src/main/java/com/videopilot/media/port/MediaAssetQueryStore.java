@@ -12,6 +12,16 @@ public interface MediaAssetQueryStore {
 
     Optional<MediaAsset> findById(OwnerId ownerId, UUID mediaId);
 
+    StorageUsage summarizeStorage(OwnerId ownerId);
+
     record AssetPage(List<MediaAsset> assets, long totalItems) {
+    }
+
+    record StorageUsage(long usedBytes, long mediaCount) {
+        public StorageUsage {
+            if (usedBytes < 0 || mediaCount < 0) {
+                throw new IllegalArgumentException("storage usage cannot be negative");
+            }
+        }
     }
 }
