@@ -1,0 +1,2 @@
+# Historical deterministic evaluation fixture; no credential was present.
+7fc24946b3dd3b761ae9d4ee41e8a80804dfa87c:server/src/test/java/com/videopilot/infrastructure/evaluation/JdbcEvaluationStoreIT.java:generic-api-key:51
