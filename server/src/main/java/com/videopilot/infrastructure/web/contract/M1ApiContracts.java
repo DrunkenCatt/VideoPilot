@@ -171,6 +171,12 @@ public final class M1ApiContracts {
             long mediaCount) {
     }
 
+    public record PlaybackProgressRequest(@Min(0) long positionMs) {
+    }
+
+    public record PlaybackProgressResponse(long positionMs, Instant updatedAt) {
+    }
+
     public record CreateAnalysisJobRequest(
             @NotNull UUID mediaId,
             @NotBlank @Size(max = 4_000) String goal,

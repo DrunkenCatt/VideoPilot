@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration;
 import com.videopilot.media.application.MediaUploadApplicationService;
 import com.videopilot.media.application.MediaAssetQueryApplicationService;
 import com.videopilot.media.application.MediaProbeApplicationService;
+import com.videopilot.media.application.PlaybackProgressApplicationService;
 import com.videopilot.media.port.MediaObjectStore;
 import com.videopilot.infrastructure.media.storage.DisabledMediaObjectStore;
 import com.videopilot.infrastructure.media.storage.MediaStorageProperties;
@@ -70,6 +71,18 @@ public class MediaUploadAutoConfiguration {
             MediaUploadPersistenceAdapter store,
             MediaStorageProperties properties) {
         return new MediaAssetQueryApplicationService(store, properties.getCapacityBytes());
+    }
+
+    @Bean
+    PlaybackProgressPersistenceAdapter playbackProgressPersistenceAdapter(PlaybackProgressMapper mapper) {
+        return new PlaybackProgressPersistenceAdapter(mapper);
+    }
+
+    @Bean
+    PlaybackProgressApplicationService playbackProgressApplicationService(
+            MediaUploadPersistenceAdapter mediaAssets,
+            PlaybackProgressPersistenceAdapter progress) {
+        return new PlaybackProgressApplicationService(mediaAssets, progress, Clock.systemUTC());
     }
 
     @Bean

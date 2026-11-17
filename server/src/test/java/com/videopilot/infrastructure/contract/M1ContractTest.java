@@ -16,6 +16,8 @@ import com.videopilot.infrastructure.web.contract.M1ApiContracts.JobLinks;
 import com.videopilot.infrastructure.web.contract.M1ApiContracts.LoginRequest;
 import com.videopilot.infrastructure.web.contract.M1ApiContracts.MediaAssetResponse;
 import com.videopilot.infrastructure.web.contract.M1ApiContracts.MediaFailure;
+import com.videopilot.infrastructure.web.contract.M1ApiContracts.PlaybackProgressRequest;
+import com.videopilot.infrastructure.web.contract.M1ApiContracts.PlaybackProgressResponse;
 import com.videopilot.infrastructure.web.contract.M1ApiContracts.PageMetadata;
 import com.videopilot.infrastructure.web.contract.M1ApiContracts.PageResponse;
 import com.videopilot.infrastructure.web.contract.M1ApiContracts.SessionResponse;
@@ -63,6 +65,7 @@ class M1ContractTest {
                         " ",
                         AnalysisMode.STANDARD)))
                 .hasSize(1);
+        assertThat(validator.validate(new PlaybackProgressRequest(-1))).hasSize(1);
     }
 
     @Test
@@ -151,6 +154,8 @@ class M1ContractTest {
                                 now,
                                 now),
                         mediaFailure,
+                        new PlaybackProgressRequest(12_345),
+                        new PlaybackProgressResponse(12_345, now),
                         failure,
                         links,
                         job,
