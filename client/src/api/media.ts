@@ -5,6 +5,7 @@ import {
   type MediaId,
   type MediaStorageSummary,
   type PageResponse,
+  type PlaybackProgress,
   type UploadId,
   type UploadPartTarget,
   type UploadSession,
@@ -62,6 +63,30 @@ export function createMediaApi(
       })
       if (!response.ok) throw await errorFrom(response)
       return (await response.json()) as MediaStorageSummary
+    },
+
+    async playbackProgress(mediaId: MediaId): Promise<PlaybackProgress> {
+      const response = await request(`${API.mediaAssets}/${encodeURIComponent(mediaId)}/playback-progress`, {
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json' },
+      })
+      if (!response.ok) throw await errorFrom(response)
+      return (await response.json()) as PlaybackProgress
+    },
+
+    async savePlaybackProgress(
+      mediaId: MediaId,
+      positionMs: number,
+      csrfToken: string,
+    ): Promise<PlaybackProgress> {
+      const response = await request(`${API.mediaAssets}/${encodeURIComponent(mediaId)}/playback-progress`, {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: jsonHeaders(csrfToken),
+        body: JSON.stringify({ positionMs }),
+      })
+      if (!response.ok) throw await errorFrom(response)
+      return (await response.json()) as PlaybackProgress
     },
 
     async create(input: UploadSessionRequest, csrfToken: string): Promise<UploadSession> {

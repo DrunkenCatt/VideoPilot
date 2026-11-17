@@ -223,6 +223,11 @@ export interface MediaStorageSummary {
   mediaCount: number
 }
 
+export interface PlaybackProgress {
+  positionMs: number
+  updatedAt: string | null
+}
+
 export interface MediaFailure {
   code: string
   retryable: boolean

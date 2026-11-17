@@ -1,18 +1,29 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
 import type { AnalysisJob, VideoContext, VideoSegment } from '../../api/contracts'
 import { createContextApi, type ContextApi } from '../../api/context'
+import { createMediaApi, type MediaApi } from '../../api/media'
 import { ApiClientError } from '../../api/session'
 import { statusLabel } from '../jobs/jobPresentation'
+import { usePlaybackProgress } from '../media/usePlaybackProgress'
 
 const props = withDefaults(defineProps<{
   job: AnalysisJob
   api?: ContextApi
+  mediaApi?: Pick<MediaApi, 'playbackProgress' | 'savePlaybackProgress'>
+  csrfToken?: string
 }>(), {
   api: () => createContextApi(),
+  mediaApi: () => createMediaApi(),
+  csrfToken: '',
 })
 const emit = defineEmits<{ unauthenticated: [] }>()
+const progress = usePlaybackProgress(
+  props.mediaApi,
+  () => props.csrfToken,
+  () => emit('unauthenticated'),
+)
 
 const context = ref<VideoContext | null>(null)
 const segments = ref<VideoSegment[]>([])
@@ -56,6 +67,8 @@ async function renewPlayback(expected = context.value) {
 
 async function load() {
   const currentRevision = ++revision
+  await progress.flush().catch(() => undefined)
+  progress.reset()
   context.value = null
   segments.value = []
   playbackUrl.value = ''
@@ -71,6 +84,7 @@ async function load() {
     const [page] = await Promise.all([
       props.api.segments(loaded.links.segments, { pageSize: 100 }),
       renewPlayback(loaded),
+      props.csrfToken ? progress.restore(loaded.mediaId, loaded.durationMs) : Promise.resolve(),
     ])
     if (currentRevision === revision) segments.value = page.data
   } catch (error) {
@@ -90,7 +104,16 @@ function seek(segment: VideoSegment) {
 }
 
 function updateTime(event: globalThis.Event) {
-  currentTimeMs.value = Math.round((event.currentTarget as globalThis.HTMLVideoElement).currentTime * 1_000)
+  const video = event.currentTarget as globalThis.HTMLVideoElement
+  currentTimeMs.value = Math.round(video.currentTime * 1_000)
+  if (context.value && props.csrfToken) {
+    progress.track(context.value.mediaId, video.currentTime, context.value.durationMs)
+  }
+}
+
+function playbackLoaded() {
+  renewed = false
+  if (player.value) progress.apply(player.value)
 }
 
 async function handlePlaybackError() {
@@ -107,6 +130,9 @@ async function handlePlaybackError() {
 }
 
 watch(() => [props.job.jobId, props.job.status] as const, load, { immediate: true })
+onBeforeUnmount(() => {
+  void progress.flush().catch(() => undefined).finally(progress.dispose)
+})
 </script>
 
 <template>
@@ -141,7 +167,8 @@ watch(() => [props.job.jobId, props.job.status] as const, load, { immediate: tru
         controls
         preload="metadata"
         @timeupdate="updateTime"
-        @loadeddata="renewed = false"
+        @loadedmetadata="playbackLoaded"
+        @pause="progress.flush"
         @error="handlePlaybackError"
       >
         当前浏览器不支持视频播放。
@@ -155,6 +182,14 @@ watch(() => [props.job.jobId, props.job.status] as const, load, { immediate: tru
       <div class="workspace-player__caption">
         <span>当前分析目标</span>
         <strong>{{ job.goal }}</strong>
+        <small
+          v-if="progress.label.value"
+          data-test="workspace-playback-progress"
+        >{{ progress.label.value }}</small>
+        <small
+          v-else-if="progress.message.value"
+          role="status"
+        >{{ progress.message.value }}</small>
       </div>
     </section>
 

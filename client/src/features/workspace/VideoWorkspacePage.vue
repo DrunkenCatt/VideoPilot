@@ -131,6 +131,7 @@ watch(() => props.jobId, (jobId) => void load(jobId), { immediate: true })
       >
         <WorkspaceContextPanel
           :job="job"
+          :csrf-token="session.csrfToken"
           @unauthenticated="emit('unauthenticated')"
         />
 

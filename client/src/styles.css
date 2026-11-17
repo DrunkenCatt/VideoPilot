@@ -535,6 +535,7 @@ h1 {
 .workspace-player__caption span, .workspace-player__caption strong { display: block; }
 .workspace-player__caption span { color: #8fb8ef; font-size: 0.65rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
 .workspace-player__caption strong { margin-top: var(--space-3); font-size: clamp(1.1rem, 2vw, 1.55rem); line-height: 1.45; }
+.workspace-player__caption small { display: block; margin-top: var(--space-3); color: #d4e1ed; font-size: 0.68rem; }
 
 .workspace-evidence { min-height: 29rem; overflow: hidden; }
 .workspace-evidence > header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); padding: var(--space-4); border-bottom: 1px solid var(--color-border); }

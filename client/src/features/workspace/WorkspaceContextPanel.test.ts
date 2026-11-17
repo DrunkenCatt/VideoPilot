@@ -14,6 +14,7 @@ const readyJob = {
 const context = {
   contextId: '30000000-0000-0000-0000-000000000008',
   jobId: readyJob.jobId,
+  mediaId: '20000000-0000-0000-0000-000000000008',
   durationMs: 120_000,
   segmentCount: 2,
   asrState: 'AVAILABLE',
@@ -59,6 +60,30 @@ describe('WorkspaceContextPanel', () => {
     await wrapper.findAll('[data-test="workspace-evidence-item"]')[1]?.trigger('click')
 
     expect(video.currentTime).toBe(42)
+  })
+
+  it('restores the last playback position and throttles subsequent progress writes', async () => {
+    vi.useFakeTimers()
+    const mediaApi = {
+      playbackProgress: vi.fn().mockResolvedValue({ positionMs: 12_000, updatedAt: '2026-11-17T08:00:00Z' }),
+      savePlaybackProgress: vi.fn().mockResolvedValue({ positionMs: 25_000, updatedAt: '2026-11-17T08:01:00Z' }),
+    }
+    const wrapper = mount(WorkspaceContextPanel, {
+      props: { job: readyJob, api: api() as unknown as ContextApi, mediaApi, csrfToken: 'csrf-progress' },
+    })
+    await flushPromises()
+    const video = wrapper.get<HTMLVideoElement>('video')
+
+    await video.trigger('loadedmetadata')
+    expect(video.element.currentTime).toBe(12)
+    expect(wrapper.get('[data-test="workspace-playback-progress"]').text()).toContain('00:12')
+
+    video.element.currentTime = 25
+    await video.trigger('timeupdate')
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(mediaApi.savePlaybackProgress).toHaveBeenCalledWith(context.mediaId, 25_000, 'csrf-progress')
+    wrapper.unmount()
+    vi.useRealTimers()
   })
 
   it('shows the real job state without requesting context before READY', async () => {

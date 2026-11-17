@@ -90,6 +90,24 @@ describe('VideoContextTimeline', () => {
     expect(wrapper.get('[data-test="keyframe-layer"]').text()).toContain('00:15')
   })
 
+  it('restores the same media-scoped playback position in the context route', async () => {
+    const mediaApi = {
+      playbackProgress: vi.fn().mockResolvedValue({ positionMs: 15_000, updatedAt: '2026-11-17T08:00:00Z' }),
+      savePlaybackProgress: vi.fn(),
+    }
+    const wrapper = mount(VideoContextTimeline, {
+      props: { job, api: contextApi(), mediaApi, csrfToken: 'csrf-progress' },
+    })
+    await flushPromises()
+
+    const video = wrapper.get<HTMLVideoElement>('[data-test="context-player"]')
+    await video.trigger('loadedmetadata')
+
+    expect(mediaApi.playbackProgress).toHaveBeenCalledWith(context.mediaId)
+    expect(video.element.currentTime).toBe(15)
+    expect(wrapper.get('[data-test="context-playback-progress"]').text()).toContain('00:15')
+  })
+
   it('keeps an ASR-degraded visual-only segment explicit instead of inventing transcript evidence', async () => {
     const visualOnly = {
       ...segments[0]!,

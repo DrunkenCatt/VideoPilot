@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 
-import type { AnalysisJob, CitedEvidence } from '../../api/contracts'
+import type { AnalysisJob, CitedEvidence, Session } from '../../api/contracts'
 import { ApiClientError } from '../../api/session'
 import VideoContextPage from './VideoContextPage.vue'
 
@@ -12,10 +12,11 @@ const job = {
   status: 'READY',
   currentStage: 'INDEXING',
 } as AnalysisJob
+const session = { csrfToken: 'csrf-progress' } as Session
 
 function mountPage(get = vi.fn().mockResolvedValue(job), jobId?: string) {
   return mount(VideoContextPage, {
-    props: { jobId, jobsApi: { get } },
+    props: { jobId, jobsApi: { get }, session },
     global: {
       stubs: {
         VideoContextTimeline: {
@@ -61,7 +62,7 @@ describe('VideoContextPage', () => {
       endMs: 89_000,
     }
     const wrapper = mount(VideoContextPage, {
-      props: { jobId: job.jobId, jobsApi: { get: vi.fn().mockResolvedValue(job) }, seekTarget },
+      props: { jobId: job.jobId, jobsApi: { get: vi.fn().mockResolvedValue(job) }, seekTarget, session },
       global: {
         stubs: {
           VideoContextTimeline: {

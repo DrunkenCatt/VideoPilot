@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 
-import type { AnalysisJob, CitedEvidence } from '../../api/contracts'
+import type { AnalysisJob, CitedEvidence, Session } from '../../api/contracts'
 import { createJobsApi } from '../../api/jobs'
 import { ApiClientError } from '../../api/session'
 import ProductPageHeader from '../../components/ProductPageHeader.vue'
@@ -14,6 +14,7 @@ const props = defineProps<{
   jobId?: AnalysisJob['jobId'] | string
   jobsApi?: JobsApi
   seekTarget?: Pick<CitedEvidence, 'segmentId' | 'startMs' | 'endMs'> | null
+  session: Session
 }>()
 const emit = defineEmits<{ unauthenticated: [] }>()
 const jobsApi = props.jobsApi ?? createJobsApi()
@@ -98,6 +99,7 @@ watch(() => props.jobId, (jobId) => void load(jobId), { immediate: true })
       <VideoContextTimeline
         :job="job"
         :seek-target="seekTarget"
+        :csrf-token="session.csrfToken"
         @unauthenticated="emit('unauthenticated')"
       />
     </template>
