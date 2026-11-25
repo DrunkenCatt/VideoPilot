@@ -8,6 +8,7 @@ import com.videopilot.identity.domain.OwnerId;
 import com.videopilot.media.application.MediaAssetPage;
 import com.videopilot.media.application.MediaAssetQueryApplicationService;
 import com.videopilot.media.application.MediaUploadException;
+import com.videopilot.media.application.MediaStorageSummary;
 import com.videopilot.media.domain.MediaStatus;
 import java.time.Instant;
 import java.util.UUID;
@@ -78,6 +79,22 @@ class MediaAssetQueryIT {
                 .isEqualTo(MediaUploadException.Reason.RESOURCE_NOT_FOUND);
         assertThat(mediaAssets.list(OTHER, 1, 20).data()).singleElement()
                 .extracting(view -> view.mediaId()).isEqualTo(FOREIGN);
+    }
+
+    @Test
+    void summarizesOnlyEffectiveOwnedMediaRegardlessOfPagination() {
+        MediaStorageSummary owner = mediaAssets.storageSummary(OWNER);
+        MediaStorageSummary other = mediaAssets.storageSummary(OTHER);
+
+        assertThat(owner.usedBytes()).isEqualTo(3_072L);
+        assertThat(owner.mediaCount()).isEqualTo(3L);
+        assertThat(owner.capacityBytes()).isNull();
+        assertThat(other.usedBytes()).isEqualTo(1_024L);
+        assertThat(other.mediaCount()).isEqualTo(1L);
+
+        clean();
+        assertThat(mediaAssets.storageSummary(OWNER))
+                .isEqualTo(new MediaStorageSummary(0, null, 0));
     }
 
     private void insert(

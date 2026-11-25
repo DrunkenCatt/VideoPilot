@@ -90,6 +90,12 @@ public class MediaUploadPersistenceAdapter implements MediaUploadStore, MediaPro
     }
 
     @Override
+    public StorageUsage summarizeStorage(OwnerId ownerId) {
+        MediaStorageUsageRow row = mapper.summarizeOwnedStorage(ownerId.value().toString());
+        return new StorageUsage(row.getUsedBytes(), row.getMediaCount());
+    }
+
+    @Override
     public List<UploadSession> findExpiredActive(Instant expiredBefore, int limit) {
         return mapper.selectExpiredActive(expiredBefore, limit).stream().map(this::toDomain).toList();
     }

@@ -2,7 +2,10 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AnalysisJob, JobEvent, MediaAsset, PageResponse, ReliabilitySummary, Session } from '../../api/contracts'
-import JobWorkbench from './JobWorkbench.vue'
+import AnalysisJobsPage from './AnalysisJobsPage.vue'
+
+const routerPush = vi.hoisted(() => vi.fn())
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: routerPush }) }))
 
 const session: Session = {
   userId: 'f97a9f68-b14c-412c-a0f2-1ad20c62f769' as Session['userId'],
@@ -69,27 +72,20 @@ function terminalStream(event: JobEvent): Response {
   })
 }
 
-function mountWorkbench(mediaGet = vi.fn().mockResolvedValue(readyMedia)) {
-  return mount(JobWorkbench, {
-    props: { session, mediaApi: { get: mediaGet }, operationsApi: { get: vi.fn().mockResolvedValue(reliabilitySummary) } },
+function mountWorkbench(mediaGet = vi.fn().mockResolvedValue(readyMedia), jobId?: AnalysisJob['jobId']) {
+  return mount(AnalysisJobsPage, {
+    props: { session, jobId, mediaApi: { get: mediaGet }, operationsApi: { get: vi.fn().mockResolvedValue(reliabilitySummary) } },
     global: {
       stubs: {
-        MediaUploadPanel: { template: '<div data-test="upload-stub" />' },
-        VideoContextTimeline: { template: '<div data-test="context-stub" />' },
-        AnswerWorkspace: { template: '<div data-test="answer-stub" />' },
-        MediaLibrary: {
-          emits: ['select'],
-          setup: () => ({ readyMedia }),
-          template: '<button data-test="choose-ready" @click="$emit(\'select\', readyMedia)">选择媒体</button>',
-        },
       },
     },
   })
 }
 
-describe('JobWorkbench', () => {
+describe('AnalysisJobsPage', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    routerPush.mockReset()
     window.history.replaceState(null, '', '/')
   })
 
@@ -99,44 +95,9 @@ describe('JobWorkbench', () => {
     const wrapper = mountWorkbench()
     await flushPromises()
 
-    expect(wrapper.get('h1').text()).toContain('视频分析工作台')
+    expect(wrapper.get('h1').text()).toContain('解析任务')
+    expect(wrapper.get('[data-test="job-metrics"]')).toBeTruthy()
     expect(wrapper.get('[data-test="jobs-empty"]').text()).toContain('还没有分析任务')
-    expect(wrapper.get('[data-test="selected-media"]').text()).toContain('请先在媒体资源中选择')
-  })
-
-  it('submits one intent and navigates with the self link returned by the server', async () => {
-    const readyEvent: JobEvent = {
-      jobId: job.jobId,
-      sequence: 6,
-      eventType: 'JOB_READY',
-      status: 'READY',
-      stage: 'INDEXING',
-      message: 'Analysis job ready.',
-      occurredAt: '2026-11-02T08:00:06Z',
-      terminal: true,
-    }
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse(200, emptyPage))
-      .mockResolvedValueOnce(jsonResponse(202, job))
-      .mockResolvedValueOnce(terminalStream(readyEvent))
-      .mockResolvedValueOnce(jsonResponse(200, { ...job, status: 'READY', currentStage: 'INDEXING', version: 6 }))
-    vi.stubGlobal('fetch', fetchMock)
-    const wrapper = mountWorkbench()
-    await flushPromises()
-
-    await wrapper.get('[data-test="choose-ready"]').trigger('click')
-    await wrapper.get('#analysis-goal').setValue(job.goal)
-    await wrapper.get('[data-test="submit-job"]').trigger('submit')
-    await flushPromises()
-
-    expect(window.location.hash).toBe(`#${job.links.self}`)
-    expect(wrapper.get('[data-test="job-status"]').text()).toContain('已就绪')
-    expect(wrapper.get('[data-test="job-events"]').text()).toContain('Analysis job ready.')
-    expect(wrapper.get('[data-test="job-media-facts"]').text()).toContain('lecture.mp4')
-    const submitHeaders = fetchMock.mock.calls[1]?.[1]?.headers as Record<string, string>
-    expect(submitHeaders['Idempotency-Key']).toBeTruthy()
-    expect(submitHeaders['X-CSRF-Token']).toBe(session.csrfToken)
   })
 
   it('cancels through the server link and announces the resulting state', async () => {
@@ -165,12 +126,37 @@ describe('JobWorkbench', () => {
 
     await wrapper.get('[data-test="open-job"]').trigger('click')
     await flushPromises()
+    expect(wrapper.get('[data-test="job-detail-drawer"]')).toBeTruthy()
     await wrapper.get('[data-test="cancel-job"]').trigger('click')
     await flushPromises()
 
     expect(fetchMock.mock.calls[2]?.[0]).toBe(job.links.cancellations)
     expect(wrapper.get('[data-test="job-status"]').text()).toContain('已取消')
     expect(wrapper.get('[aria-live="polite"]').text()).toContain('已取消')
+  })
+
+  it('presents jobs as full-width filtered rows instead of the old rail layout', async () => {
+    const ready = { ...job, status: 'READY' as const, goal: 'Redis 可靠性课程' }
+    const failed = {
+      ...job,
+      jobId: '10000000-0000-0000-0000-000000000009' as AnalysisJob['jobId'],
+      status: 'FAILED' as const,
+      goal: 'MySQL 索引课程',
+    }
+    const page = {
+      ...emptyPage,
+      data: [ready, failed],
+      pagination: { ...emptyPage.pagination, totalItems: 2, totalPages: 1 },
+    }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, page)))
+    const wrapper = mountWorkbench()
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="job-table"]')).toBeTruthy()
+    expect(wrapper.find('.jobs-layout').exists()).toBe(false)
+    await wrapper.get('[data-test="job-search"]').setValue('Redis')
+    expect(wrapper.text()).toContain('Redis 可靠性课程')
+    expect(wrapper.text()).not.toContain('MySQL 索引课程')
   })
 
   it('confirms a dead-letter replay once and refreshes the persisted attempt', async () => {
@@ -254,7 +240,7 @@ describe('JobWorkbench', () => {
     expect(wrapper.find('[data-test="cancel-job"]').exists()).toBe(false)
   })
 
-  it('restores a selected terminal job from the server link in the URL hash', async () => {
+  it('restores a selected terminal job from the route job id', async () => {
     const ready = { ...job, status: 'READY' as const, version: 6 }
     const page = { ...emptyPage, data: [ready], pagination: { ...emptyPage.pagination, totalItems: 1, totalPages: 1 } }
     const readyEvent: JobEvent = {
@@ -267,7 +253,6 @@ describe('JobWorkbench', () => {
       occurredAt: '2026-11-02T08:00:06Z',
       terminal: true,
     }
-    globalThis.window.history.replaceState(null, '', `#${job.links.self}`)
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(200, page))
@@ -275,12 +260,61 @@ describe('JobWorkbench', () => {
       .mockResolvedValueOnce(jsonResponse(200, ready))
     vi.stubGlobal('fetch', fetchMock)
 
-    const wrapper = mountWorkbench()
+    const wrapper = mountWorkbench(vi.fn().mockResolvedValue(readyMedia), job.jobId)
     await flushPromises()
 
     expect(wrapper.get('[data-test="job-status"]').text()).toContain('已就绪')
     expect(wrapper.get('[data-test="job-events"]').text()).toContain('Analysis job ready.')
     expect(fetchMock).toHaveBeenCalledTimes(3)
+
+    await wrapper.get('[data-test="open-workspace"]').trigger('click')
+    expect(routerPush).toHaveBeenCalledWith({ name: 'workspace', params: { jobId: job.jobId } })
+  })
+
+  it('ignores a late job response after the route job id changes', async () => {
+    const second = {
+      ...job,
+      jobId: '10000000-0000-0000-0000-000000000009' as AnalysisJob['jobId'],
+      mediaId: '20000000-0000-0000-0000-000000000009' as AnalysisJob['mediaId'],
+      goal: '第二个任务',
+      status: 'READY' as const,
+      links: {
+        self: '/api/v1/analysis-jobs/10000000-0000-0000-0000-000000000009',
+        events: '/api/v1/analysis-jobs/10000000-0000-0000-0000-000000000009/events',
+        cancellations: '/api/v1/analysis-jobs/10000000-0000-0000-0000-000000000009/cancellations',
+      },
+    }
+    let resolveFirst!: (response: Response) => void
+    const firstResponse = new Promise<Response>((resolve) => { resolveFirst = resolve })
+    const terminal: JobEvent = {
+      jobId: second.jobId, sequence: 1, eventType: 'JOB_READY', status: 'READY', stage: 'INDEXING',
+      message: 'Second job ready.', occurredAt: '2026-11-02T09:00:00Z', terminal: true,
+    }
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('?page=')) return Promise.resolve(jsonResponse(200, emptyPage))
+      if (url === job.links.self) return firstResponse
+      if (url === second.links.self) return Promise.resolve(jsonResponse(200, second))
+      if (url === second.links.events) return Promise.resolve(terminalStream(terminal))
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const mediaGet = vi.fn().mockImplementation((mediaId: MediaAsset['mediaId']) => Promise.resolve({
+      ...readyMedia,
+      mediaId,
+      originalFilename: mediaId === second.mediaId ? 'second.mp4' : 'first.mp4',
+    }))
+    const wrapper = mountWorkbench(mediaGet, job.jobId)
+    await flushPromises()
+
+    await wrapper.setProps({ jobId: second.jobId })
+    await flushPromises()
+    resolveFirst(jsonResponse(200, job))
+    await flushPromises()
+
+    expect(wrapper.get('#job-detail-title').text()).toContain('第二个任务')
+    expect(wrapper.get('[data-test="job-media-facts"]').text()).toContain('second.mp4')
+    expect(wrapper.text()).not.toContain('first.mp4')
   })
 
   it('restores the persisted media facts when an existing job is opened', async () => {

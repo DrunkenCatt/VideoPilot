@@ -207,6 +207,7 @@ videopilot:
       secret-key: ${MINIO_SECRET_KEY:}
       bucket: ${MINIO_MEDIA_BUCKET:videopilot-media}
       region: ${MINIO_REGION:us-east-1}
+      capacity: ${MEDIA_STORAGE_CAPACITY:}
       part-size: ${MEDIA_UPLOAD_PART_SIZE:8MB}
       max-parts: ${MEDIA_UPLOAD_MAX_PARTS:10000}
       session-ttl: ${MEDIA_UPLOAD_SESSION_TTL:1h}

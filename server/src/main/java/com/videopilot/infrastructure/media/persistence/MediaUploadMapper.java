@@ -114,6 +114,15 @@ interface MediaUploadMapper extends BaseMapper<MediaAssetRow> {
     long countOwnedAssets(@Param("ownerId") String ownerId);
 
     @Select("""
+            SELECT COALESCE(SUM(content_length), 0) AS used_bytes,
+                   COUNT(*) AS media_count
+            FROM media_asset
+            WHERE owner_id = #{ownerId}
+              AND media_status IN ('UPLOADED', 'PROBING', 'READY', 'FAILED')
+            """)
+    MediaStorageUsageRow summarizeOwnedStorage(@Param("ownerId") String ownerId);
+
+    @Select("""
             SELECT * FROM media_asset
             WHERE media_status = 'UPLOADED'
                OR (media_status = 'PROBING' AND updated_at <= #{staleBefore})

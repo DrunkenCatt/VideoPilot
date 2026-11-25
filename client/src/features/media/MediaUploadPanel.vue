@@ -11,6 +11,7 @@ type UploadState = 'idle' | 'ready' | 'hashing' | 'uploading' | 'retrying' | 'ab
 const props = defineProps<{
   session: Session
   uploader?: typeof uploadMediaFile
+  compact?: boolean
 }>()
 const emit = defineEmits<{ unauthenticated: []; uploaded: [media: MediaAsset] }>()
 const api = createMediaApi()
@@ -127,6 +128,7 @@ onBeforeUnmount(() => controller?.abort())
 <template>
   <section
     class="upload-panel"
+    :class="{ 'upload-panel--compact': compact }"
     aria-labelledby="upload-title"
   >
     <div class="upload-panel__intro">

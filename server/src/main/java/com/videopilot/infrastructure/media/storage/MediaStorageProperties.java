@@ -14,6 +14,7 @@ public class MediaStorageProperties {
     private String secretKey = "";
     private String bucket = "videopilot-media";
     private String region = "us-east-1";
+    private String capacity = "";
     private DataSize partSize = DataSize.ofMegabytes(8);
     private int maxParts = 10_000;
     private Duration sessionTtl = Duration.ofHours(1);
@@ -34,6 +35,14 @@ public class MediaStorageProperties {
     public void setBucket(String bucket) { this.bucket = bucket; }
     public String getRegion() { return region; }
     public void setRegion(String region) { this.region = region; }
+    public String getCapacity() { return capacity; }
+    public void setCapacity(String capacity) { this.capacity = capacity; }
+    public Long getCapacityBytes() {
+        if (capacity == null || capacity.isBlank()) return null;
+        long bytes = DataSize.parse(capacity).toBytes();
+        if (bytes <= 0) throw new IllegalArgumentException("media storage capacity must be positive");
+        return bytes;
+    }
     public DataSize getPartSize() { return partSize; }
     public void setPartSize(DataSize partSize) { this.partSize = partSize; }
     public int getMaxParts() { return maxParts; }

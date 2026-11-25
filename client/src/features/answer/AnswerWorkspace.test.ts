@@ -119,6 +119,42 @@ afterEach(() => {
 })
 
 describe('AnswerWorkspace', () => {
+  it('prefills a question handed off by the current video workspace', async () => {
+    const wrapper = mount(AnswerWorkspace, {
+      props: {
+        job,
+        csrfToken: session.csrfToken,
+        initialQuestion: 'MySQL 为什么是真源？',
+        api: answersApi(),
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.get<HTMLTextAreaElement>('[data-test="answer-question"]').element.value).toBe('MySQL 为什么是真源？')
+  })
+
+  it('uses a job-scoped history rail and renders only the selected answer in the reader', async () => {
+    const wrapper = mount(AnswerWorkspace, {
+      props: {
+        job,
+        csrfToken: session.csrfToken,
+        api: answersApi({ list: vi.fn().mockResolvedValue(page([answered, refused])) }),
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="answer-product-grid"]')).toBeTruthy()
+    expect(wrapper.get('[data-test="answer-history-panel"]').text()).toContain(answered.question)
+    expect(wrapper.get('[data-test="answer-reader-panel"]').text()).toContain('String 可以保存')
+    expect(wrapper.findAll('[data-test="answer-reader-entry"]')).toHaveLength(1)
+
+    await wrapper.get(`[data-test="answer-history-item-${refused.answerId}"]`).trigger('click')
+
+    expect(wrapper.get('[data-test="answer-reader-panel"]').text()).toContain(refused.question)
+    expect(wrapper.get('[data-test="answer-refused"]').text()).toContain('视频证据不足')
+    expect(wrapper.find('[data-test="answer-claim"]').exists()).toBe(false)
+  })
+
   it('keeps the experimental Agent entry absent by default', async () => {
     const wrapper = mount(AnswerWorkspace, { props: { job, csrfToken: session.csrfToken, api: answersApi() } })
     await flushPromises()

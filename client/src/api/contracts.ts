@@ -217,6 +217,17 @@ export interface MediaAsset {
   updatedAt: string
 }
 
+export interface MediaStorageSummary {
+  usedBytes: number
+  capacityBytes: number | null
+  mediaCount: number
+}
+
+export interface PlaybackProgress {
+  positionMs: number
+  updatedAt: string | null
+}
+
 export interface MediaFailure {
   code: string
   retryable: boolean

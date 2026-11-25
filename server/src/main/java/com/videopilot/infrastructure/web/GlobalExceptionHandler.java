@@ -10,6 +10,7 @@ import com.videopilot.infrastructure.error.ErrorCode;
 import com.videopilot.infrastructure.error.VideoPilotException;
 import com.videopilot.infrastructure.trace.TraceContext;
 import com.videopilot.media.application.MediaUploadException;
+import com.videopilot.media.application.PlaybackProgressException;
 import com.videopilot.retrieval.application.RetrievalException;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
@@ -137,6 +138,17 @@ public final class GlobalExceptionHandler {
             case DEPENDENCY_UNAVAILABLE -> ErrorCode.DEPENDENCY_UNAVAILABLE;
         };
         LOGGER.warn("Media upload request failed code={}", errorCode);
+        return response(errorCode, statusFor(errorCode));
+    }
+
+    @ExceptionHandler(PlaybackProgressException.class)
+    ResponseEntity<ApiErrorResponse> handlePlaybackProgressFailure(PlaybackProgressException exception) {
+        ErrorCode errorCode = switch (exception.reason()) {
+            case INVALID_REQUEST -> ErrorCode.INVALID_REQUEST;
+            case NOT_FOUND -> ErrorCode.RESOURCE_NOT_FOUND;
+            case NOT_READY -> ErrorCode.MEDIA_NOT_READY;
+        };
+        LOGGER.warn("Playback progress request failed code={}", errorCode);
         return response(errorCode, statusFor(errorCode));
     }
 

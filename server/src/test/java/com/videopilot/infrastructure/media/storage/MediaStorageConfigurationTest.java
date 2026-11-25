@@ -25,6 +25,7 @@ class MediaStorageConfigurationTest {
         properties.setSecretKey("secret");
         properties.setBucket("media-test");
         properties.setRegion("eu-west-1");
+        properties.setCapacity("30GB");
         properties.setPartSize(DataSize.ofMegabytes(16));
         properties.setMaxParts(500);
         properties.setSessionTtl(Duration.ofHours(2));
@@ -38,11 +39,17 @@ class MediaStorageConfigurationTest {
         assertThat(properties.getSecretKey()).isEqualTo("secret");
         assertThat(properties.getBucket()).isEqualTo("media-test");
         assertThat(properties.getRegion()).isEqualTo("eu-west-1");
+        assertThat(properties.getCapacityBytes()).isEqualTo(DataSize.ofGigabytes(30).toBytes());
         assertThat(properties.getPartSize()).isEqualTo(DataSize.ofMegabytes(16));
         assertThat(properties.getMaxParts()).isEqualTo(500);
         assertThat(properties.getSessionTtl()).isEqualTo(Duration.ofHours(2));
         assertThat(properties.getPartUrlTtl()).isEqualTo(Duration.ofMinutes(5));
         assertThat(properties.getExpiryBatchSize()).isEqualTo(25);
+
+        properties.setCapacity("");
+        assertThat(properties.getCapacityBytes()).isNull();
+        properties.setCapacity("0B");
+        assertThatThrownBy(properties::getCapacityBytes).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

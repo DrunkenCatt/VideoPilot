@@ -8,6 +8,7 @@ import com.videopilot.infrastructure.web.contract.M1ApiContracts.PageResponse;
 import com.videopilot.media.application.MediaAssetPage;
 import com.videopilot.media.application.MediaAssetQueryApplicationService;
 import com.videopilot.media.application.MediaAssetView;
+import com.videopilot.media.application.MediaStorageSummary;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import java.util.UUID;
@@ -50,6 +51,14 @@ public class MediaAssetController {
             @PathVariable UUID mediaId) {
         MediaAssetView media = mediaAssets.get(principal.ownerContext(), mediaId);
         return response(media);
+    }
+
+    @GetMapping("/storage-summary")
+    M1ApiContracts.MediaStorageSummaryResponse storageSummary(
+            @AuthenticationPrincipal IdentityPrincipal principal) {
+        MediaStorageSummary summary = mediaAssets.storageSummary(principal.ownerContext());
+        return new M1ApiContracts.MediaStorageSummaryResponse(
+                summary.usedBytes(), summary.capacityBytes(), summary.mediaCount());
     }
 
     private static MediaAssetResponse response(MediaAssetView media) {

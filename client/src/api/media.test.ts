@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import type { MediaAsset, PageResponse, UploadSession } from './contracts'
+import type { MediaAsset, MediaStorageSummary, PageResponse, PlaybackProgress, UploadSession } from './contracts'
 import { createMediaApi } from './media'
 import { ApiClientError } from './session'
 
@@ -79,6 +79,52 @@ describe('media API', () => {
     expect(request.mock.calls[0]?.[0]).toBe('/api/v1/media-assets?page=2&pageSize=10')
     expect(request.mock.calls[1]?.[0]).toBe(`/api/v1/media-assets/${media.mediaId}`)
     expect(JSON.stringify(request.mock.calls)).not.toContain('ownerId')
+  })
+
+  it('reads the owner-scoped storage summary independently from media pagination', async () => {
+    const summary: MediaStorageSummary = {
+      usedBytes: 1_073_741_824,
+      capacityBytes: 32_212_254_720,
+      mediaCount: 4,
+    }
+    const request = vi.fn().mockResolvedValueOnce(jsonResponse(200, summary))
+    const api = createMediaApi(request)
+
+    await expect(api.storageSummary()).resolves.toEqual(summary)
+
+    expect(request).toHaveBeenCalledWith('/api/v1/media-assets/storage-summary', {
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json' },
+    })
+    expect(JSON.stringify(request.mock.calls)).not.toContain('ownerId')
+  })
+
+  it('restores and overwrites owner-scoped playback progress with CSRF', async () => {
+    const restored: PlaybackProgress = { positionMs: 12_000, updatedAt: '2026-11-17T08:00:00Z' }
+    const saved: PlaybackProgress = { positionMs: 18_000, updatedAt: '2026-11-17T08:01:00Z' }
+    const request = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(200, restored))
+      .mockResolvedValueOnce(jsonResponse(200, saved))
+    const api = createMediaApi(request)
+
+    await expect(api.playbackProgress(media.mediaId)).resolves.toEqual(restored)
+    await expect(api.savePlaybackProgress(media.mediaId, 18_000, 'csrf-progress')).resolves.toEqual(saved)
+
+    const path = `/api/v1/media-assets/${media.mediaId}/playback-progress`
+    expect(request).toHaveBeenNthCalledWith(1, path, {
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json' },
+    })
+    expect(request).toHaveBeenNthCalledWith(2, path, {
+      method: 'PUT',
+      credentials: 'same-origin',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': 'csrf-progress',
+      },
+      body: JSON.stringify({ positionMs: 18_000 }),
+    })
   })
 
   it('uploads a part without credentials and reports real loaded bytes', async () => {

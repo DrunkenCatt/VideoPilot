@@ -55,9 +55,24 @@ describe('MediaLibrary', () => {
     expect(wrapper.text()).toContain('文件不是可解析的视频。')
     expect(wrapper.text()).toContain('30 B')
     expect(wrapper.text()).not.toContain('ffprobe')
+    expect(wrapper.get('[data-test="media-feature-grid"]')).toBeTruthy()
+    expect(wrapper.get('[data-test="media-table"]')).toBeTruthy()
     expect(wrapper.findAll('[data-test="select-media"]')).toHaveLength(1)
     await wrapper.get('[data-test="select-media"]').trigger('click')
     expect(wrapper.emitted('select')?.[0]).toEqual([ready])
+  })
+
+  it('filters the visible card and table views with the product toolbar', async () => {
+    const api = { list: vi.fn().mockResolvedValue(page([ready, failed])), get: vi.fn() }
+    const wrapper = mount(MediaLibrary, { props: { session, api } })
+    await flushPromises()
+
+    await wrapper.get('[data-test="media-search"]').setValue('broken')
+    expect(wrapper.text()).toContain('broken.mp4')
+    expect(wrapper.text()).not.toContain('lecture.mp4')
+
+    await wrapper.get('[data-test="media-status-filter"]').setValue('READY')
+    expect(wrapper.get('[data-test="media-filter-empty"]').text()).toContain('没有匹配')
   })
 
   it('polls visible non-terminal media until READY and then stops', async () => {

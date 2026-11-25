@@ -1,18 +1,43 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { RouterView, useRoute, useRouter } from 'vue-router'
 
-import type { Session } from './api/contracts'
+import type { CitedEvidence, LoginRequest, Session } from './api/contracts'
 import { ApiClientError, createSessionApi } from './api/session'
-import JobWorkbench from './features/jobs/JobWorkbench.vue'
-import EvaluationWorkbench from './features/evaluation/EvaluationWorkbench.vue'
+import LoginDialog from './features/session/LoginDialog.vue'
+import { clearUiPreferences } from './features/settings/uiPreferences'
+import AppShell from './layout/AppShell.vue'
 
 const sessionApi = createSessionApi()
 const session = ref<Session | null>(null)
-const username = ref('')
-const password = ref('')
 const status = ref<'loading' | 'ready' | 'submitting'>('loading')
 const errorMessage = ref('')
-const workspace = ref<'video' | 'evaluation'>('video')
+const sessionEpoch = ref(0)
+const route = useRoute()
+const router = useRouter()
+const currentWorkspaceJobId = ref('')
+const jobScopedRouteNames = new Set(['workspace', 'context', 'answers'])
+const pageTitle = computed(() => String(route.meta.title ?? '视频工作台'))
+const citationSeekTarget = computed<Pick<CitedEvidence, 'segmentId' | 'startMs' | 'endMs'> | null>(() => {
+  if (route.name !== 'context') return null
+  const segmentId = typeof route.query.segmentId === 'string' ? route.query.segmentId : ''
+  const startMs = typeof route.query.fromMs === 'string' ? Number(route.query.fromMs) : Number.NaN
+  const endMs = typeof route.query.toMs === 'string' ? Number(route.query.toMs) : Number.NaN
+  if (!segmentId || !Number.isSafeInteger(startMs) || !Number.isSafeInteger(endMs) || startMs < 0 || endMs < startMs) {
+    return null
+  }
+  return { segmentId: segmentId as CitedEvidence['segmentId'], startMs, endMs }
+})
+
+watch(
+  () => [String(route.name ?? ''), route.params.jobId] as const,
+  ([routeName, jobId]) => {
+    if (jobScopedRouteNames.has(routeName) && typeof jobId === 'string') {
+      currentWorkspaceJobId.value = jobId
+    }
+  },
+  { immediate: true },
+)
 
 function messageFor(error: unknown): string {
   if (!(error instanceof ApiClientError)) return '无法连接本地服务，请确认后端已启动。'
@@ -32,15 +57,13 @@ onMounted(async () => {
   }
 })
 
-async function login() {
+async function login(credentials: LoginRequest) {
   errorMessage.value = ''
   status.value = 'submitting'
   try {
-    session.value = await sessionApi.login({ username: username.value, password: password.value })
-    password.value = ''
+    session.value = await sessionApi.login(credentials)
   } catch (error) {
     errorMessage.value = messageFor(error)
-    password.value = ''
   } finally {
     status.value = 'ready'
   }
@@ -52,7 +75,10 @@ async function logout() {
   status.value = 'submitting'
   try {
     await sessionApi.logout(session.value.csrfToken)
+    clearUiPreferences(session.value.userId)
     session.value = null
+    currentWorkspaceJobId.value = ''
+    sessionEpoch.value += 1
   } catch (error) {
     errorMessage.value = messageFor(error)
   } finally {
@@ -61,53 +87,27 @@ async function logout() {
 }
 
 function sessionExpired() {
+  if (session.value) clearUiPreferences(session.value.userId)
   session.value = null
+  currentWorkspaceJobId.value = ''
+  sessionEpoch.value += 1
   errorMessage.value = '会话已过期，请重新登录。'
+}
+
+async function selectJob(jobId: string) {
+  const routeName = String(route.name ?? '')
+  if (routeName === 'analysis' || routeName === 'analysis-detail') {
+    await router.push({ name: 'analysis-detail', params: { jobId } })
+    return
+  }
+  const name = ['workspace', 'context', 'answers'].includes(routeName) ? routeName : 'workspace'
+  currentWorkspaceJobId.value = jobId
+  await router.push({ name, params: { jobId } })
 }
 </script>
 
 <template>
   <div class="app-frame">
-    <header class="brand-bar">
-      <a
-        class="wordmark"
-        href="/"
-        aria-label="VideoPilot 首页"
-      >VIDEOPILOT</a>
-      <div
-        v-if="session"
-        class="session-actions"
-      >
-        <button
-          class="text-button"
-          :aria-pressed="workspace === 'video'"
-          @click="workspace = 'video'"
-        >
-          视频
-        </button>
-        <button
-          class="text-button"
-          :aria-pressed="workspace === 'evaluation'"
-          @click="workspace = 'evaluation'"
-        >
-          评测
-        </button>
-        <span>{{ session.username }}</span>
-        <button
-          class="text-button"
-          data-test="logout"
-          :disabled="status === 'submitting'"
-          @click="logout"
-        >
-          {{ status === 'submitting' ? '正在退出…' : '退出' }}
-        </button>
-      </div>
-      <span
-        v-else
-        class="environment"
-      >LOCAL WORKSPACE</span>
-    </header>
-
     <main
       v-if="status === 'loading'"
       class="loading-shell"
@@ -120,110 +120,57 @@ function sessionExpired() {
       <p>正在恢复本地会话…</p>
     </main>
 
-    <main
-      v-else-if="!session"
-      class="login-shell"
+    <AppShell
+      v-else
+      :session="session"
+      :page-title="pageTitle"
+      :current-workspace-job-id="currentWorkspaceJobId"
+      :busy="status === 'submitting'"
+      :content-blocked="!session"
+      @logout="logout"
+      @unauthenticated="sessionExpired"
     >
-      <section
-        class="login-story"
-        aria-labelledby="login-title"
-      >
-        <p class="kicker">
-          教学长视频 · 可追溯工作台
-        </p>
-        <h1 id="login-title">
-          回到视频，也回到证据。
-        </h1>
-        <p class="intro">
-          登录后继续上传、解析与检索。每个答案最终都将关联可跳转的时间戳证据。
-        </p>
-        <div
-          class="principle-list"
-          aria-label="产品原则"
+      <template v-if="session">
+        <p
+          v-if="errorMessage"
+          class="form-error app-alert"
+          role="alert"
         >
-          <p><strong>01</strong><span>本地优先，资源按账号隔离</span></p>
-          <p><strong>02</strong><span>任务状态持久化，可恢复、可追踪</span></p>
-          <p><strong>03</strong><span>结论必须回到原始视频证据</span></p>
-        </div>
-      </section>
-
-      <section
-        class="login-panel"
-        aria-label="登录"
-      >
-        <div class="panel-heading">
-          <p class="section-index">
-            M1 / SESSION
-          </p>
-          <h2>进入工作台</h2>
-          <p>使用管理员为本机配置的账号。</p>
-        </div>
-        <form @submit.prevent="login">
-          <label for="username">
-            <span>账号</span>
-            <input
-              id="username"
-              v-model.trim="username"
-              name="username"
-              type="text"
-              autocomplete="username"
-              maxlength="100"
-              required
-              autofocus
-            >
-          </label>
-          <label for="password">
-            <span>密码</span>
-            <input
-              id="password"
-              v-model="password"
-              name="password"
-              type="password"
-              autocomplete="current-password"
-              maxlength="256"
-              required
-            >
-          </label>
-          <p
-            v-if="errorMessage"
-            class="form-error"
-            role="alert"
-          >
-            {{ errorMessage }}
-          </p>
-          <button
-            type="submit"
-            :disabled="status === 'submitting'"
-          >
-            <span>{{ status === 'submitting' ? '正在验证…' : '进入工作台' }}</span><span aria-hidden="true">→</span>
-          </button>
-        </form>
-        <p class="security-note">
-          会话保存在安全 Cookie 中，此页面不会保存密码。
+          {{ errorMessage }}
         </p>
-      </section>
-    </main>
-
-    <template v-else>
-      <p
-        v-if="errorMessage"
-        class="form-error app-alert"
-        role="alert"
-      >
-        {{ errorMessage }}
-      </p>
-      <JobWorkbench
-        v-if="workspace === 'video'"
-        :session="session"
-        @unauthenticated="sessionExpired"
-      />
-      <EvaluationWorkbench
+        <RouterView v-slot="{ Component }">
+          <component
+            :is="Component"
+            :key="`${session.userId}:${sessionEpoch}`"
+            :session="session"
+            :job-id="typeof route.params.jobId === 'string' ? route.params.jobId : undefined"
+            :seek-target="citationSeekTarget"
+            @select-job="selectJob"
+            @unauthenticated="sessionExpired"
+            @logout="logout"
+          />
+        </RouterView>
+      </template>
+      <section
         v-else
-        :session="session"
-        @unauthenticated="sessionExpired"
-      />
-    </template>
+        class="locked-workspace"
+        aria-labelledby="locked-workspace-title"
+      >
+        <p class="section-index">
+          LOCAL WORKSPACE
+        </p>
+        <h2 id="locked-workspace-title">
+          继续你的视频工作区
+        </h2>
+        <p>登录后恢复当前页面。未验证时不会加载媒体、任务或问答数据。</p>
+      </section>
+    </AppShell>
 
-    <footer><span>VideoPilot / M5</span><span>Local-first · Evidence-bound</span></footer>
+    <LoginDialog
+      v-if="status !== 'loading' && !session"
+      :busy="status === 'submitting'"
+      :error-message="errorMessage"
+      @submit="login"
+    />
   </div>
 </template>

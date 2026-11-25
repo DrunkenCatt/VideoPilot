@@ -13,6 +13,7 @@ import com.videopilot.media.domain.MediaFailure;
 import com.videopilot.media.domain.MediaStatus;
 import com.videopilot.media.domain.UploadSession;
 import com.videopilot.media.domain.UploadStatus;
+import com.videopilot.media.port.MediaAssetQueryStore;
 import java.lang.reflect.Field;
 import java.time.Instant;
 import java.util.List;
@@ -164,6 +165,19 @@ class MediaUploadPersistenceAdapterTest {
                 .extracting(MediaAsset::mediaId).isEqualTo(MEDIA_ID);
         verify(mapper).selectOwnedAssets(OWNER.value().toString(), 20, 20);
         verify(mapper).countOwnedAssets(OWNER.value().toString());
+    }
+
+    @Test
+    void summarizesOwnedPersistedMediaWithoutPagination() {
+        MediaStorageUsageRow row = new MediaStorageUsageRow();
+        row.setUsedBytes(18_000_000L);
+        row.setMediaCount(2L);
+        when(mapper.summarizeOwnedStorage(OWNER.value().toString())).thenReturn(row);
+
+        var usage = adapter.summarizeStorage(OWNER);
+
+        assertThat(usage).isEqualTo(new MediaAssetQueryStore.StorageUsage(18_000_000L, 2));
+        verify(mapper).summarizeOwnedStorage(OWNER.value().toString());
     }
 
     private MediaAsset probingToDomain(MediaAssetRow row) {
